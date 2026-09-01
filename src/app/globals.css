@@ -1,0 +1,50 @@
+@import "tailwindcss";
+
+/*
+ * "Soft Daylight" design system — see docs/design/design-tokens.md.
+ * Tailwind v4 is CSS-first: tokens are declared as CSS variables here and
+ * exposed to utility classes via @theme, rather than tailwind.config.ts.
+ */
+:root {
+  --color-terracotta: #8d4934;
+  --color-sage: #56624b;
+  --color-pale-sky: #cbd5e0;
+  --color-chalk: #f9f8f6;
+  --color-ink: #1a1a1a;
+  --color-verified-gold: #d4af37; /* Verified/trust badges only — never decorative, per AGENTS.md */
+
+  --radius-standard: 8px;
+  --spacing-unit: 8px;
+}
+
+@theme inline {
+  --font-display: var(--font-display);
+  --font-body: var(--font-body);
+
+  --color-terracotta: var(--color-terracotta);
+  --color-sage: var(--color-sage);
+  --color-pale-sky: var(--color-pale-sky);
+  --color-chalk: var(--color-chalk);
+  --color-ink: var(--color-ink);
+  --color-verified-gold: var(--color-verified-gold);
+
+  --radius-DEFAULT: var(--radius-standard);
+}
+
+body {
+  background: var(--color-chalk);
+  color: var(--color-ink);
+  font-family: var(--font-body), sans-serif;
+}
+
+h1,
+h2,
+h3,
+.font-display {
+  font-family: var(--font-display), serif;
+}
+
+.data-tabular {
+  font-family: var(--font-body), sans-serif;
+  font-variant-numeric: tabular-nums;
+}

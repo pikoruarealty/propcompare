@@ -1,0 +1,40 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Next.js
+.next/
+out/
+build/
+dist/
+
+# Environment
+.env
+.env*.local
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Editor/OS
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/extensions.json
+
+# Testing
+coverage/
+
+# Local database data (if running Postgres via local volume)
+.pgdata/
+
+# Design source exports — large, non-code, kept outside version control.
+# Canonical tokens are captured in docs/design/design-tokens.md instead.
+_stitch_export/
+*.zip
+
+# Drizzle
+drizzle/meta/
