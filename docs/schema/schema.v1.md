@@ -1,10 +1,10 @@
 # PropCompare Schema — v1 (draft, pending sign-off)
 
-Status: **draft** — reflects the whiteboard schema plus all Q&A resolutions from 2026-08-31, and the role/portal split confirmed the same day. This is the canonical schema reference until superseded by a later `schema.v2.md` (never edited in place — see [DECISIONS.md](../../DECISIONS.md) on schema versioning).
+Status: **implemented in the first Phase 1 migration** — reflects the whiteboard schema plus all Q&A resolutions from 2026-08-31, the role/portal split, and the private-role decision recorded 2026-09-01. This is the canonical schema reference until superseded by a later `schema.v2.md` (never edited in place — see [DECISIONS.md](../../DECISIONS.md) on schema versioning).
 
 Conventions: tables are `snake_case`, plural. Every table has `id uuid primary key default gen_random_uuid()`, `created_at timestamptz not null default now()`, `updated_at timestamptz not null default now()` unless noted otherwise. Any column named `..._id` other than a table's own `id` is a foreign key. Money is always `numeric`, never `float`. Enums are native Postgres enums for small, truly fixed sets; lookup tables are used wherever the set is "fixed for now, softly extensible later."
 
-Two Postgres schemas: `public` (everything app-facing) and `private` (commercial/price data — RLS enabled, zero policies, service-role only, per the old project's validated pattern).
+Two Postgres schemas: `public` (everything app-facing) and `private` (commercial/price data — RLS enabled and forced with zero policies, service-role only). The regular application role has no `private` schema access; the discovery/comparison service is the only code path permitted a dedicated `BYPASSRLS` connection (see `DECISIONS.md`, 2026-09-01).
 
 ---
 

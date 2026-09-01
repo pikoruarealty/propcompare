@@ -48,6 +48,14 @@ Context: this is a direct instance of the failure mode `AGENTS.md` line 20 exist
 
 Why this entry is longer than usual: it exists specifically to make sure this exact loss doesn't happen again — anyone re-deriving these fields from a whiteboard photo in the future should find them here first.
 
+**2026-09-01 — Private-schema access uses separate PostgreSQL app and service roles.**
+Context: PostgreSQL table owners bypass row-level security by default. The initial local `DATABASE_URL` used the Docker bootstrap/owner role, so RLS with zero policies would not actually prevent regular application code from reading exact prices. Resolution: the normal application connection is `propcompare_app`, which receives public-schema privileges and no `private` schema usage; migrations use the non-runtime `propcompare` admin role; the future discovery/comparison service alone uses `propcompare_service`, a narrowly reserved `BYPASSRLS` role. `private` tables have RLS enabled and forced with zero policies. Why: preserves the already-decided rule that exact prices never reach ordinary app code while using PostgreSQL's own enforcement rather than a convention. Alternatives: retain one owner connection and rely on code discipline — rejected because it defeats the stated RLS boundary.
+
+---
+
+**2026-09-01 — Phase 1 does not use a direct catalog fixture to test the private bucket mapping.**
+Context: `private.unit_price_history` correctly requires an existing published `unit_variants` row. Creating that row with a seed script, migration, or direct SQL insert would violate the one-write-path rule before the Phase 2 publish transaction exists. Resolution: Phase 1 verifies the view definition and effective role/RLS boundary; an end-to-end current-price-to-bucket mapping test is deferred until Phase 2 can create a fixture through `property_submissions` publication. Why: a test convenience cannot become an exception to the project’s primary trust boundary. Alternatives: direct temporary catalog insertion or a special test backdoor — rejected.
+
 ---
 
 **Still open, not yet decided:** admin MFA enforcement timing (schema has the flag, default off); exact publish-transaction implementation; developer self-serve submission UI validation rules; whether `unit_variants.variant_name` needs a stronger identity guarantee across resubmissions (flagged as a known risk in `docs/schema/schema.v1.md`, deferred rather than solved).

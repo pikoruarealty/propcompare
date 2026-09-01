@@ -1,8 +1,11 @@
 import "dotenv/config";
 import { defineConfig } from "drizzle-kit";
 
-if (!process.env.DATABASE_URL) {
-  throw new Error("DATABASE_URL is not set");
+const databaseAdminUrl =
+  process.env.DATABASE_ADMIN_URL ?? process.env.DATABASE_URL;
+
+if (!databaseAdminUrl) {
+  throw new Error("DATABASE_ADMIN_URL or DATABASE_URL is not set");
 }
 
 export default defineConfig({
@@ -10,7 +13,7 @@ export default defineConfig({
   out: "./drizzle",
   dialect: "postgresql",
   dbCredentials: {
-    url: process.env.DATABASE_URL,
+    url: databaseAdminUrl,
   },
   schemaFilter: ["public", "private"],
 });

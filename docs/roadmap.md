@@ -27,7 +27,7 @@ Phases 2A and 2B run in parallel once Phase 1 lands, so both developers are work
 
 **Area of focus: Deep** — once table shapes exist, populate seed _data_ for the catalogs (amenity/spec lists, budget bucket ranges) against the fixed schema.
 
-**Acceptance:** migrations run clean; seed script populates all lookup tables; a manual insert into `private.unit_price_history` plus a select against `private.unit_current_bucket` proves the view works.
+**Acceptance:** migrations run clean; seed scripts populate lookup tables from approved source data; effective role/RLS checks prove the normal app connection cannot access `private` while the service role can resolve `private.unit_current_bucket`. A data-bearing current-price-to-bucket proof uses a published fixture created by the Phase 2 publish transaction — never a direct catalog insert.
 
 ---
 

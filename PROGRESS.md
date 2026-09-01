@@ -1,5 +1,21 @@
 # Progress
 
+## 2026-09-01 — Phase 1 database foundation implemented and locally verified
+
+**Done:**
+
+- Created the full Drizzle implementation of canonical `schema.v1`: lookup tables, public catalog, governance/provenance, Better Auth extensions, buyer records, private price history, native enums, FKs, uniqueness, and indexes.
+- Generated and applied the first schema migration plus a tracked follow-up grant migration to a fresh local Postgres 17 database.
+- Closed an access-control gap before it became production debt: normal app, admin-migration, and future service-role connections are separate. The normal app role has no `private` schema usage; the dedicated service role has narrowly required `BYPASSRLS` access; `private.unit_price_history` has forced RLS with zero policies.
+- Added a security-invoker `private.unit_current_bucket` view and enforced at most one current price per unit variant.
+- Added an idempotent lookup seed command and seeded the explicit canonical property types (3), BHK types (6), and layout types (3). Amenity/specification vocabularies, budget buckets, and OCR field definitions are deliberately pending approved source data in a separate Deep-owned tasklist.
+- Verified effective role behavior: restricted app role can read public lookups but is denied `private`; service role can query the bucket view; RLS is enabled and forced with zero policies. Added two schema-contract tests.
+- Recorded the role-model and no-direct-fixture decisions in `DECISIONS.md`, so the Phase 1 proof does not create an exception to the publish-only catalog rule.
+
+**Verified:** `bun run db:migrate` against fresh local Postgres; `bun run db:seed` twice with stable counts; `bun run format:check`; `bun run lint`; `bun run typecheck`; `bun run test` (2 passing tests); and `bun run db:generate` (no pending schema changes).
+
+**Next up:** Deep completes [lookup catalog data](docs/tasklists/2026-09-01-lookup-catalog-data.md) from approved source material. Phase 2A then implements the publish transaction so a data-bearing private bucket mapping test can use a legitimately published fixture.
+
 ## 2026-09-01 — Shared product, API, role-flow, design, and tasklist documentation established
 
 **Done:**

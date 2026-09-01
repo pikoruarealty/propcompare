@@ -60,7 +60,7 @@ Every write to the live catalog goes through exactly one path: a `property_submi
 
 ## Budget bucketing (never expose exact price)
 
-`private.unit_price_history` holds exact prices with full history (source: developer submission, admin manual entry, or RERA extract), in the `private` schema — RLS enabled, zero policies, so only a service-role connection can read it at all. A derived view, `private.unit_current_bucket`, maps each unit variant to a `budget_buckets` row. The discovery/comparison matching service is the only code path with a service-role connection into `private`; it matches a buyer's stated budget range to bucket ± one adjacent bucket and returns property/unit-variant ids — never a price. The property detail page shows no price at all by default, until enquiry.
+`private.unit_price_history` holds exact prices with full history (source: developer submission, admin manual entry, or RERA extract), in the `private` schema — RLS is enabled and forced with zero policies. The normal application role has no `private` schema access; only the dedicated `BYPASSRLS` service role may read it. A derived view, `private.unit_current_bucket`, maps each unit variant to a `budget_buckets` row. The discovery/comparison matching service is the only code path allowed the service connection; it matches a buyer's stated budget range to bucket ± one adjacent bucket and returns property/unit-variant ids — never a price. The property detail page shows no price at all by default, until enquiry.
 
 ## Multi-agent development
 
