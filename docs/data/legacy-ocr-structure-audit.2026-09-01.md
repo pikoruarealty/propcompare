@@ -51,9 +51,15 @@ Counts below are file-level across 27 current extraction jobs. They demonstrate 
 
 The construction-detail and configuration values are mostly strings, including values that need numeric or date parsing. A Phase 2 ingestion validator must parse and reject/route ambiguous values for review; it must not coerce them silently.
 
+The approved initial construction-detail taxonomy is documented in the [v1 specification catalog](v1-specification-catalog.2026-09-01.md).
+
 ## Catalog recommendation — candidates only
 
 The current amenity array has **789 distinct source labels** after only per-property repetition is removed. It mixes facilities with unit details, measurements, marketing phrases, nearby-place claims, and operational features. It is not safe to seed as-is.
+
+**Recorded v1 policy:** the catalog has no numerical cap. Each meaningful buyer-useful amenity receives one canonical key and label; casing, spacing, punctuation, and approved wording variants map through synonyms. Uncommon or ambiguous brochure labels remain review-only until a documented catalog review. See [DECISIONS.md](../../DECISIONS.md).
+
+The exact recommended 26-item set and source-synonym treatment are in the [v1 amenity catalog proposal](v1-amenity-catalog.proposal.2026-09-01.md).
 
 These are the strongest proposed starting groups for a reviewed amenity taxonomy, based on repeated generic facility concepts and evident synonym variants:
 
@@ -61,9 +67,13 @@ These are the strongest proposed starting groups for a reviewed amenity taxonomy
 | ----------------- | ---------------------------------------------------------------------------------- |
 | Wellness          | `swimming_pool`, `gymnasium`, `spa`, `sauna`, `steam_room`, `jacuzzi`, `yoga_deck` |
 | Recreation        | `indoor_games`, `home_theatre`, `library`, `box_cricket`, `multipurpose_court`     |
-| Social            | `multipurpose_hall`, `banquet_hall`, `lounge`                                      |
+| Social            | `clubhouse`, `multipurpose_hall`, `banquet_hall`, `lounge`                         |
 | Outdoor/family    | `children_play_area`, `landscaped_garden`, `gazebo`, `lawn`, `walkway`, `pet_park` |
 | Access/safety     | `security`, `visitor_parking`, `service_lift`                                      |
+
+The access/safety group is approved for v1 buyer-facing filtering. Individual labels still require the approved synonym mapping before seed data is written.
+
+`clubhouse` is also approved as a buyer-facing v1 filter; `club house` is its approved source synonym.
 
 Examples of normalization that should be reviewed as synonyms rather than separate catalog records include gym/gymnasium/fully-equipped gym, children/kids/toddler play-area variants, clubhouse spellings, theatre spellings, and landscape-garden variants.
 

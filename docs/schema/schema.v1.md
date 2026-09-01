@@ -217,7 +217,7 @@ private.unit_current_bucket AS
   JOIN public.budget_buckets bb ON ph.price_inr BETWEEN bb.min_inr AND bb.max_inr
 ```
 
-The discovery/comparison matching service is the _only_ code path allowed a service-role DB connection into `private`. It reads `private.unit_current_bucket`, joins it against a buyer's stated bucket ± one adjacent bucket, and returns property/unit-variant ids — never a price. The property detail page shows **no price at all** by default, until the buyer submits an enquiry (per the explicit 2026-08-31 decision; this default may change later).
+The discovery/comparison matching service is the _only_ code path allowed a service-role DB connection into `private`. It uses `private.unit_current_bucket` only for coarse classification; its Phase 3 private matcher evaluates current prices internally against the buyer's inclusive range `[budget_min_inr × 0.80, budget_max_inr × 1.20]` and returns only property/unit-variant ids — never a price or price range. The property detail page shows **no price at all** by default, until the buyer submits an enquiry (per the explicit 2026-08-31 decision; this default may change later).
 
 ---
 

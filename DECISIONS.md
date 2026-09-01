@@ -58,4 +58,24 @@ Context: `private.unit_price_history` correctly requires an existing published `
 
 ---
 
+**2026-09-01 — V1 uses a concise, buyer-facing amenity catalog; uncommon or ambiguous brochure items remain review-only.**
+Context: the legacy OCR audit found 789 distinct amenity labels, including facilities mixed with room details, measurements, marketing language, and nearby-place claims. Resolution: seed a deliberately limited set of roughly 20–30 buyer-useful facility concepts and their approved synonyms; do not create a new filter simply because it occurs in a brochure. Unmatched text remains source-review material and may later justify a catalog addition through an explicit product decision. Why: useful discovery filters need stable, comparable meanings. Alternative: reproduce every brochure label as an amenity — rejected because it would turn the catalog into an unfilterable, inconsistent free-text mirror.
+
+---
+
+**2026-09-01 — Access and safety facilities are buyer-facing amenity filters in V1.**
+Resolution: include security, visitor parking, and service lift in the concise amenity catalog, subject to the same normalized-key and synonym rules as other amenities. Why: they are buyer-relevant and comparable across properties. They are not treated as decorative marketing claims or inferred when absent.
+
+---
+
+**2026-09-01 — V1 amenity catalog size is not capped; canonical normalization, not a numerical limit, prevents duplicates.**
+Context: the earlier concise-catalog decision used a rough 20–30-item starting scope. The product direction is now to retain as many meaningful amenities as are useful, provided their names remain consistent. Resolution: the approved 26-item list is an initial seed, not a ceiling. Each meaningful facility receives one lowercase `snake_case` key and one buyer-facing label; casing, spacing, punctuation, and approved wording variants map through `amenity_synonyms`. A new semantic concept may be added only through a documented catalog review, never automatically from an unmatched OCR string. Non-amenity room details, counts, measurements, brands, nearby places, and marketing claims remain excluded. This supersedes only the numerical cap in the 2026-09-01 concise-catalog decision.
+
+---
+
+**2026-09-01 — Buyer budget matching uses an inclusive ±20% expansion of the buyer's stated range.**
+Resolution: for buyer range `[min, max]`, the Phase 3 service matches current unit prices in `[min × 0.80, max × 1.20]`, inclusive. Thus ₹3–4 crore matches ₹2.4–4.8 crore. The calculation and exact prices remain entirely in the private service-only path; it returns only property/unit identifiers, never a price or derived price range. The existing `private.unit_current_bucket` view remains a coarse classification aid, but the earlier adjacent-bucket candidate-selection approach is superseded because it cannot guarantee this tolerance. The precise service-only matcher receives its own Phase 3 tasklist and review.
+
+---
+
 **Still open, not yet decided:** admin MFA enforcement timing (schema has the flag, default off); exact publish-transaction implementation; developer self-serve submission UI validation rules; whether `unit_variants.variant_name` needs a stronger identity guarantee across resubmissions (flagged as a known risk in `docs/schema/schema.v1.md`, deferred rather than solved).

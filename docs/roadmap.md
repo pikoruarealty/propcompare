@@ -53,11 +53,11 @@ Phases 2A and 2B run in parallel once Phase 1 lands, so both developers are work
 
 ## Phase 3 — Integration & core buyer flows
 
-**Area of focus: Bhavarth** — the discovery/comparison budget-bucket matching service (the only code path with a service-role connection into `private`).
+**Area of focus: Bhavarth** — the discovery/comparison budget-range matching service (the only code path with a service-role connection into `private`), implementing the documented inclusive ±20% range without returning price data. See [its tasklist](tasklists/2026-09-01-phase-3-budget-range-matching.md).
 
 **Area of focus: Deep** — wire the built UI to real endpoints: comparison feature, saved properties, dossier-unlock phone-OTP gate, enquiry submission, following the contracts Bhavarth defines.
 
-**Acceptance:** a buyer can browse, get intake-matched results by budget bucket (no price ever rendered), compare, save, unlock a dossier via OTP, and submit an enquiry — end to end on real data.
+**Acceptance:** a buyer can browse, get intake-matched results from the inclusive ±20% private budget-range matcher (no price ever rendered), compare, save, unlock a dossier via OTP, and submit an enquiry — end to end on real data.
 
 ---
 
