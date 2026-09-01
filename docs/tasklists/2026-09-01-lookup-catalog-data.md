@@ -26,8 +26,7 @@ Populate the fixed Phase 1 lookup table shapes with reviewed Gujarat-relevant am
 
 ## Source review
 
-- [x] Reviewed `C:\Users\Bhavarth\Desktop\august_review.md` on 2026-09-01. It is a retrospective on the retired product and confirms its old code/data are reference-only; it contains no approved input for this task.
-- [ ] Add the approved source documents, spreadsheet, or written product decisions here before seeding. Do not infer missing values from legacy code, brochure marketing, or general market conventions.
+- [ ] Add approved in-repository source documents, a project spreadsheet, or written product decisions here before seeding. Do not infer missing values from legacy code, brochure marketing, or general market conventions.
 
 ## Implementation checklist
 
