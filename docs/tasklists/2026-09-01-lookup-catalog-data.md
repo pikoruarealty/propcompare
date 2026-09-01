@@ -1,6 +1,6 @@
 # Tasklist — Lookup catalog data
 
-**Status:** blocked — awaiting approved source data
+**Status:** blocked — structural audit complete; explicit catalog/contract approval required before seeding
 **Owner:** Deep
 **Branch:** `task/lookup-catalog-data`
 **Base branch:** `task/phase-1-data-layer` (until the Phase 1 baseline merges to `main`)
@@ -26,6 +26,7 @@ Populate the fixed Phase 1 lookup table shapes with reviewed Gujarat-relevant am
 
 ## Source review
 
+- [x] Review the read-only [legacy OCR structure audit](2026-09-01-legacy-ocr-structure-audit.md). It provides candidate field and vocabulary shapes only; it does not approve catalog values.
 - [ ] Add approved in-repository source documents, a project spreadsheet, or written product decisions here before seeding. Do not infer missing values from legacy code, brochure marketing, or general market conventions.
 
 ## Implementation checklist

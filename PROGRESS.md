@@ -1,5 +1,13 @@
 # Progress
 
+## 2026-09-01 — Legacy OCR corpus audited structurally; lookup seeding remains review-gated
+
+**Done:** Per user authorization, read-only structural analysis covered 27 current and 69 current-plus-historical hashed legacy OCR jobs, excluding PDFs/images and retaining no source records in this repository. The current set has 26 mechanically distinct normalized name-and-city comparisons; all historical jobs produce 28. The user-confirmed usable source set is 24, which cannot be reconstructed safely from that weak identity comparison. The versioned [audit report](docs/data/legacy-ocr-structure-audit.2026-09-01.md) records the reusable evidence envelope, coverage, a candidate OCR contract, and a deliberately conservative amenity/specification taxonomy.
+
+**Important finding:** the amenity extraction is too noisy to seed directly (789 distinct labels in the current jobs) and every current record has legacy `verified=false`. No actual property data, price, media, or catalog relationship was imported or seeded.
+
+**Next up:** review and explicitly approve the catalog taxonomy, synonym mappings, specification keys, budget buckets, and exact `property_schema_fields` contract in [the lookup-data tasklist](docs/tasklists/2026-09-01-lookup-catalog-data.md). A Phase 2 curator-owned source manifest will be required to select the confirmed 24 properties for submission-based ingestion.
+
 ## 2026-09-01 — Phase 1 database foundation implemented and locally verified
 
 **Done:**
