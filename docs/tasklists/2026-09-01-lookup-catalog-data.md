@@ -1,8 +1,9 @@
 # Tasklist — Lookup catalog data
 
-**Status:** ready to start after data source is agreed  
-**Owner:** Deep  
-**Branch:** `task/lookup-catalog-data`  
+**Status:** blocked — awaiting approved source data
+**Owner:** Deep
+**Branch:** `task/lookup-catalog-data`
+**Base branch:** `task/phase-1-data-layer` (until the Phase 1 baseline merges to `main`)
 **Depends on:** [Phase 1 data layer](2026-09-01-phase-1-data-layer.md)
 
 ## Scope
@@ -23,9 +24,14 @@ Populate the fixed Phase 1 lookup table shapes with reviewed Gujarat-relevant am
 - [ ] Approved INR budget-bucket boundaries and display labels.
 - [ ] Approved `property_schema_fields` list: field key, label, data type, JSON path where relevant, schema version, active state, and extraction description.
 
+## Source review
+
+- [x] Reviewed `C:\Users\Bhavarth\Desktop\august_review.md` on 2026-09-01. It is a retrospective on the retired product and confirms its old code/data are reference-only; it contains no approved input for this task.
+- [ ] Add the approved source documents, spreadsheet, or written product decisions here before seeding. Do not infer missing values from legacy code, brochure marketing, or general market conventions.
+
 ## Implementation checklist
 
-- [ ] Create the task branch from current `main`.
+- [x] Create `task/lookup-catalog-data` from the Phase 1 foundation branch; it will merge with that phase baseline before Phase 1 reaches `main`.
 - [ ] Add the agreed data to the seed source using idempotent upserts keyed by each table's canonical key/unique identity.
 - [ ] Keep controlled vocabulary values in catalog/synonym tables; never add free-text fallback fields.
 - [ ] Seed only lookup/contract tables. Do not insert into `properties`, `unit_variants`, or any other live catalog table.
