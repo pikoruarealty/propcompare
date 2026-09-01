@@ -79,3 +79,8 @@ Resolution: for buyer range `[min, max]`, the Phase 3 service matches current un
 ---
 
 **Still open, not yet decided:** admin MFA enforcement timing (schema has the flag, default off); exact publish-transaction implementation; developer self-serve submission UI validation rules; whether `unit_variants.variant_name` needs a stronger identity guarantee across resubmissions (flagged as a known risk in `docs/schema/schema.v1.md`, deferred rather than solved).
+
+---
+
+**2026-09-01 — Budget-bucket bounds move from `public` to `private`; v1 uses fixed internal bands.**
+Context: `budget_buckets` was initially a public lookup, and the normal application role can read all public tables. That contradicts the approved rule that price bounds must never appear in public schema or buyer-facing output. Resolution: schema v2 moves the sole `budget_buckets` table to `private`; the security-invoker `private.unit_current_bucket` joins it internally, and only the dedicated service role may read the resulting classification. The controlled admin seed path owns the initial fixed magnitude bands. Ranges are lower-inclusive and upper-exclusive to prevent overlapping classifications at a boundary. The Phase 3 ±20% private matcher is unchanged and remains the authoritative buyer-range matcher.

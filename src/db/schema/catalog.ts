@@ -199,21 +199,6 @@ export const specificationSynonyms = pgTable(
   ],
 );
 
-export const budgetBuckets = pgTable(
-  "budget_buckets",
-  {
-    id: uuid("id").defaultRandom().primaryKey(),
-    label: text("label").notNull(),
-    minInr: numeric("min_inr").notNull(),
-    maxInr: numeric("max_inr").notNull(),
-    displayOrder: integer("display_order").notNull(),
-    ...timestamps(),
-  },
-  (table) => [
-    uniqueIndex("budget_buckets_display_order_unique").on(table.displayOrder),
-  ],
-);
-
 export const propertySchemaFields = pgTable("property_schema_fields", {
   id: uuid("id").defaultRandom().primaryKey(),
   fieldKey: text("field_key").notNull().unique(),

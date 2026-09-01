@@ -1,5 +1,26 @@
 # Progress
 
+## 2026-09-01 — Phase 1 lookup catalogs and private budget boundary completed
+
+**Done:** Seeded 26 amenities with 51 controlled synonyms, 13 specifications
+with 13 source-field synonyms, and the approved 26-row OCR field contract. No
+property, unit, media, or price-history record was seeded.
+
+**Security correction:** schema v2 moves the sole `budget_buckets` table to
+`private` and keeps its classifier service-only. The private seed contains 16
+fixed bands; the normal app role is denied access, while the service role can
+use the classifier. The Phase 3 private ±20% matcher is unchanged.
+
+**Verified:** the migration applied locally; both seeds ran twice with stable
+counts; format, lint, typecheck, tests, and migration generation pass. An
+app-role private bucket query is denied with PostgreSQL code `42501`; service
+access succeeds without returning price data.
+
+**Next up:** Phase 2A implements the submission/publish transaction and OCR
+provider adapter. It requires the curator-owned manifest selecting the
+confirmed 24 properties; do not reconstruct that set from legacy names or
+filenames.
+
 ## 2026-09-01 — Legacy OCR corpus audited structurally; lookup seeding remains review-gated
 
 **Done:** Per user authorization, read-only structural analysis covered 27 current and 69 current-plus-historical hashed legacy OCR jobs, excluding PDFs/images and retaining no source records in this repository. The current set has 26 mechanically distinct normalized name-and-city comparisons; all historical jobs produce 28. The user-confirmed usable source set is 24, which cannot be reconstructed safely from that weak identity comparison. The versioned [audit report](docs/data/legacy-ocr-structure-audit.2026-09-01.md) records the reusable evidence envelope, coverage, a candidate OCR contract, and a deliberately conservative amenity/specification taxonomy.

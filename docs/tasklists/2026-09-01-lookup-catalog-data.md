@@ -1,10 +1,14 @@
 # Tasklist — Lookup catalog data
 
-**Status:** blocked — structural audit complete; explicit catalog/contract approval required before seeding
+**Status:** complete
 **Owner:** Deep
 **Branch:** `task/lookup-catalog-data`
 **Base branch:** `task/phase-1-data-layer` (until the Phase 1 baseline merges to `main`)
 **Depends on:** [Phase 1 data layer](2026-09-01-phase-1-data-layer.md)
+
+**Completion:** approved lookup vocabularies, the OCR contract, and fixed
+internal bands are seeded. Budget bounds are private under schema v2; the
+normal application role cannot read them.
 
 ## Scope
 
@@ -12,7 +16,7 @@ Populate the fixed Phase 1 lookup table shapes with reviewed Gujarat-relevant am
 
 ## References
 
-- [Schema v1](../schema/schema.v1.md)
+- [Schema v2](../schema/schema.v2.md)
 - [PRD](../product/prd.v1.md)
 - [Admin flow](../app-flows/admin.md)
 - [Contributor rules](../../AGENTS.md)
@@ -21,8 +25,8 @@ Populate the fixed Phase 1 lookup table shapes with reviewed Gujarat-relevant am
 
 - [x] Approve the [26-item initial amenity catalog](../data/v1-amenity-catalog.proposal.2026-09-01.md) and its source-synonym treatment. It is extensible through catalog review, not capped at 26.
 - [x] Approve the [initial v1 specification catalog](../data/v1-specification-catalog.2026-09-01.md): construction details appear as property specifications, not buyer filters.
-- [ ] Define INR budget-bucket boundaries/display labels. (The matching formula is already confirmed.)
-- [ ] Approved `property_schema_fields` list: field key, label, data type, JSON path where relevant, schema version, active state, and extraction description.
+- [x] Choose fixed internal INR magnitude bands for the current version. Their exact boundaries and labels remain unseeded because of the placement conflict recorded below. (The matching formula is already confirmed.)
+- [x] Approve and seed the exact [`property_schema_fields` contract](../data/v1-property-schema-fields.proposal.2026-09-01.md): field key, label, data type, JSON path where relevant, schema version, active state, and extraction description.
 
 ## Recorded product direction
 
@@ -36,6 +40,13 @@ Populate the fixed Phase 1 lookup table shapes with reviewed Gujarat-relevant am
 
 The current `private.unit_current_bucket` view supports coarse classification only. Exact ±20% range matching has a dedicated planned [Phase 3 tasklist](2026-09-01-phase-3-budget-range-matching.md) for a service-only private matcher that returns only candidate IDs, never price data. Do not alter the private schema/view during this Phase 1 lookup task.
 
+## Budget placement resolution
+
+The original public placement would have exposed price bounds to the normal app
+role. The sole table moved to `private` in [schema v2](../schema/schema.v2.md),
+and its security-invoker classifier remains service-only. See the completed
+[private-budget tasklist](2026-09-01-private-budget-buckets.md).
+
 ## Source review
 
 - [x] Review the read-only [legacy OCR structure audit](2026-09-01-legacy-ocr-structure-audit.md). It provides candidate field and vocabulary shapes only; it does not approve catalog values.
@@ -44,16 +55,19 @@ The current `private.unit_current_bucket` view supports coarse classification on
 ## Implementation checklist
 
 - [x] Create `task/lookup-catalog-data` from the Phase 1 foundation branch; it will merge with that phase baseline before Phase 1 reaches `main`.
-- [ ] Add the agreed data to the seed source using idempotent upserts keyed by each table's canonical key/unique identity.
-- [ ] Keep controlled vocabulary values in catalog/synonym tables; never add free-text fallback fields.
-- [ ] Seed only lookup/contract tables. Do not insert into `properties`, `unit_variants`, or any other live catalog table.
-- [ ] Run the seed twice against local Postgres and verify stable row counts.
+- [x] Seed the approved amenity catalog and approved source synonyms using idempotent upserts.
+- [x] Seed the approved specification catalog and source-field synonyms using idempotent upserts.
+- [x] Seed fixed internal budget bands through the service-role-only seed path.
+- [x] Seed `property_schema_fields` from the approved exact contract.
+- [x] Keep controlled vocabulary values in catalog/synonym tables; never add free-text fallback fields.
+- [x] Seed only lookup/contract tables. Do not insert into `properties`, `unit_variants`, or any other live catalog table.
+- [x] Run public and private seeds twice with stable counts: 26 amenities, 51 amenity synonyms, 13 specifications, 13 specification synonyms, 26 OCR fields, and 16 private budget bands.
 
 ## Verification and handoff
 
-- [ ] `bun run format:check`
-- [ ] `bun run lint`
-- [ ] `bun run typecheck`
-- [ ] `bun run test`
-- [ ] Record the approved source/version for each catalog in this tasklist.
-- [ ] Update the Phase 1 tasklist and `PROGRESS.md`.
+- [x] `bun run format:check`
+- [x] `bun run lint`
+- [x] `bun run typecheck`
+- [x] `bun run test`
+- [x] Record the approved source/version for seeded catalogs: [amenities](../data/v1-amenity-catalog.proposal.2026-09-01.md) and [specifications](../data/v1-specification-catalog.2026-09-01.md), both version `2026-09-01`.
+- [x] Update the Phase 1 tasklist and `PROGRESS.md`.

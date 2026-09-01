@@ -33,7 +33,7 @@ Translate the canonical schema into Drizzle, generate and apply the first migrat
 - [x] Generate/review the first Drizzle migration for public/private placement, FK order, RLS, and no catalog-data writes.
 - [x] Apply migrations cleanly to local Postgres.
 - [x] Add idempotent seed plumbing and the explicitly approved property/BHK/layout values.
-- [ ] Have Deep populate approved amenity/specification vocabulary, budget buckets, and OCR field definitions in the separate [lookup catalog data tasklist](2026-09-01-lookup-catalog-data.md).
+- [x] Deep populated approved amenity/specification vocabulary, private fixed budget bands, and OCR field definitions in the completed [lookup catalog data tasklist](2026-09-01-lookup-catalog-data.md).
 - [x] Prove effective app/service role separation, forced RLS, zero private policies, and service-view access. Data-bearing mapping waits for a Phase 2 published fixture; see `DECISIONS.md` (2026-09-01).
 
 ## Verification
