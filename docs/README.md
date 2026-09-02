@@ -17,6 +17,7 @@ This directory holds the collaborative product and implementation reference for 
 - [Roadmap](roadmap.md) — phase-level delivery plan and ownership.
 - [Tasklists](tasklists/) — a separate tasklist is required for every implementation plan.
 - [Data audits](data/) — versioned, review-only analysis of approved external source shapes; raw source data stays outside the repository.
+- [Local database setup](local-database-setup.md) — env-routed local Postgres, via Docker or a native install, plus seeds and the privilege-split check.
 
 ## Document status
 

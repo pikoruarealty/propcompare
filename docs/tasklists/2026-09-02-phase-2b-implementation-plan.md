@@ -1,6 +1,6 @@
 # Implementation plan — Phase 2B buyer experience
 
-**Status:** step 1 complete (2026-09-02); step 2 is next
+**Status:** step 2 complete (2026-09-02); step 3 is next
 **Owner:** Deep (buyer UI), with Bhavarth owning the read contract in step 1
 **Branch:** this plan on `task/phase-2b-implementation-plan`; each step below takes its own `task/` branch
 **Roadmap:** [Phase 2B](../roadmap.md#phase-2b--buyer-ui-against-a-fixed-contract-parallel-with-2a)
@@ -70,9 +70,10 @@ gets a dated `DECISIONS.md` entry before the code is written.
 - [ ] **Whether `PropScoreDial` ships in 2B** — blocks step 6. `prd.v1.md` lists
       its definition as an open product decision and requires it not imply a
       fabricated score. Recommendation: defer it out of 2B entirely.
-- [ ] **Filter set for the listing route** — blocks step 1. `prd.v1.md` says
-      browsing is supported "as the read contract matures"; step 1 must fix the
-      v1 filter list rather than leave it open-ended.
+- [x] **Filter set for the listing route** — resolved in step 1 (2026-09-02).
+      Fixed at `city`, `locality`, `propertyType`, `bhk`, `possessionStatus`, and
+      repeatable `amenity`, matched on lookup `key` rather than UUID. Recorded in
+      `DECISIONS.md`.
 
 ## Step 0 — Tooling baseline
 
@@ -196,23 +197,61 @@ existing schema or documented rules, not invented scope):
 
 ## Step 2 — Typed read layer and fixtures
 
-**Branch:** `task/phase-2b-read-layer`
+**Branch:** `task/phase-2b-read-layer` · **Status: complete 2026-09-02**
 
-- [ ] Define exported TypeScript types mirroring the step 1 contract exactly, as
+- [x] Define exported TypeScript types mirroring the step 1 contract exactly, as
       the single shared source for routes, screens, fixtures, and tests.
-- [ ] Implement `listPublishedProperties` and `getPublishedPropertyBySlug` as
+      (`src/lib/properties/types.ts`)
+- [x] Implement `listPublishedProperties` and `getPublishedPropertyBySlug` as
       Drizzle queries joining the catalog, lookup, and controlled-vocabulary
-      tables. Read-only; no write path.
-- [ ] Build fixtures that satisfy the same exported types, including a
+      tables. Read-only; no write path. (`src/lib/properties/queries.ts`)
+- [x] Build fixtures that satisfy the same exported types, including a
       deliberately sparse property exercising `not_stated`,
       `explicitly_not_offered`, absent media, absent RERA facts, and a variant
-      with partial areas.
-- [ ] Tests: query shape conformance, pagination and every filter, slug
+      with partial areas. (`src/lib/properties/fixtures.ts`)
+- [x] Tests: query shape conformance, pagination and every filter, slug
       not-found, and an assertion that no returned object graph contains a price
       or bucket key.
 
-**Acceptance:** the read layer returns contract-shaped data; fixtures typecheck
-against the same types; tests pass without a database for the fixture path.
+**Design decisions taken during implementation:**
+
+- **The database handle is a parameter, not a module import.** `@/db` throws at
+  import time when `DATABASE_URL` is unset, so importing it here would force
+  every fixture-path test to require a running Postgres. `listPublishedProperties(db, params)`
+  keeps the module importable and its shapes testable without one.
+- **BHK and amenity filters use `EXISTS`, not joins.** A property with three
+  matching variants must still count once, or pagination totals silently lie.
+- **The exclusion-list guard is runtime code** (`src/lib/properties/no-price.ts`),
+  not a test helper, so fixtures and database tests assert the same rule through
+  one implementation. It is itself tested against planted leaks first — a guard
+  that cannot fail proves nothing.
+- **The contract gained two rules it was missing.** `primaryMedia` resolves to
+  the `isPrimary` row, else lowest `displayOrder`, else `null`; `bhkTypes` is the
+  distinct set across variants. Both are now in `api-spec.v1.md`, so the doc and
+  the code do not drift.
+
+**Acceptance — met and exceeded:** the read layer returns contract-shaped data;
+fixtures typecheck against the same types; the 35 fixture-path tests pass with no
+database. Beyond the original acceptance, a local Postgres was stood up this step,
+so the 24 read-layer database tests (pagination, every filter, both sorts,
+slug-not-found, price-absence on real query output) and the 6 previously
+unrunnable publisher integration tests now run too: **105 passed across 8 files**,
+the first fully green suite in this project. `format:check`, `lint`, `typecheck`,
+and `build` all pass.
+
+Database-backed read tests seed their properties through the real
+`publishSubmission` transaction rather than direct catalog inserts — the
+one-write-path rule binds tests too, and a raw INSERT would test a shape the
+publisher cannot actually produce.
+
+**Defect found, not fixed — needs a decision.** `.gitignore` excludes
+`drizzle/meta/`, so Drizzle's migration journal and snapshots were never
+committed. `bun run db:migrate` therefore fails on every fresh checkout (it did
+here), and more seriously `db:generate` has no snapshot to diff against and can
+emit a migration duplicating existing ones — a schema-divergence risk of exactly
+the class this project exists to prevent. Local setup worked around it by applying
+`drizzle/*.sql` in order. Recorded in `docs/local-database-setup.md`; resolving it
+is a migration-workflow decision, so it is surfaced rather than taken unilaterally.
 
 ## Step 3 — Buyer read routes
 

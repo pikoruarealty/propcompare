@@ -78,6 +78,10 @@ An unknown query parameter, or a value that fails validation (e.g. `possessionSt
 }
 ```
 
+`primaryMedia` is the property's card image: the `property_media` row flagged `isPrimary`, falling back to the lowest `displayOrder` when none is flagged, and `null` when the property has no media at all. A property without media has no card image rather than a placeholder.
+
+`bhkTypes` is the distinct set of BHK types across the property's unit variants, so a property with three 2 BHK variants lists `2bhk` once.
+
 No summary object contains a price, price-per-square-foot, or bucket value, at any nesting level.
 
 ### `GET /api/v1/properties/{slug}`

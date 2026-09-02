@@ -1,5 +1,64 @@
 # Progress
 
+## 2026-09-02 — Phase 2B step 2 complete: typed read layer, fixtures, and a working local database
+
+**Done:** Built the buyer read layer under `src/lib/properties/`: `types.ts`
+(the step 1 contract as TypeScript, describing the wire shape so numerics stay
+strings and timestamps stay ISO), `queries.ts` (`listPublishedProperties` and
+`getPublishedPropertyBySlug` as read-only Drizzle queries), `fixtures.ts`
+(typed doubles including a deliberately sparse property), and `no-price.ts`
+(the exclusion-list guard).
+
+**Three implementation decisions worth knowing:** the database handle is a
+function parameter rather than a module import, because `@/db` throws at import
+time without `DATABASE_URL` and would otherwise force every fixture test to need
+Postgres. BHK and amenity filters use `EXISTS` rather than joins, so a property
+with three matching variants still counts once instead of inflating pagination
+totals. And the exclusion-list guard is runtime code rather than a test helper,
+so fixtures and database tests assert the same rule through one implementation —
+and the guard is itself tested against planted leaks first, since a guard that
+cannot fail proves nothing.
+
+**Local Postgres is now running, routed entirely through env.** Docker could not
+be used (Docker Desktop cannot start — WSL is not installed on this machine), but
+a native PostgreSQL 18 install was already present on port 5432. Created the
+`propcompare` database, the `private` schema, and the three roles, replicating
+`docker/postgres-init/*.sql` plus the ownership grants the container otherwise
+gets for free. Nothing is hard-coded: `.env` is gitignored and `.env.example`
+remains the template, so a second developer points the same three variables at
+their own instance. Documented in
+[docs/local-database-setup.md](docs/local-database-setup.md), covering both the
+Docker path and the native path. Verified the privilege split holds — the
+application role is refused on `private`, the service role is allowed.
+
+**Verified:** `bun run test` reports **105 passed across 8 files** — the first
+fully green suite in this project. That includes 35 fixture-path tests needing no
+database, 24 new read-layer database tests (pagination, every filter, both sorts,
+slug-not-found, price-absence on real query output), and the 6 publisher
+integration tests that had never once been runnable here. `format:check`, `lint`,
+`typecheck`, and `build` all pass. Read-layer database tests seed their
+properties through the real `publishSubmission` transaction, never direct catalog
+inserts — the one-write-path rule binds tests too.
+
+**Contract gained two rules it was missing**, found by implementing against it:
+`primaryMedia` resolves to the `isPrimary` row, else lowest `displayOrder`, else
+`null`; `bhkTypes` is the distinct set across a property's variants. Both are now
+in `api-spec.v1.md` so the document and the code cannot drift.
+
+**Defect found, deliberately not fixed — needs your decision.** `.gitignore`
+excludes `drizzle/meta/`, so Drizzle's migration journal and snapshots were never
+committed. `bun run db:migrate` consequently fails on every fresh checkout, and
+`db:generate` — with no snapshot to diff against — can emit a migration that
+duplicates existing ones. That is a schema-divergence risk of precisely the class
+this project exists to prevent, so it is surfaced rather than resolved
+unilaterally. Local setup worked around it by applying `drizzle/*.sql` in
+filename order.
+
+**Next up:** step 3 — the buyer read routes (`task/phase-2b-api-routes`):
+`src/app/api/v1/properties/route.ts` and `[slug]/route.ts` over this layer, query
+parameter validation and coercion returning the documented `422` envelope, and
+deliberate caching/revalidation.
+
 ## 2026-09-02 — Phase 2B step 1 complete: buyer read contract specified
 
 **Done:** Both buyer read routes are now fully specified in
