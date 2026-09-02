@@ -32,6 +32,7 @@ coverage/
 *.pdf
 **/ocr-results/
 **/ocr-eval/results/
+.local/ocr-checkpoints/
 
 # Local database data (if running Postgres via local volume)
 .pgdata/

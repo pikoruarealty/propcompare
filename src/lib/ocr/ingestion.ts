@@ -1,7 +1,9 @@
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import {
+  amenityCatalog,
   ocrExtractionJobs,
+  propertyTypes,
   propertySchemaFields,
   propertySubmissionFieldEvidence,
   propertySubmissionFields,
@@ -23,6 +25,22 @@ export class OcrIngestionError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "OcrIngestionError";
+  }
+}
+
+/**
+ * Keeps a successfully parsed provider result reachable when only persistence
+ * fails. Call retryOcrExtractionPersistence(error.jobId, error.result) to retry
+ * the database transaction without making another provider request.
+ */
+export class OcrPersistenceError extends OcrIngestionError {
+  constructor(
+    public readonly jobId: string,
+    public readonly result: OcrProviderExtractionResult,
+    public readonly persistenceCause: unknown,
+  ) {
+    super(`OCR extraction succeeded but persistence failed for job ${jobId}`);
+    this.name = "OcrPersistenceError";
   }
 }
 
@@ -96,6 +114,103 @@ export const persistOcrExtractionResult = async (
   }
 };
 
+export const retryOcrExtractionPersistence = async (params: {
+  jobId: string;
+  result: OcrProviderExtractionResult;
+}): Promise<OcrProviderExtractionResult> => {
+  const [job] = await db
+    .select({
+      id: ocrExtractionJobs.id,
+      sourceDocumentId: ocrExtractionJobs.sourceDocumentId,
+      submissionId: ocrExtractionJobs.submissionId,
+      status: ocrExtractionJobs.status,
+      errorCode: ocrExtractionJobs.errorCode,
+      routingManifest: ocrExtractionJobs.routingManifest,
+      pageCount: sourceDocuments.pageCount,
+    })
+    .from(ocrExtractionJobs)
+    .innerJoin(
+      sourceDocuments,
+      eq(ocrExtractionJobs.sourceDocumentId, sourceDocuments.id),
+    )
+    .where(eq(ocrExtractionJobs.id, params.jobId));
+
+  if (!job) {
+    throw new OcrIngestionError(`OCR job not found: ${params.jobId}`);
+  }
+  if (
+    job.status !== "processing" &&
+    !(
+      job.status === "failed" && job.errorCode === "evidence_persistence_failed"
+    )
+  ) {
+    throw new OcrIngestionError(
+      `OCR persistence retry requires a processing job or an evidence_persistence_failed job, received ${job.status}`,
+    );
+  }
+
+  const manifest = parseOcrRoutingManifest(
+    job.routingManifest,
+    job.pageCount ?? undefined,
+  );
+  try {
+    await db.transaction(async (tx) => {
+      const [lockedJob] = await tx
+        .select({
+          status: ocrExtractionJobs.status,
+          errorCode: ocrExtractionJobs.errorCode,
+        })
+        .from(ocrExtractionJobs)
+        .where(eq(ocrExtractionJobs.id, job.id))
+        .for("update");
+      if (
+        lockedJob?.status !== "processing" &&
+        !(
+          lockedJob?.status === "failed" &&
+          lockedJob.errorCode === "evidence_persistence_failed"
+        )
+      ) {
+        throw new OcrIngestionError(
+          "OCR job is not eligible for persistence; evidence was not written",
+        );
+      }
+      if (lockedJob.status === "failed") {
+        await tx
+          .update(ocrExtractionJobs)
+          .set({
+            status: "processing",
+            completedAt: null,
+            errorCode: null,
+            errorMessage: null,
+          })
+          .where(eq(ocrExtractionJobs.id, job.id));
+      }
+      await persistOcrExtractionResult(tx, {
+        jobId: job.id,
+        sourceDocumentId: job.sourceDocumentId,
+        submissionId: job.submissionId,
+        manifest,
+        result: params.result,
+      });
+      await tx
+        .update(ocrExtractionJobs)
+        .set({
+          status: "completed",
+          completedAt: new Date(),
+          providerJobId: params.result.providerRequestIds[0] ?? null,
+          errorCode: null,
+          errorMessage: null,
+        })
+        .where(eq(ocrExtractionJobs.id, job.id));
+    });
+  } catch (error) {
+    await markJobFailed(job.id, "evidence_persistence_failed", String(error));
+    throw new OcrPersistenceError(job.id, params.result, error);
+  }
+
+  return params.result;
+};
+
 export const executeOcrExtractionJob = async (params: {
   jobId: string;
   adapter: OcrProviderAdapter;
@@ -137,13 +252,35 @@ export const executeOcrExtractionJob = async (params: {
     })
     .from(propertySchemaFields)
     .where(eq(propertySchemaFields.isActive, true));
+  const propertyTypeRows = await db
+    .select({ key: propertyTypes.key })
+    .from(propertyTypes);
+  const amenityRows = await db
+    .select({ key: amenityCatalog.key })
+    .from(amenityCatalog);
+  const activeFieldsWithVocabularies = activeFields.map((field) => {
+    if (field.fieldKey === "property.type") {
+      return {
+        ...field,
+        allowedValues: propertyTypeRows.map((row) => row.key),
+      };
+    }
+    if (field.fieldKey === "property.amenities") {
+      return {
+        ...field,
+        allowedValues: amenityRows.map((row) => row.key),
+      };
+    }
+    return field;
+  });
   const request: OcrExtractionRequest = {
+    jobId: job.id,
     sourceDocumentId: job.sourceDocumentId,
     gcsPath: job.gcsPath,
     manifest,
     pipelineVersion: job.pipelineVersion,
     fieldSchemaVersion: job.fieldSchemaVersion,
-    activeFields,
+    activeFields: activeFieldsWithVocabularies,
   };
 
   const processingRows = await db
@@ -177,38 +314,5 @@ export const executeOcrExtractionJob = async (params: {
     throw error;
   }
 
-  try {
-    await db.transaction(async (tx) => {
-      const [lockedJob] = await tx
-        .select({ status: ocrExtractionJobs.status })
-        .from(ocrExtractionJobs)
-        .where(eq(ocrExtractionJobs.id, job.id))
-        .for("update");
-      if (lockedJob?.status !== "processing") {
-        throw new OcrIngestionError(
-          "OCR job is no longer processing; evidence was not written",
-        );
-      }
-      await persistOcrExtractionResult(tx, {
-        jobId: job.id,
-        sourceDocumentId: job.sourceDocumentId,
-        submissionId: job.submissionId,
-        manifest,
-        result,
-      });
-      await tx
-        .update(ocrExtractionJobs)
-        .set({
-          status: "completed",
-          completedAt: new Date(),
-          providerJobId: result.providerRequestIds[0] ?? null,
-        })
-        .where(eq(ocrExtractionJobs.id, job.id));
-    });
-  } catch (error) {
-    await markJobFailed(job.id, "evidence_persistence_failed", String(error));
-    throw error;
-  }
-
-  return result;
+  return retryOcrExtractionPersistence({ jobId: job.id, result });
 };

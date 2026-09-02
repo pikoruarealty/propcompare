@@ -1,3 +1,5 @@
+import { mkdir, rename, writeFile } from "node:fs/promises";
+import path from "node:path";
 import { PDFDocument } from "pdf-lib";
 import {
   findRoutingScope,
@@ -9,6 +11,7 @@ import {
 export interface ActiveOcrField {
   fieldKey: string;
   dataType: string;
+  allowedValues?: string[];
 }
 
 export interface OcrEvidenceCandidate {
@@ -71,9 +74,22 @@ export interface OcrProviderExtractionResult {
   extraction: NewPipelineExtraction;
   unmappedRawEvidence: OcrUnmappedEvidenceCandidate[];
   providerRequestIds: string[];
+  usage?: OcrScopeUsage[];
+  checkpointPath?: string;
+}
+
+export interface OcrScopeUsage {
+  scopeKey: string;
+  inputPdfBytes: number;
+  providerRequestId?: string;
+  promptTokens?: number;
+  completionTokens?: number;
+  reasoningTokens?: number;
+  costUsd?: number;
 }
 
 export interface OcrExtractionRequest {
+  jobId?: string;
   sourceDocumentId: string;
   gcsPath: string;
   manifest: OcrRoutingManifest;
@@ -97,6 +113,33 @@ export interface SubmissionFieldCandidate {
   confidence?: number;
   evidence: SubmissionEvidenceCandidate[];
 }
+
+const deduplicateSubmissionEvidence = (
+  evidence: SubmissionEvidenceCandidate[],
+): SubmissionEvidenceCandidate[] => {
+  const unique = new Map<string, SubmissionEvidenceCandidate>();
+  for (const item of evidence) {
+    const key = `${item.pageNumber}\u0000${item.valuePath}`;
+    const existing = unique.get(key);
+    if (existing === undefined) {
+      unique.set(key, item);
+      continue;
+    }
+
+    const snippets = [existing.sourceSnippet, item.sourceSnippet].filter(
+      (snippet): snippet is string =>
+        snippet !== undefined && snippet.trim().length > 0,
+    );
+    const mergedSnippets = [...new Set(snippets)];
+    unique.set(key, {
+      ...existing,
+      ...(mergedSnippets.length === 0
+        ? {}
+        : { sourceSnippet: mergedSnippets.join("\n") }),
+    });
+  }
+  return [...unique.values()];
+};
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
@@ -187,23 +230,30 @@ const parseEvidenceList = (
 };
 
 const validateFieldValue = (
-  dataType: string,
+  field: ActiveOcrField,
   value: unknown,
   path: string,
 ): unknown => {
+  const { dataType } = field;
   const stringTypes = new Set([
     "string",
     "city_name",
     "locality_name",
     "rera_registration_number",
     "specification_text",
-    "property_type_key",
   ]);
   if (stringTypes.has(dataType)) {
     return readNonEmptyString(value, path);
   }
   if (dataType === "positive_integer") {
     return readPositiveInteger(value, path);
+  }
+  if (dataType === "property_type_key") {
+    const key = readNonEmptyString(value, path);
+    if (field.allowedValues && !field.allowedValues.includes(key)) {
+      throw new OcrContractError(`${path} is not an approved property type`);
+    }
+    return key;
   }
   if (dataType === "percentage_0_to_100") {
     if (
@@ -251,6 +301,14 @@ const validateFieldValue = (
     const normalized = value.map((item) => (item as string).trim());
     if (new Set(normalized).size !== normalized.length) {
       throw new OcrContractError(`${path} contains duplicate amenity keys`);
+    }
+    const unknown = normalized.find(
+      (key) => field.allowedValues && !field.allowedValues.includes(key),
+    );
+    if (unknown !== undefined) {
+      throw new OcrContractError(
+        `${path} contains an unapproved amenity key: ${unknown}`,
+      );
     }
     return normalized;
   }
@@ -411,11 +469,7 @@ export const validateNewPipelineExtraction = (
     );
     return {
       fieldKey,
-      value: validateFieldValue(
-        contract.dataType,
-        candidate.value,
-        `${path}.value`,
-      ),
+      value: validateFieldValue(contract, candidate.value, `${path}.value`),
       ...(confidence === undefined ? {} : { confidence }),
       evidence: parseEvidenceList(
         candidate.evidence,
@@ -506,10 +560,12 @@ export const buildSubmissionFieldCandidates = (
   const extraction = input;
   const result: SubmissionFieldCandidate[] = extraction.fields.map((field) => ({
     ...field,
-    evidence: field.evidence.map((evidence) => ({
-      ...evidence,
-      valuePath: "$",
-    })),
+    evidence: deduplicateSubmissionEvidence(
+      field.evidence.map((evidence) => ({
+        ...evidence,
+        valuePath: "$",
+      })),
+    ),
   }));
 
   if (extraction.unitVariants.length === 0) {
@@ -535,14 +591,16 @@ export const buildSubmissionFieldCandidates = (
   )
     ? Math.min(...variantConfidences)
     : undefined;
-  const evidence = orderedScopes.flatMap((scope) => {
-    const candidate = candidatesByScope.get(scope.scopeKey);
-    if (candidate === undefined) {
-      return [];
-    }
-    const valuePath = `$[${assembled.findIndex((value) => value.variantName === scope.variant.variantName)}]`;
-    return candidate.evidence.map((item) => ({ ...item, valuePath }));
-  });
+  const evidence = deduplicateSubmissionEvidence(
+    orderedScopes.flatMap((scope) => {
+      const candidate = candidatesByScope.get(scope.scopeKey);
+      if (candidate === undefined) {
+        return [];
+      }
+      const valuePath = `$[${assembled.findIndex((value) => value.variantName === scope.variant.variantName)}]`;
+      return candidate.evidence.map((item) => ({ ...item, valuePath }));
+    }),
+  );
   result.push({
     fieldKey: "unit_variants",
     value: assembled,
@@ -588,6 +646,7 @@ export interface OpenRouterOcrAdapterOptions {
   requestTimeoutMs?: number;
   fetch?: typeof fetch;
   retryDelayMs?: number;
+  checkpointDirectory?: string | false;
 }
 
 interface OpenRouterScopeResponse {
@@ -600,7 +659,30 @@ interface OpenRouterStreamResult {
   rawText: string;
   finishReason?: string;
   providerRequestId?: string;
+  usage?: {
+    promptTokens?: number;
+    completionTokens?: number;
+    reasoningTokens?: number;
+    costUsd?: number;
+  };
 }
+
+interface OcrScopeCheckpoint {
+  scopeKey: string;
+  pageNumbers: number[];
+  providerRequestId?: string;
+  response: unknown;
+}
+
+const writeCheckpointAtomically = async (
+  checkpointPath: string,
+  value: unknown,
+): Promise<void> => {
+  await mkdir(path.dirname(checkpointPath), { recursive: true });
+  const temporaryPath = `${checkpointPath}.${process.pid}.tmp`;
+  await writeFile(temporaryPath, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+  await rename(temporaryPath, checkpointPath);
+};
 
 const stripCodeFence = (value: string): string =>
   value
@@ -710,6 +792,7 @@ const consumeOpenRouterStream = async (
   let rawText = "";
   let finishReason: string | undefined;
   let providerRequestId: string | undefined;
+  let usage: OpenRouterStreamResult["usage"];
 
   const consumeFrame = (frame: string): void => {
     const data = frame
@@ -726,6 +809,29 @@ const consumeOpenRouterStream = async (
     }
     if (!isRecord(event)) return;
     if (typeof event.id === "string") providerRequestId ??= event.id;
+    const eventUsage = event.usage;
+    if (isRecord(eventUsage)) {
+      const readUsageNumber = (key: string): number | undefined =>
+        typeof eventUsage[key] === "number" ? eventUsage[key] : undefined;
+      const completionDetails = isRecord(eventUsage.completion_tokens_details)
+        ? eventUsage.completion_tokens_details
+        : undefined;
+      usage = {
+        ...(readUsageNumber("prompt_tokens") === undefined
+          ? {}
+          : { promptTokens: readUsageNumber("prompt_tokens") }),
+        ...(readUsageNumber("completion_tokens") === undefined
+          ? {}
+          : { completionTokens: readUsageNumber("completion_tokens") }),
+        ...(completionDetails === undefined ||
+        typeof completionDetails.reasoning_tokens !== "number"
+          ? {}
+          : { reasoningTokens: completionDetails.reasoning_tokens }),
+        ...(readUsageNumber("cost") === undefined
+          ? {}
+          : { costUsd: readUsageNumber("cost") }),
+      };
+    }
     const choices = event.choices;
     if (!Array.isArray(choices) || !isRecord(choices[0])) return;
     const choice = choices[0];
@@ -746,7 +852,7 @@ const consumeOpenRouterStream = async (
     if (done) break;
   }
   if (pending.trim() !== "") consumeFrame(pending);
-  return { rawText, finishReason, providerRequestId };
+  return { rawText, finishReason, providerRequestId, usage };
 };
 
 const normalizeProviderEvidence = (
@@ -992,6 +1098,14 @@ export const createOpenRouterOcrAdapter = (
   );
   const fetchImplementation = options.fetch ?? globalThis.fetch;
   const retryDelayMs = options.retryDelayMs ?? 1_000;
+  const configuredCheckpointDirectory =
+    options.checkpointDirectory === false
+      ? undefined
+      : path.resolve(
+          options.checkpointDirectory ??
+            process.env.OCR_CHECKPOINT_DIR ??
+            ".local/ocr-checkpoints",
+        );
 
   const callScope = async (
     scope: OcrRoutingManifest["scopes"][number],
@@ -1093,6 +1207,33 @@ export const createOpenRouterOcrAdapter = (
       const unitVariants: OcrUnitVariantCandidate[] = [];
       const unmappedRawEvidence: OcrUnmappedEvidenceCandidate[] = [];
       const providerRequestIds: string[] = [];
+      const usage: OcrScopeUsage[] = [];
+      const scopeCheckpoints: OcrScopeCheckpoint[] = [];
+      const checkpointPath =
+        request.jobId === undefined ||
+        configuredCheckpointDirectory === undefined
+          ? undefined
+          : path.join(
+              configuredCheckpointDirectory,
+              `${request.jobId.replace(/[^a-zA-Z0-9_-]/g, "_")}.json`,
+            );
+
+      const saveCheckpoint = async (
+        status: "extracting" | "extracted",
+        result?: OcrProviderExtractionResult,
+      ): Promise<void> => {
+        if (checkpointPath === undefined) return;
+        await writeCheckpointAtomically(checkpointPath, {
+          version: 1,
+          status,
+          jobId: request.jobId,
+          sourceDocumentId: request.sourceDocumentId,
+          providerKey: `openrouter:${model}`,
+          updatedAt: new Date().toISOString(),
+          scopes: scopeCheckpoints,
+          ...(result === undefined ? {} : { result }),
+        });
+      };
 
       for (const scope of request.manifest.scopes) {
         if (scope.kind === "ignore") continue;
@@ -1104,6 +1245,14 @@ export const createOpenRouterOcrAdapter = (
         if (stream.providerRequestId) {
           providerRequestIds.push(stream.providerRequestId);
         }
+        usage.push({
+          scopeKey: scope.scopeKey,
+          inputPdfBytes: scopedPdf.byteLength,
+          ...(stream.providerRequestId === undefined
+            ? {}
+            : { providerRequestId: stream.providerRequestId }),
+          ...stream.usage,
+        });
         if (stream.finishReason === "length") {
           throw new OcrAdapterError(
             "output_length",
@@ -1135,6 +1284,15 @@ export const createOpenRouterOcrAdapter = (
           request.manifest,
           request.activeFields,
         );
+        scopeCheckpoints.push({
+          scopeKey: scope.scopeKey,
+          pageNumbers: scope.pages.map((page) => page.pageNumber),
+          ...(stream.providerRequestId === undefined
+            ? {}
+            : { providerRequestId: stream.providerRequestId }),
+          response: parsed,
+        });
+        await saveCheckpoint("extracting");
         fields.push(...scopeResult.fields);
         if (scopeResult.unitVariant) unitVariants.push(scopeResult.unitVariant);
         unmappedRawEvidence.push(...scopeResult.unmapped);
@@ -1153,7 +1311,15 @@ export const createOpenRouterOcrAdapter = (
         request.pipelineVersion,
         request.fieldSchemaVersion,
       );
-      return { extraction, unmappedRawEvidence, providerRequestIds };
+      const result: OcrProviderExtractionResult = {
+        extraction,
+        unmappedRawEvidence,
+        providerRequestIds,
+        usage,
+        ...(checkpointPath === undefined ? {} : { checkpointPath }),
+      };
+      await saveCheckpoint("extracted", result);
+      return result;
     },
   };
 };

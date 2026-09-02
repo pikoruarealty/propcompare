@@ -86,7 +86,11 @@ const scopeKeyFromRequest = (init?: RequestInit): string => {
 
 const activeFields: ActiveOcrField[] = [
   { fieldKey: "property.name", dataType: "string" },
-  { fieldKey: "property.amenities", dataType: "amenity_key_array" },
+  {
+    fieldKey: "property.amenities",
+    dataType: "amenity_key_array",
+    allowedValues: ["gym", "swimming_pool"],
+  },
   { fieldKey: "unit_variants", dataType: "unit_variant_array" },
 ];
 
@@ -207,6 +211,43 @@ describe("the versioned OCR routing contract", () => {
     expect(variants?.evidence).toEqual([
       { scopeKey: "penthouse", pageNumber: 2, valuePath: "$[0]" },
       { scopeKey: "penthouse", pageNumber: 3, valuePath: "$[0]" },
+    ]);
+  });
+
+  it("merges duplicate evidence snippets for the same DB evidence key", () => {
+    const manifest = parseOcrRoutingManifest(routingInput, 5);
+    const duplicateEvidence = structuredClone(
+      extractionInput,
+    ) as NewPipelineExtraction;
+    duplicateEvidence.fields[0].evidence = [
+      {
+        scopeKey: "project",
+        pageNumber: 1,
+        sourceSnippet: "Example",
+      },
+      {
+        scopeKey: "project",
+        pageNumber: 1,
+        sourceSnippet: "Residences",
+      },
+    ];
+    const extraction = validateNewPipelineExtraction(
+      duplicateEvidence,
+      manifest,
+      activeFields,
+      "ocr-v1",
+      "v1",
+    );
+
+    const [propertyName] = buildSubmissionFieldCandidates(extraction, manifest);
+
+    expect(propertyName.evidence).toEqual([
+      {
+        scopeKey: "project",
+        pageNumber: 1,
+        sourceSnippet: "Example\nResidences",
+        valuePath: "$",
+      },
     ]);
   });
 
@@ -355,6 +396,54 @@ describe("the OpenRouter OCR provider adapter", () => {
     }
   });
 
+  it("checkpoints each parsed scope before later provider work completes", async () => {
+    const checkpointDirectory = await mkdtemp(
+      path.join(tmpdir(), "propcompare-ocr-checkpoint-"),
+    );
+    try {
+      const pdf = await createSyntheticPdf();
+      let requestCount = 0;
+      const fetchMock = (async (_input: unknown, init?: RequestInit) => {
+        requestCount += 1;
+        if (requestCount === 2) {
+          return new Response("synthetic provider failure", { status: 400 });
+        }
+        const scopeKey = scopeKeyFromRequest(init);
+        return streamResponse(
+          JSON.stringify(validScopePayload(scopeKey)),
+          "stop",
+          `generation-${scopeKey}`,
+        );
+      }) as typeof fetch;
+      const adapter = createOpenRouterOcrAdapter({
+        apiKey: "test-key",
+        loadSourcePdf: async () => pdf,
+        fetch: fetchMock,
+        retryDelayMs: 0,
+        checkpointDirectory,
+      });
+
+      await expect(
+        adapter.extract({ ...(await createRequest()), jobId: "job-test" }),
+      ).rejects.toMatchObject({ code: "provider_error" });
+
+      const checkpoint = JSON.parse(
+        await readFile(path.join(checkpointDirectory, "job-test.json"), "utf8"),
+      ) as {
+        status: string;
+        scopes: Array<{ scopeKey: string; response: unknown }>;
+      };
+      expect(checkpoint.status).toBe("extracting");
+      expect(checkpoint.scopes).toHaveLength(1);
+      expect(checkpoint.scopes[0]).toMatchObject({
+        scopeKey: "project",
+        response: validScopePayload("project"),
+      });
+    } finally {
+      await rm(checkpointDirectory, { recursive: true, force: true });
+    }
+  });
+
   it("flags unknown fields as unmapped raw evidence", async () => {
     const pdf = await createSyntheticPdf();
     const fetchMock = (async (_input: unknown, init?: RequestInit) => {
@@ -454,3 +543,6 @@ describe("the OpenRouter OCR provider adapter", () => {
     } satisfies Partial<OcrAdapterError>);
   });
 });
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
