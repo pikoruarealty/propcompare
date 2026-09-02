@@ -36,14 +36,17 @@ Property details may expose identifiers, property/developer facts, location, RER
 
 ## Admin API
 
-| Method and route                                        | Status             | Access               | Contract                                                                  |
-| ------------------------------------------------------- | ------------------ | -------------------- | ------------------------------------------------------------------------- |
-| `GET /api/v1/admin/submissions`                         | Planned (Phase 2A) | Admin                | Review queue filtered by submission status.                               |
-| `GET /api/v1/admin/submissions/{id}`                    | Planned (Phase 2A) | Admin                | Submission payload plus field-level evidence/review state.                |
-| `PATCH /api/v1/admin/submissions/{id}/fields/{fieldId}` | Planned (Phase 2A) | Admin                | Confirm, edit, or reject a proposed field with field-contract validation. |
-| `POST /api/v1/admin/submissions/{id}/review`            | Planned (Phase 2A) | Admin                | Request changes, reject, or approve; no direct catalog mutation.          |
-| `POST /api/v1/admin/submissions/{id}/publish`           | Planned (Phase 2A) | Authorized publisher | Executes the transactional live-catalog publish and revision snapshot.    |
-| `POST /api/v1/admin/source-documents`                   | Planned (Phase 2A) | Admin                | Creates an ingestion document record and starts controlled OCR.           |
+| Method and route                                        | Status             | Access               | Contract                                                                                             |
+| ------------------------------------------------------- | ------------------ | -------------------- | ---------------------------------------------------------------------------------------------------- |
+| `GET /api/v1/admin/submissions`                         | Planned (Phase 2A) | Admin                | Review queue filtered by submission status.                                                          |
+| `GET /api/v1/admin/submissions/{id}`                    | Planned (Phase 2A) | Admin                | Submission payload plus field-level evidence/review state.                                           |
+| `PATCH /api/v1/admin/submissions/{id}/fields/{fieldId}` | Planned (Phase 2A) | Admin                | Confirm, edit, or reject a proposed field with field-contract validation.                            |
+| `POST /api/v1/admin/submissions/{id}/review`            | Planned (Phase 2A) | Admin                | Request changes, reject, or approve; no direct catalog mutation.                                     |
+| `POST /api/v1/admin/submissions/{id}/publish`           | Planned (Phase 2A) | Authorized publisher | Executes the transactional live-catalog publish and revision snapshot.                               |
+| `POST /api/v1/admin/source-documents`                   | Planned (Phase 2A) | Admin                | Creates an immutable ingestion document and draft OCR submission; it does not start paid extraction. |
+| `POST /api/v1/admin/source-documents/{id}/ocr-jobs`     | Planned (Phase 2A) | Admin                | Creates or updates a draft, versioned page-routing manifest for one OCR attempt.                     |
+| `POST /api/v1/admin/ocr-jobs/{id}/queue`                | Planned (Phase 2A) | Admin                | Validates complete human-confirmed routing, freezes the manifest, and queues extraction.             |
+| `GET /api/v1/admin/ocr-jobs/{id}`                       | Planned (Phase 2A) | Admin                | Returns attempt status, routing, and safe error metadata; provider secrets remain server-only.       |
 
 ## Developer API
 

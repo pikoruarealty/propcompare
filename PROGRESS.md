@@ -1,5 +1,69 @@
 # Progress
 
+## 2026-09-01 — Phase 2A submission review and publish transaction completed
+
+**Done:** Implemented the review state machine (`src/lib/submissions/transitions.ts`,
+`applySubmissionTransition`) enforcing role-gated actor permissions
+(submitter/verifier/owner) and legal `from`-status sets per action, including
+owner-only publish and rejection of duplicate publish attempts. Implemented
+`publishSubmission` (`src/lib/submissions/publisher.ts`) — the sole
+transaction permitted to write `properties`, `unit_variants`, `unit_areas`,
+`property_amenities`, and `property_specifications`. It row-locks the
+submission, enforces the transition guard, blocks publication while any field
+is `needs_review`, discards rejected/inactive fields, validates the remaining
+payload against the active field contract, and applies it as an additive
+patch: new properties get explicit `not_stated` rows for every unmentioned
+catalog item, existing properties leave unmentioned fields, amenities, and
+specifications untouched. Unit variants upsert only by exact `variant_name`.
+New-property slugs use a deterministic collision suffix
+(`src/lib/submissions/slug.ts`) derived from the submission id, pre-checked
+via SELECT rather than a caught unique-violation (no mid-transaction
+SAVEPOINT). Every publish writes one `property_revisions` snapshot in the
+same transaction and writes the validated payload back onto
+`property_submissions.payload` as a computed cache.
+
+**Verified:** 10 unit tests cover `transitions.ts`; 14 unit tests cover
+`validation.ts` (no DB access, `src/lib/submissions/submissions.test.ts`). 6
+integration tests against local Postgres
+(`src/lib/submissions/publisher.integration.test.ts`) cover: new-property
+publish with catalog backfill; the needs_review block with a no-partial-write
+assertion; rejection of a non-approved submission; rejection of a duplicate
+publish; an additive-patch update to an existing property with untouched
+fields/amenities verified unchanged; and the deferred Phase 1 private budget
+bucket mapping proof (inserts into `private.unit_price_history` via the
+service-role client, queries the raw `private.unit_current_bucket` view, and
+confirms the mapped bucket matches the seeded band). `bun run format:check`,
+`bun run lint`, `bun run typecheck`, `bun run test` (39 passed, 4 files), and
+`git diff --check` all pass.
+
+**Next up:** wire `publishSubmission` and the transition function to the
+actual `/api/v1/admin/submissions/{id}` HTTP routes (currently "Planned" in
+`docs/api/api-spec.v1.md`), including auth/session-derived actor role. The
+admin review UI and OCR provider adapter remain later Phase 2A/2B work.
+
+## 2026-09-01 — Phase 2A OCR routing and evidence foundation completed
+
+**Done:** Added canonical schema v3 and migration `0003`: OCR status now belongs
+to versioned extraction attempts, each attempt retains its human-confirmed page
+routing manifest, and submission fields can cite multiple document pages with
+JSON value paths. The provider-neutral adapter validates only active contract
+fields and guarantees that a confirmed multi-page unit scope produces at most
+one unit-variant candidate.
+
+**Legacy boundary:** historical property JSON is comparison-only evidence. It
+has no production submission adapter. Every curator-selected brochure will be
+rerun through the new pipeline before its output is eligible for reconciliation
+or publication.
+
+**Verified:** migration applied locally; Drizzle reports no schema drift;
+format, lint, typecheck, nine tests, and `git diff --check` pass. No live catalog
+record or private commercial record was written.
+
+**Next up:** continue Phase 2A with a separate task for submission state
+transitions, canonical payload validation, and the transactional publish path.
+Provider selection, the admin page-routing UI, and RERA integration remain later
+Phase 2A tasks.
+
 ## 2026-09-01 — Phase 1 lookup catalogs and private budget boundary completed
 
 **Done:** Seeded 26 amenities with 51 controlled synonyms, 13 specifications

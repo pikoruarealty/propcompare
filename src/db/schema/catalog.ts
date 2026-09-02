@@ -1,5 +1,6 @@
 import {
   boolean,
+  check,
   date,
   index,
   integer,
@@ -13,6 +14,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { users } from "./auth";
 
 const timestamps = () => ({
@@ -37,11 +39,13 @@ export const documentType = pgEnum("document_type", [
   "possession_proof",
   "other",
 ]);
-export const ocrStatus = pgEnum("ocr_status", [
-  "pending",
+export const ocrJobStatus = pgEnum("ocr_job_status", [
+  "draft",
+  "queued",
   "processing",
   "completed",
   "failed",
+  "cancelled",
 ]);
 export const submissionStatus = pgEnum("submission_status", [
   "draft",
@@ -398,11 +402,15 @@ export const sourceDocuments = pgTable(
       onDelete: "set null",
     }),
     pageCount: integer("page_count"),
-    ocrStatus: ocrStatus("ocr_status").default("pending").notNull(),
-    ocrCompletedAt: timestamp("ocr_completed_at", { withTimezone: true }),
     ...timestamps(),
   },
-  (table) => [index("source_documents_property_id_idx").on(table.propertyId)],
+  (table) => [
+    index("source_documents_property_id_idx").on(table.propertyId),
+    check(
+      "source_documents_page_count_positive",
+      sql`${table.pageCount} is null or ${table.pageCount} > 0`,
+    ),
+  ],
 );
 
 export const propertySubmissions = pgTable(
@@ -410,6 +418,9 @@ export const propertySubmissions = pgTable(
   {
     id: uuid("id").defaultRandom().primaryKey(),
     propertyId: uuid("property_id").references(() => properties.id, {
+      onDelete: "set null",
+    }),
+    developerId: uuid("developer_id").references(() => developers.id, {
       onDelete: "set null",
     }),
     submittedBy: text("submitted_by").references(() => users.id, {
@@ -445,12 +456,6 @@ export const propertySubmissionFields = pgTable(
       .references(() => propertySchemaFields.fieldKey),
     value: jsonb("value").notNull(),
     confidence: numeric("confidence"),
-    sourceDocumentId: uuid("source_document_id").references(
-      () => sourceDocuments.id,
-      { onDelete: "set null" },
-    ),
-    sourcePage: integer("source_page"),
-    sourceSnippet: text("source_snippet"),
     reviewStatus: fieldReviewStatus("review_status")
       .default("needs_review")
       .notNull(),
@@ -460,6 +465,73 @@ export const propertySubmissionFields = pgTable(
     uniqueIndex("submission_fields_submission_field_key_unique").on(
       table.submissionId,
       table.fieldKey,
+    ),
+  ],
+);
+
+export const ocrExtractionJobs = pgTable(
+  "ocr_extraction_jobs",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    sourceDocumentId: uuid("source_document_id")
+      .notNull()
+      .references(() => sourceDocuments.id, { onDelete: "cascade" }),
+    submissionId: uuid("submission_id")
+      .notNull()
+      .references(() => propertySubmissions.id, { onDelete: "cascade" }),
+    status: ocrJobStatus("status").default("draft").notNull(),
+    pipelineVersion: text("pipeline_version").notNull(),
+    fieldSchemaVersion: text("field_schema_version").notNull(),
+    providerKey: text("provider_key"),
+    providerJobId: text("provider_job_id"),
+    routingManifest: jsonb("routing_manifest").notNull(),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    errorCode: text("error_code"),
+    errorMessage: text("error_message"),
+    ...timestamps(),
+  },
+  (table) => [
+    index("ocr_extraction_jobs_document_id_idx").on(table.sourceDocumentId),
+    index("ocr_extraction_jobs_submission_id_idx").on(table.submissionId),
+    index("ocr_extraction_jobs_status_idx").on(table.status),
+    uniqueIndex("ocr_extraction_jobs_provider_job_unique").on(
+      table.providerKey,
+      table.providerJobId,
+    ),
+  ],
+);
+
+export const propertySubmissionFieldEvidence = pgTable(
+  "property_submission_field_evidence",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    submissionFieldId: uuid("submission_field_id")
+      .notNull()
+      .references(() => propertySubmissionFields.id, { onDelete: "cascade" }),
+    ocrExtractionJobId: uuid("ocr_extraction_job_id").references(
+      () => ocrExtractionJobs.id,
+      { onDelete: "set null" },
+    ),
+    sourceDocumentId: uuid("source_document_id")
+      .notNull()
+      .references(() => sourceDocuments.id),
+    sourcePage: integer("source_page").notNull(),
+    valuePath: text("value_path").default("$").notNull(),
+    sourceSnippet: text("source_snippet"),
+    ...timestamps(),
+  },
+  (table) => [
+    uniqueIndex("submission_field_evidence_source_unique").on(
+      table.submissionFieldId,
+      table.sourceDocumentId,
+      table.sourcePage,
+      table.valuePath,
+    ),
+    index("submission_field_evidence_job_id_idx").on(table.ocrExtractionJobId),
+    check(
+      "submission_field_evidence_source_page_positive",
+      sql`${table.sourcePage} > 0`,
     ),
   ],
 );

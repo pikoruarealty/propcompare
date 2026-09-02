@@ -37,9 +37,13 @@ Phases 2A and 2B run in parallel once Phase 1 lands, so both developers are work
 
 - `property_submissions` / `property_submission_fields` / `property_revisions` implementation.
 - The publish transaction — the one write path into live catalog tables.
+- Versioned, human-confirmed brochure page routing before paid OCR; multi-page
+  unit scopes and many-page field evidence follow schema v3.
 - OCR provider integration against `property_schema_fields` (provider choice tracked as a dated `DECISIONS.md` entry once made).
+- Legacy-vs-new OCR evaluation reports remain comparison-only; every selected
+  brochure is rerun through the new pipeline before submission review.
 - `rera_fetch_jobs` scrape job and cross-check logic.
-- Admin UI: submission queue, Data Reconciliation screen (field + OCR confidence + source page + confirm/edit).
+- Admin UI: page-routing workspace, submission queue, and Data Reconciliation screen (field + OCR confidence + all evidence pages + confirm/edit).
 
 ## Phase 2B — Buyer UI against a fixed contract (parallel with 2A)
 

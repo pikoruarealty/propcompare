@@ -19,11 +19,15 @@ Staff sign-in
 ```
 
 1. Staff sign in with a developer-staff account.
-2. The portal resolves `developer_users` and shows only that developer's portfolio.
-3. Staff review portfolio completeness/interest analytics and select an existing property or new-property proposal.
-4. Staff create or edit a `property_submissions` draft, providing evidence/documents where required.
-5. Staff submit it for admin review and track draft, submitted, in review, changes requested, approved, rejected, or published status.
-6. If changes are requested, they revise and resubmit. Publication is visible as an outcome, never as an action they can invoke.
+2. The invitation already links the account through `developer_users` to an
+   administrator-created canonical `developers` profile; it does not create a
+   second builder record.
+3. The portal resolves that link and shows only the builder's portfolio.
+4. Staff review portfolio completeness/interest analytics and select an existing property or new-property proposal.
+5. Staff upload a brochure, map its pages to project/amenity/specification scopes and multi-page unit-variant groups, then review the OCR draft.
+6. Staff create or edit a `property_submissions` draft, providing evidence/documents where required.
+7. Staff submit it for admin review and track draft, submitted, in review, changes requested, approved, rejected, or published status.
+8. If changes are requested, they revise and resubmit. Publication is visible as an outcome, never as an action they can invoke.
 
 ## Permissions and boundaries
 

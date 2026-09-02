@@ -43,9 +43,14 @@ Developer and admin portals are separate products with separate permissions. A d
 ### Admin ingestion and verification
 
 - Accept a brochure/RERA source document and retain its provenance.
+- Let admins create/select canonical builder profiles without requiring a
+  builder account during initial curation; future invited builder staff submit
+  through the same profile and review boundary.
 - Extract only active fields in the versioned `property_schema_fields` contract; discard all other OCR output.
 - Let an admin confirm, edit, reject, request changes to, and approve a submission at field level.
 - Publish only through the canonical submission transaction, producing a revision snapshot in the same transaction.
+- Treat a later brochure as an additive property update: omitted facts never
+  delete published facts, and variant deletion/renaming is always explicit.
 
 ### Developer portal
 

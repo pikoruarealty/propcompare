@@ -10,7 +10,7 @@ This is a from-scratch rebuild — see [DECISIONS.md](DECISIONS.md) for why, and
 - [DECISIONS.md](DECISIONS.md) — dated record of every decision worth not silently reversing.
 - [PROGRESS.md](PROGRESS.md) — running log of what's done and what's next.
 - [AGENTS.md](AGENTS.md) — conventions for anyone (human or AI) writing code here.
-- [docs/schema/schema.v1.md](docs/schema/schema.v1.md) — the full database schema.
+- [docs/schema/schema.v4.md](docs/schema/schema.v4.md) — the active database schema.
 - [docs/design/design-tokens.md](docs/design/design-tokens.md) — the "Soft Daylight" design system.
 - [docs/roadmap.md](docs/roadmap.md) — phase-by-phase build plan and ownership.
 
