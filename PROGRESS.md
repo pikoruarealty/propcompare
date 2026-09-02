@@ -1,5 +1,78 @@
 # Progress
 
+## 2026-09-02 — Phase 2B step 0 complete: UI tooling baseline
+
+**Done:** Installed dependencies and stood up the buyer-UI toolchain.
+shadcn/ui was initialized on the Radix base and then reconciled onto the Soft
+Daylight palette: the generator had written its own neutral grayscale token set,
+bound Geist over Plus Jakarta Sans, set a 10px radius against the documented
+8px, and invented a dark theme. Every shadcn semantic token in
+`src/app/globals.css` now resolves to a documented Soft Daylight token or a
+`color-mix()` tonal layer derived from one, and `src/app/layout.tsx` is back on
+Cormorant Garamond + Plus Jakarta Sans. Added a second Vitest project (`ui`,
+jsdom + Testing Library, `.test.tsx`) beside the existing node project
+(`.test.ts`), which runs unchanged.
+
+**Guardrail:** `--color-verified-gold` staying out of the component palette is
+now enforced by `src/app/design-tokens.test.ts` rather than by convention — it
+also fails if the generated grayscale palette or a non-8px radius is
+reintroduced by a future `shadcn init`.
+
+**Two pre-existing defects found and fixed:** `bun run typecheck` could never
+pass on a fresh checkout, because `layout.tsx` uses the generated `LayoutProps`
+type from the gitignored `.next/types` and CI has no build step — the script is
+now `next typegen && tsc --noEmit`. And with no `.gitattributes`, a Windows
+checkout materializes CRLF, failing `format:check` on all 65 files despite
+correct formatting; `* text=auto eol=lf` fixes it without changing any stored
+content. Separately, the first `bun install` silently produced eight empty
+package directories from a corrupted cache, fixed by `bun pm cache rm` and a
+clean reinstall.
+
+**Verified:** `bun run format:check`, `bun run lint`, `bun run typecheck`, and
+`bun run build` all pass. `bun run test` reports 40 passed across 5 files (33
+pre-existing unit tests, 5 new token-contract tests, 2 button smoke tests). The
+6 database integration tests still cannot run locally — Postgres is not up and
+`DATABASE_URL` is unset — which is unchanged from before this step.
+
+**Deferred deliberately, not silently:** dark mode (Soft Daylight documents no
+dark palette, so the invented one was removed rather than kept), `--destructive`
+(no documented error colour; a restrained placeholder is flagged in the CSS),
+and chart/sidebar tokens (they belong to Phase 4 and admin surfaces).
+
+**Next up:** step 1 — fully specify the two buyer read routes in
+`docs/api/api-spec.v1.md`, including resolving the open filter-set decision
+gate. No screen work begins before it lands.
+
+## 2026-09-02 — Phase 2B planned; buyer read contract identified as a hard prerequisite
+
+**Done:** Split Phase 2B into an ordered, independently reviewable ten-step
+implementation plan
+([docs/tasklists/2026-09-02-phase-2b-implementation-plan.md](docs/tasklists/2026-09-02-phase-2b-implementation-plan.md)),
+each step taking its own short-lived branch. Recorded three dated `DECISIONS.md`
+entries for choices made this session: the buyer read layer is implemented as
+real Drizzle queries with fixtures as typed test doubles sharing the same
+exported types (superseding the roadmap's fixture-only assumption, which
+predated Phase 2A landing); shadcn/ui with Radix is adopted as the buyer
+component foundation restyled to Soft Daylight tokens; and buyer UI is tested in
+a jsdom Testing Library project alongside the existing node-environment tests.
+
+**Blocker found before writing any code:** both Phase 2B routes
+(`GET /api/v1/properties`, `GET /api/v1/properties/{slug}`) exist in
+`docs/api/api-spec.v1.md` only as one-line summaries, with no request, response,
+pagination, filter, or error semantics. The spec's own contract-change process
+requires those to be defined before a consumer starts work, and the roadmap
+assumes the read contract is fixed up front. Defining it is therefore step 1 of
+the plan, and no screen work begins before it lands.
+
+**Also noted:** `node_modules` is absent, so nothing currently runs until
+`bun install`; Soft Daylight tokens are already wired into `src/app/globals.css`
+from Phase 0; and three decision gates are open and recorded in the plan — media
+delivery for `property_media.gcsPath`, whether `PropScoreDial` ships in 2B, and
+the fixed v1 filter set for the listing route.
+
+**Next up:** step 0 (tooling baseline — `bun install`, shadcn/ui, jsdom/Testing
+Library) followed by step 1 (the buyer read contract), per the plan.
+
 ## 2026-09-01 — Phase 2A submission review and publish transaction completed
 
 **Done:** Implemented the review state machine (`src/lib/submissions/transitions.ts`,

@@ -114,3 +114,18 @@ Context: a later brochure often contains only a subset of a property’s facts, 
 
 **2026-09-01 — Submission review permissions and slug generation are fixed for Phase 2A.**
 Resolution: a submitter moves a draft or changes-requested submission to `submitted`; an admin verifier or owner may move it into review and issue changes, rejection, or approval; only an owner may publish an approved submission. The initial owner-admin workflow may have the same actor in each step, but every transition remains timestamped and attributable. New properties receive a normalized name-derived slug; on a uniqueness conflict, the publisher appends a deterministic short suffix derived from the submission id and retries inside the transaction. Why: early operation remains practical without weakening the future separation between builder submitters and admin publishers.
+
+---
+
+**2026-09-02 — Phase 2B builds the real Drizzle read layer now; fixtures are typed test doubles, not a parallel data path.**
+Context: the roadmap scheduled Phase 2B against fixtures so buyer UI would not wait on Phase 2A's writers. Phase 2A's publish transaction has since landed, so published catalog data can now be produced legitimately. Resolution: the buyer read functions are implemented as real read-only Drizzle queries over the published catalog, and fixtures satisfy the same exported TypeScript types rather than defining their own shape. Fixtures back component and route tests, so screen work still needs no running database. Why: this avoids building a read path that is thrown away in Phase 3, and prevents a fixture shape from silently diverging from the real one — the same divergence class that ended the prior attempt. Alternatives: fixtures only for the whole phase — rejected because it defers the real read layer and creates two shapes of one entity; database-only — rejected because it blocks all UI work on local Docker availability.
+
+---
+
+**2026-09-02 — shadcn/ui with Radix primitives is the buyer component foundation, restyled to Soft Daylight tokens.**
+Context: `ARCHITECTURE.md` named shadcn/Radix from the outset, but nothing was ever installed, so the choice was still genuinely open at first use. Resolution: adopt shadcn/ui now and point its theme at the existing Soft Daylight CSS variables in `src/app/globals.css` rather than generating a second token set. `--color-verified-gold` is kept out of the generated component palette and remains reserved strictly for verified/trust badges. Why: Radix supplies accessible interactive primitives — dialog, popover, and the Phase 3 OTP gate — that are expensive and error-prone to rebuild, and confirming the already-documented intent avoids a silent divergence from `ARCHITECTURE.md`. Alternatives: hand-rolled Tailwind components only — rejected because it re-implements accessibility behavior this project already knows it needs.
+
+---
+
+**2026-09-02 — Buyer UI is tested in a jsdom environment with Testing Library, alongside the existing node-environment tests.**
+Context: Vitest ran one node environment, correct for the data-layer and publish-transaction tests but unable to assert rendered output. Resolution: add jsdom and Testing Library as a separate Vitest project so the existing node tests continue to run unchanged. The price-restraint rule and the honest-incompleteness states (`not_stated`, `explicitly_not_offered`) are asserted against rendered output, not assumed. Why: "never render a price" and "never render a plausible placeholder" are product guardrails, and an unenforced guardrail is exactly the failure mode this project has already paid for once. Alternatives: node-environment logic tests only — rejected because these particular guardrails exist only in rendered output.

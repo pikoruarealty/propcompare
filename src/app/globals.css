@@ -1,11 +1,23 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
 
 /*
  * "Soft Daylight" design system — see docs/design/design-tokens.md.
+ *
  * Tailwind v4 is CSS-first: tokens are declared as CSS variables here and
  * exposed to utility classes via @theme, rather than tailwind.config.ts.
+ *
+ * shadcn/ui's generator ships a neutral grayscale palette of its own. Per the
+ * 2026-09-02 decision in DECISIONS.md, that second palette is NOT kept: every
+ * shadcn semantic token below resolves to a Soft Daylight token, or to a tonal
+ * layer derived from one. `--color-verified-gold` is deliberately absent from
+ * the component palette — it is reserved strictly for Verified/trust badges.
  */
 :root {
+  /* Documented palette — the only source colors in this file. */
   --color-terracotta: #8d4934;
   --color-sage: #56624b;
   --color-pale-sky: #cbd5e0;
@@ -15,12 +27,57 @@
 
   --radius-standard: 8px;
   --spacing-unit: 8px;
+
+  /*
+   * shadcn semantic slots mapped onto the documented palette. Tonal layers use
+   * color-mix() against the documented tokens rather than new hard-coded hexes,
+   * so nothing here introduces an undocumented colour.
+   */
+  --background: var(--color-chalk);
+  --foreground: var(--color-ink);
+
+  --card: #ffffff;
+  --card-foreground: var(--color-ink);
+  --popover: #ffffff;
+  --popover-foreground: var(--color-ink);
+
+  --primary: var(--color-terracotta);
+  --primary-foreground: var(--color-chalk);
+  --secondary: var(--color-sage);
+  --secondary-foreground: var(--color-chalk);
+
+  --muted: color-mix(in oklab, var(--color-ink) 5%, var(--color-chalk));
+  --muted-foreground: color-mix(
+    in oklab,
+    var(--color-ink) 55%,
+    var(--color-chalk)
+  );
+  --accent: color-mix(in oklab, var(--color-sage) 12%, var(--color-chalk));
+  --accent-foreground: var(--color-sage);
+
+  /*
+   * Not in the design token spec — error/destructive state is an open design
+   * item (see the Phase 2B plan). Held to a restrained editorial red until a
+   * documented value exists; do not treat this as an approved brand colour.
+   */
+  --destructive: #8c3a2f;
+
+  --border: var(--color-pale-sky);
+  --input: var(--color-pale-sky);
+  --ring: var(--color-terracotta);
+
+  --radius: var(--radius-standard);
 }
 
 @theme inline {
+  /* Typography — Cormorant Garamond for display, Plus Jakarta Sans for UI/data.
+     `font-sans` is mapped to the body font so shadcn components inherit it. */
   --font-display: var(--font-display);
   --font-body: var(--font-body);
+  --font-sans: var(--font-body);
+  --font-heading: var(--font-display);
 
+  /* Documented palette, exposed as utilities. */
   --color-terracotta: var(--color-terracotta);
   --color-sage: var(--color-sage);
   --color-pale-sky: var(--color-pale-sky);
@@ -28,23 +85,53 @@
   --color-ink: var(--color-ink);
   --color-verified-gold: var(--color-verified-gold);
 
+  /* shadcn component tokens. */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  /* 8px standard radius per the token spec; the scale steps off it. */
   --radius-DEFAULT: var(--radius-standard);
+  --radius-sm: calc(var(--radius) * 0.5);
+  --radius-md: calc(var(--radius) * 0.75);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.5);
 }
 
-body {
-  background: var(--color-chalk);
-  color: var(--color-ink);
-  font-family: var(--font-body), sans-serif;
-}
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
 
-h1,
-h2,
-h3,
-.font-display {
-  font-family: var(--font-display), serif;
-}
+  body {
+    @apply bg-background text-foreground font-sans;
+  }
 
-.data-tabular {
-  font-family: var(--font-body), sans-serif;
-  font-variant-numeric: tabular-nums;
+  h1,
+  h2,
+  h3,
+  .font-display {
+    font-family: var(--font-display), serif;
+  }
+
+  /* Tabular numerals for areas, dates, and counts, per the design guide. */
+  .data-tabular {
+    font-family: var(--font-body), sans-serif;
+    font-variant-numeric: tabular-nums;
+  }
 }
