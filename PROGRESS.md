@@ -1,5 +1,73 @@
 # Progress
 
+## 2026-09-02 — Schema v5 brochure fields implemented and verified
+
+**Done:** Added nullable canonical columns for `properties.total_floors`,
+`properties.plot_area_sqft`, `developers.profile_narrative`, and
+`unit_variants.units_per_floor` in Drizzle and migration `0005`. Extended the
+active field contract with the three scalar fields and versioned the existing
+composite `unit_variants` row to v5 so `unitsPerFloor` remains attached to its
+variant rather than creating a parallel scalar representation. Submission
+validation accepts the new numeric, integer, narrative, and nested variant
+values; the sole publish transaction writes them for new properties and applies
+the same omission-preserving additive-patch behavior to existing records.
+
+**Verified:** Generated and applied migration `0005`, reseeded the active
+contract, and confirmed a second `bun run db:generate` reports no drift.
+`bun run format:check`, `bun run lint`, `bun run typecheck`, `bun run test`
+(41 passed, 4 files), and `git diff --check` pass. The integration coverage
+publishes all four values and confirms an update that omits them leaves them
+unchanged; unit coverage confirms active-contract acceptance and rejection when
+the applicable contract entry is absent.
+
+**Next up:** Implement the scoped Claude Sonnet 5 via OpenRouter adapter in
+`docs/tasklists/2026-09-02-ocr-provider-integration.md`. No paid brochure run is
+authorized as part of that implementation without explicit confirmation.
+
+---
+
+## 2026-09-02 — OCR provider selected (Claude Sonnet 5); schema v5 and two follow-on tasklists scoped
+
+**Done:** Completed the `docs/tasklists/2026-09-02-ocr-provider-selection.md`
+bake-off (4 models x 3 real brochures via OpenRouter, native-PDF-engine
+plugin). Claude Sonnet 5 was cheapest of the four ($0.253/brochure avg vs.
+Opus 5 $0.561, GPT-5.6 Sol $0.632, GPT-5.6 Terra $0.654) with equivalent
+structural output once requests were scoped per unit-variant rather than
+whole-brochure. Recorded as a dated decision rather than spending the
+available OpenAI key on a redundant run. Also resolved, by explicit user
+decision, that total floors, units-per-floor, non-RERA-gated plot/land area,
+and a developer-profile narrative belong in the canonical schema (matching
+the original whiteboard schema) rather than staying `unmapped_raw_evidence`
+indefinitely — written up as schema v5 (`docs/schema/schema.v5.md`).
+
+Both decisions are recorded in `DECISIONS.md` (2026-09-02 entries: "OCR
+extraction provider is Claude Sonnet 5..." and "Schema v5 adds total
+floors..."). Two follow-on implementation tasklists are scoped and ready to
+start, per `AGENTS.md`'s mandatory pre-implementation tasklist rule — neither
+has been implemented yet:
+
+- `docs/tasklists/2026-09-02-schema-v5-brochure-fields.md` — Drizzle schema/
+  migration for the four new columns, field-contract extension, validation
+  and publisher wiring.
+- `docs/tasklists/2026-09-02-ocr-provider-integration.md` — turns
+  `src/lib/ocr/adapter.ts` from a type-only contract (from the OCR routing
+  foundation task) into a real Claude-Sonnet-5-via-OpenRouter extraction
+  adapter, adapting the scratchpad's `run-comparison.ts` reference script.
+
+**Not yet done:** No code for either tasklist has been written. Human
+spot-checks of field-level (not just structural) accuracy on the Adani
+Amaris and Kimana Towers brochures remain outstanding (carried over from the
+provider-selection tasklist). `room_catalog`/synonym table design (mirroring
+`amenity_catalog`) is unscoped future work. The HTTP route wiring for the
+publish transaction (carried from the prior task) is still open.
+
+**Next up:** Start `task/schema-v5-brochure-fields` (small, low-risk,
+unblocks the extraction adapter's output contract) before
+`task/ocr-provider-integration`, since the adapter should emit against the
+final contract rather than needing a second pass after schema v5 lands.
+
+---
+
 ## 2026-09-01 — Phase 2A submission review and publish transaction completed
 
 **Done:** Implemented the review state machine (`src/lib/submissions/transitions.ts`,

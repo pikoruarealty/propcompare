@@ -118,7 +118,10 @@ describe("applySubmissionTransition", () => {
 describe("validateSubmissionPayload", () => {
   const activeFields: ActiveSubmissionField[] = [
     { fieldKey: "property.name", dataType: "string" },
+    { fieldKey: "developer.profile_narrative", dataType: "string" },
     { fieldKey: "property.type", dataType: "property_type_key" },
+    { fieldKey: "property.total_floors", dataType: "positive_integer" },
+    { fieldKey: "property.plot_area_sqft", dataType: "positive_number" },
     {
       fieldKey: "property.rera_construction_progress_percent",
       dataType: "percentage_0_to_100",
@@ -155,6 +158,49 @@ describe("validateSubmissionPayload", () => {
         lookups,
       ),
     ).toThrow("not an active submission field");
+  });
+
+  it("accepts all schema v5 brochure fields when their contract entries are active", () => {
+    const payload = {
+      "developer.profile_narrative":
+        "A developer with a documented project history.",
+      "property.total_floors": 21,
+      "property.plot_area_sqft": 108900,
+      unit_variants: [{ variantName: "3 BHK - Type A", unitsPerFloor: 4 }],
+    };
+
+    expect(validateSubmissionPayload(payload, activeFields, lookups)).toEqual(
+      payload,
+    );
+  });
+
+  it("rejects each schema v5 brochure field when its active contract entry is absent", () => {
+    const cases: Array<[string, unknown, string]> = [
+      [
+        "developer.profile_narrative",
+        "Evidence-backed developer narrative",
+        "developer.profile_narrative",
+      ],
+      ["property.total_floors", 21, "property.total_floors"],
+      ["property.plot_area_sqft", 108900, "property.plot_area_sqft"],
+      [
+        "unit_variants",
+        [{ variantName: "3 BHK - Type A", unitsPerFloor: 4 }],
+        "unit_variants",
+      ],
+    ];
+
+    for (const [fieldKey, value, disabledContractKey] of cases) {
+      expect(() =>
+        validateSubmissionPayload(
+          { [fieldKey]: value },
+          activeFields.filter(
+            (field) => field.fieldKey !== disabledContractKey,
+          ),
+          lookups,
+        ),
+      ).toThrow("not an active submission field");
+    }
   });
 
   it("rejects an unapproved property type key", () => {
@@ -235,6 +281,7 @@ describe("validateSubmissionPayload", () => {
           bhkTypeKey: "3bhk",
           layoutTypeKey: "duplex",
           totalUnitsOfVariant: 12,
+          unitsPerFloor: 4,
           areas: [{ basis: "carpet", areaSqft: 1450 }],
           dimensions: {
             rooms: [{ name: "Master Bedroom", lengthFt: 14, widthFt: 12 }],

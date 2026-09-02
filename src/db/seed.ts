@@ -297,6 +297,13 @@ const initialPropertySchemaFields = [
     "Proposed developer name; publication resolves the canonical developer record.",
   ],
   [
+    "developer.profile_narrative",
+    "Developer profile narrative",
+    "string",
+    "$.developer.profile_narrative",
+    "Evidence-backed brochure narrative for the canonical developer profile.",
+  ],
+  [
     "property.type",
     "Property type",
     "property_type_key",
@@ -339,11 +346,25 @@ const initialPropertySchemaFields = [
     "Project-level tower count.",
   ],
   [
+    "property.total_floors",
+    "Total floors",
+    "positive_integer",
+    "$.property.total_floors",
+    "Project-level storey count as explicitly stated by the brochure.",
+  ],
+  [
     "property.total_units",
     "Total units",
     "positive_integer",
     "$.project_structure.units.value",
     "Project-level unit count.",
+  ],
+  [
+    "property.plot_area_sqft",
+    "Plot area",
+    "positive_number",
+    "$.property.plot_area_sqft",
+    "Brochure-stated plot or land area normalized to square feet; independent of RERA land area.",
   ],
   [
     "property.rera_registration_number",
@@ -364,7 +385,7 @@ const initialPropertySchemaFields = [
     "Unit configurations",
     "unit_variant_array",
     "$.configurations[*]",
-    "Reviewed variants contain only BHK key, variant name, explicit areas, and supported dimensions.",
+    "Reviewed variants contain BHK and layout keys, variant name, explicit counts including units per floor, areas, and supported dimensions.",
   ],
   [
     "property.amenities",
@@ -577,7 +598,14 @@ async function seed() {
           label,
           dataType,
           jsonbPath,
-          schemaVersion: "v1",
+          schemaVersion: [
+            "developer.profile_narrative",
+            "property.total_floors",
+            "property.plot_area_sqft",
+            "unit_variants",
+          ].includes(fieldKey)
+            ? "v5"
+            : "v1",
           isActive: true,
           description,
         }),

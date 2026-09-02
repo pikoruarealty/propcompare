@@ -3,6 +3,7 @@ import { db } from "@/db";
 import {
   amenityCatalog,
   bhkTypes,
+  developers,
   layoutTypes,
   properties,
   propertyAmenities,
@@ -134,7 +135,7 @@ const resolveNewPropertySlug = async (
 };
 
 /**
- * The one write path into the live catalog tables (`properties`,
+ * The one write path into the live catalog tables (`properties`, `developers`,
  * `unit_variants`, `unit_areas`, `property_amenities`,
  * `property_specifications`) — see AGENTS.md. It applies exactly one
  * approved submission's reviewed field values and writes a matching
@@ -221,7 +222,12 @@ export const publishSubmission = async (
     ) as PropertyInsert["possessionStatus"] | undefined;
     const possessionDate = getStringField("property.possession_date");
     const totalTowers = getNumberField("property.total_towers");
+    const totalFloors = getNumberField("property.total_floors");
     const totalUnits = getNumberField("property.total_units");
+    const plotArea = getNumberField("property.plot_area_sqft");
+    const developerProfileNarrative = getStringField(
+      "developer.profile_narrative",
+    );
     const reraRegistrationNumber = getStringField(
       "property.rera_registration_number",
     );
@@ -261,7 +267,9 @@ export const publishSubmission = async (
           possessionStatus: possessionStatusValue,
           possessionDate,
           totalTowers,
+          totalFloors,
           totalUnits,
+          plotAreaSqft: plotArea === undefined ? undefined : String(plotArea),
           reraRegistrationNumber,
           reraConstructionProgressPercent,
         })
@@ -287,7 +295,9 @@ export const publishSubmission = async (
         updateColumns.possessionDate = possessionDate;
       }
       if (totalTowers !== undefined) updateColumns.totalTowers = totalTowers;
+      if (totalFloors !== undefined) updateColumns.totalFloors = totalFloors;
       if (totalUnits !== undefined) updateColumns.totalUnits = totalUnits;
+      if (plotArea !== undefined) updateColumns.plotAreaSqft = String(plotArea);
       if (reraRegistrationNumber !== undefined) {
         updateColumns.reraRegistrationNumber = reraRegistrationNumber;
       }
@@ -302,6 +312,26 @@ export const publishSubmission = async (
           .set(updateColumns)
           .where(eq(properties.id, propertyId));
       }
+    }
+
+    if (developerProfileNarrative !== undefined) {
+      let targetDeveloperId = submission.developerId;
+      if (!isNewProperty) {
+        const [propertyDeveloper] = await tx
+          .select({ developerId: properties.developerId })
+          .from(properties)
+          .where(eq(properties.id, propertyId));
+        targetDeveloperId = propertyDeveloper?.developerId ?? null;
+      }
+      if (!targetDeveloperId) {
+        throw new SubmissionPublishError(
+          "developer.profile_narrative requires a canonical developer",
+        );
+      }
+      await tx
+        .update(developers)
+        .set({ profileNarrative: developerProfileNarrative })
+        .where(eq(developers.id, targetDeveloperId));
     }
 
     const submittedVariants = payload["unit_variants"] as
@@ -327,6 +357,7 @@ export const publishSubmission = async (
           bhkTypeId,
           layoutTypeId,
           totalUnitsOfVariant: variant.totalUnitsOfVariant ?? null,
+          unitsPerFloor: variant.unitsPerFloor ?? null,
           dimensions: variant.dimensions ?? null,
         };
 
@@ -339,6 +370,10 @@ export const publishSubmission = async (
               bhkTypeId: variantValues.bhkTypeId,
               layoutTypeId: variantValues.layoutTypeId,
               totalUnitsOfVariant: variantValues.totalUnitsOfVariant,
+              unitsPerFloor:
+                variant.unitsPerFloor === undefined
+                  ? unitVariants.unitsPerFloor
+                  : variantValues.unitsPerFloor,
               dimensions: variantValues.dimensions,
             },
           })

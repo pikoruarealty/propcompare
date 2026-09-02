@@ -311,7 +311,20 @@ describe("publishSubmission", () => {
         "property.type": { value: "apartment" },
         "property.city": { value: "Ahmedabad" },
         "property.locality": { value: "Test Locality" },
+        "developer.profile_narrative": {
+          value: "A test developer narrative sourced from brochure evidence.",
+        },
+        "property.total_floors": { value: 21 },
+        "property.plot_area_sqft": { value: 108900.5 },
         "property.amenities": { value: ["swimming_pool"] },
+        unit_variants: {
+          value: [
+            {
+              variantName: "3 BHK - Type A",
+              unitsPerFloor: 4,
+            },
+          ],
+        },
       },
     });
     const baseResult = await publishSubmission({
@@ -343,7 +356,23 @@ describe("publishSubmission", () => {
       .from(properties)
       .where(eq(properties.id, baseResult.propertyId));
     expect(property.totalUnits).toBe(120);
+    expect(property.totalFloors).toBe(21);
+    expect(Number(property.plotAreaSqft)).toBe(108900.5);
     expect(property.name).toBe(propertyName);
+
+    const [developer] = await db
+      .select({ profileNarrative: developers.profileNarrative })
+      .from(developers)
+      .where(eq(developers.id, developerId));
+    expect(developer.profileNarrative).toBe(
+      "A test developer narrative sourced from brochure evidence.",
+    );
+
+    const [variant] = await db
+      .select()
+      .from(unitVariants)
+      .where(eq(unitVariants.propertyId, baseResult.propertyId));
+    expect(variant.unitsPerFloor).toBe(4);
 
     const amenityRows = await db
       .select({
