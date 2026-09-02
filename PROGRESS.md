@@ -1,5 +1,59 @@
 # Progress
 
+## 2026-09-02 — Phase 2B step 4 complete: the buyer shell and the two trust primitives
+
+**Done:** The shared buyer components, under `src/components/buyer/` —
+`page-frame.tsx` (the shell plus `PageContainer`, `GridRow`, `PageSection`),
+`site-header.tsx`, `site-footer.tsx`, `typography.tsx` (`DisplayHeading`,
+`BodyText`, `Eyebrow`, `TabularValue`), `verified-badge.tsx`, and
+`fact-value.tsx`. This is the buyer shell specifically; the developer and admin
+portals are separate surfaces and this must not grow into one shell gated by
+role.
+
+**The two trust rules are enforced by shape, not by discipline.**
+`VerifiedBadge` takes a verified _fact_ or `null` — no boolean, no `variant`, no
+`children`, no `className` — so there is no way to call it that renders Soft
+Gold decoratively, and `null` renders nothing at all. The fact is only derivable
+from a RERA registration that carries an actual registration number, which the
+badge then displays: the claim and its evidence are inseparable, which is what
+`design.v1.md` means by an evidence path. `FactValue` owns the absence
+vocabulary — "Not stated" for an unanswered question, "Not offered" for an
+answered one — distinct in wording, styling, and explanatory title. A stray
+value passed beside an explicit status loses to the status, so a contradiction
+surfaces as a defect rather than rendering as though correct, and zero is
+treated as a stated value rather than absence.
+
+**The verified badge is currently unreachable, and that is correct.** Nothing
+sets `properties.rera_registered`, which defaults to `false`, and the field
+contract records against `property.rera_registration_number` that "OCR never
+sets RERA verification or a verified badge". A trust signal that extraction
+alone could produce would not be a trust signal. It waits on the GujRERA
+cross-check path. Step 6's dossier must render correctly with no badge, exactly
+as it must with zero media.
+
+**The layout grid is now a token, not a habit.** `--layout-columns`,
+`--layout-gutter`, `--layout-margin-mobile`, `--layout-margin-desktop`, and
+`--layout-max-width` live in `globals.css`, and the page frame reads them
+instead of hard-coding `px-12`. The documented 12-column / 24px / 48px / 16px
+grid is therefore stated once; `design-tokens.test.ts` locks the values and
+checks each sits on the 8px rhythm.
+
+**A gap in the existing gold guard was closed.** The token test keeps Soft Gold
+out of every shadcn colour slot, but nothing stopped a component naming
+`--color-verified-gold` directly to make a card feel premium.
+`src/components/verified-gold-reservation.test.ts` now scans the source and
+fails if any file other than the token declaration and the badge itself
+references it. Verified by planting a violation in the footer and watching the
+guard fail with that file named — a guard that cannot fail proves nothing.
+
+**Verified:** `bun run test` reports **191 passed across 15 files** (144 from
+step 3, plus 47 component and token tests). `format:check`, `lint`, `typecheck`,
+and `build` all pass.
+
+**Left for step 7, deliberately:** `src/app/page.tsx` still holds the
+`create-next-app` scaffold, so these components are covered by tests but are not
+yet mounted in a rendered route.
+
 ## 2026-09-02 — Phase 2B step 3 complete: the two buyer read routes are live
 
 **Done:** `GET /api/v1/properties` and `GET /api/v1/properties/{slug}` are

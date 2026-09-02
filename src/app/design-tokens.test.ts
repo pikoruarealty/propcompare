@@ -75,6 +75,39 @@ describe("Soft Daylight design tokens", () => {
     expect(readToken("radius")).toBe("var(--radius-standard)");
   });
 
+  it("declares the documented layout grid", () => {
+    // The buyer page frame reads these rather than hard-coding 48px and 24px
+    // as utility classes, so this is the one place the grid is stated.
+    expect(readToken("layout-columns")).toBe("12");
+    expect(readToken("layout-gutter")).toBe("24px");
+    expect(readToken("layout-margin-mobile")).toBe("16px");
+    expect(readToken("layout-margin-desktop")).toBe("48px");
+  });
+
+  it("keeps the 8px rhythm and the layout numbers on it", () => {
+    expect(readToken("spacing-unit")).toBe("8px");
+
+    for (const token of [
+      "layout-gutter",
+      "layout-margin-mobile",
+      "layout-margin-desktop",
+    ]) {
+      const pixels = Number.parseInt(readToken(token), 10);
+      expect(pixels % 8, `--${token} must sit on the 8px rhythm`).toBe(0);
+    }
+  });
+
+  it("gives numeric data tabular numerals", () => {
+    // The class the TabularValue primitive applies; areas only line up in a
+    // column if the CSS behind it actually sets tabular figures.
+    const tabularRule = globalsCss.match(/\.data-tabular\s*\{([^}]+)\}/);
+    expect(
+      tabularRule,
+      ".data-tabular is not defined in globals.css",
+    ).not.toBeNull();
+    expect(tabularRule?.[1]).toContain("font-variant-numeric: tabular-nums");
+  });
+
   it("reserves Soft Gold for verified badges only", () => {
     for (const token of COMPONENT_COLOR_TOKENS) {
       expect(

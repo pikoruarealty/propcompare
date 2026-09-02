@@ -29,6 +29,18 @@
   --spacing-unit: 8px;
 
   /*
+   * Layout grid, from the token spec: 12 columns, 24px gutters, 48px margins on
+   * desktop, 16px margins on mobile. Declared here so the buyer page frame
+   * reads the documented numbers rather than restating them as utility classes
+   * that can drift; `src/app/design-tokens.test.ts` locks the values.
+   */
+  --layout-columns: 12;
+  --layout-gutter: 24px;
+  --layout-margin-mobile: 16px;
+  --layout-margin-desktop: 48px;
+  --layout-max-width: 1280px;
+
+  /*
    * shadcn semantic slots mapped onto the documented palette. Tonal layers use
    * color-mix() against the documented tokens rather than new hard-coded hexes,
    * so nothing here introduces an undocumented colour.

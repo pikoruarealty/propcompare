@@ -1,6 +1,6 @@
 # Implementation plan — Phase 2B buyer experience
 
-**Status:** step 3 complete (2026-09-02); step 4 is next
+**Status:** step 4 complete (2026-09-02); step 5 is next
 **Owner:** Deep (buyer UI), with Bhavarth owning the read contract in step 1
 **Branch:** `task/phase-2b` — one branch for the whole phase, merged into `main` at the phase boundary. Steps 0–2 originally took a branch each; those were collapsed into `task/phase-2b` on 2026-09-02 with no commits moved.
 **Roadmap:** [Phase 2B](../roadmap.md#phase-2b--buyer-ui-against-a-fixed-contract-parallel-with-2a)
@@ -317,21 +317,67 @@ in step 6, which is where SEO actually lives.
 
 ## Step 4 — Shared buyer components
 
-- [ ] Buyer app shell: header, footer, page frame on the 12-column grid with
+**Status: complete 2026-09-02**
+
+- [x] Buyer app shell: header, footer, page frame on the 12-column grid with
       documented gutters/margins and the 8px rhythm.
-- [ ] Typography primitives binding Cormorant Garamond to display text and Plus
+      (`src/components/buyer/page-frame.tsx`, `site-header.tsx`,
+      `site-footer.tsx`)
+- [x] Typography primitives binding Cormorant Garamond to display text and Plus
       Jakarta Sans to UI/data, plus the `data-tabular` treatment for areas,
-      dates, and counts.
-- [ ] `VerifiedBadge` — Soft Gold, rendered only when a concrete verified
+      dates, and counts. (`src/components/buyer/typography.tsx`)
+- [x] `VerifiedBadge` — Soft Gold, rendered only when a concrete verified
       condition holds, never decoratively.
-- [ ] `FactValue` — the honest-incompleteness primitive rendering `not_stated`
+- [x] `FactValue` — the honest-incompleteness primitive rendering `not_stated`
       and `explicitly_not_offered` distinctly, never as a blank or a plausible
       placeholder.
-- [ ] Tests asserting the gold badge cannot render without its verified
+- [x] Tests asserting the gold badge cannot render without its verified
       condition and that missing facts render as explicit states.
 
-**Acceptance:** components match the token spec and the design guide's stated
-behaviors, with the two trust rules covered by tests.
+**Acceptance — met:** `format:check`, `lint`, `typecheck`, and `build` pass;
+`bun run test` reports **191 passed across 15 files** (144 from step 3, plus 47
+component and token tests).
+
+**Both trust rules are enforced structurally, not by convention:**
+
+- **`VerifiedBadge` takes a verified fact or `null` — no boolean, no `variant`,
+  no `children`, no `className`.** There is no shape of the component that
+  renders Soft Gold decoratively, and the fact is only derivable from a RERA
+  registration that carries an actual registration number, which the badge then
+  displays as its evidence. Recorded in `DECISIONS.md`.
+- **`FactValue` owns the absence vocabulary** — "Not stated" for an unanswered
+  question, "Not offered" for an answered one — distinct in wording, styling,
+  and explanatory `title`. An explicit status beats a value passed beside it, so
+  a contradiction surfaces as a defect instead of rendering as though correct;
+  and zero is a stated value, not absence.
+
+**Worth knowing before step 6:** the verified badge is currently unreachable, by
+design rather than by omission. Nothing sets `properties.rera_registered`, which
+defaults to `false`, and the field contract records against
+`property.rera_registration_number` that "OCR never sets RERA verification or a
+verified badge". The badge waits on a real verification path — the GujRERA
+cross-check job (`DECISIONS.md`, 2026-08-31). The dossier must therefore render
+correctly with no badge at all, exactly as it must with zero media.
+
+**The layout grid moved into tokens.** `--layout-columns`, `--layout-gutter`,
+`--layout-margin-mobile`, `--layout-margin-desktop`, and `--layout-max-width`
+are now declared in `globals.css` and read by the page frame, so the documented
+12-column / 24px / 48px / 16px grid is stated once rather than restated as
+utility classes that can drift. `design-tokens.test.ts` locks the values and
+asserts each sits on the 8px rhythm.
+
+**A second gold guard was added.** The existing token test keeps Soft Gold out
+of every shadcn colour slot, which does not stop a component reaching for
+`--color-verified-gold` directly to make a card feel premium.
+`src/components/verified-gold-reservation.test.ts` scans the source and fails if
+any file other than the token declaration and the badge itself names the token.
+It was verified by planting a violation in the footer and watching it fail with
+that file named — a guard that cannot fail proves nothing.
+
+**Not done here, deliberately:** `src/app/page.tsx` still holds the
+`create-next-app` scaffold and does not yet use `PageFrame`. Replacing it is
+step 7's checklist item, so these components are exercised by tests but not yet
+by a rendered route.
 
 ## Step 5 — Browse / listing grid
 
