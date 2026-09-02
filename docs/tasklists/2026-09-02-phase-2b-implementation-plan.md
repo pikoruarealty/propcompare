@@ -1,13 +1,13 @@
 # Implementation plan — Phase 2B buyer experience
 
-**Status:** step 2 complete (2026-09-02); step 3 is next
+**Status:** step 3 complete (2026-09-02); step 4 is next
 **Owner:** Deep (buyer UI), with Bhavarth owning the read contract in step 1
-**Branch:** this plan on `task/phase-2b-implementation-plan`; each step below takes its own `task/` branch
+**Branch:** `task/phase-2b` — one branch for the whole phase, merged into `main` at the phase boundary. Steps 0–2 originally took a branch each; those were collapsed into `task/phase-2b` on 2026-09-02 with no commits moved.
 **Roadmap:** [Phase 2B](../roadmap.md#phase-2b--buyer-ui-against-a-fixed-contract-parallel-with-2a)
 
 This is the master plan for Phase 2B. It is deliberately split into ordered,
-independently reviewable steps; each step becomes its own short-lived branch and
-is checked off here as it lands. Steps 1 and 2 are prerequisites for every
+independently reviewable steps; each step becomes its own commit on the phase
+branch and is checked off here as it lands. Steps 1 and 2 are prerequisites for every
 screen — no buyer UI is built before the read contract exists in writing.
 
 ## Scope
@@ -77,7 +77,7 @@ gets a dated `DECISIONS.md` entry before the code is written.
 
 ## Step 0 — Tooling baseline
 
-**Branch:** `task/phase-2b-tooling` · **Status: complete 2026-09-02**
+**Status: complete 2026-09-02**
 
 `node_modules` was absent and no UI/component tooling existed.
 
@@ -133,7 +133,7 @@ step.
 
 ## Step 1 — Buyer read API contract (prerequisite)
 
-**Branch:** `task/phase-2b-read-contract` · **Documentation only, no code.** · **Status: complete 2026-09-02**
+**Documentation only, no code.** · **Status: complete 2026-09-02**
 
 `api-spec.v1.md`'s own contract-change process requires a route's request,
 response, access rules, pagination/filter semantics, and errors to be defined
@@ -197,7 +197,7 @@ existing schema or documented rules, not invented scope):
 
 ## Step 2 — Typed read layer and fixtures
 
-**Branch:** `task/phase-2b-read-layer` · **Status: complete 2026-09-02**
+**Status: complete 2026-09-02**
 
 - [x] Define exported TypeScript types mirroring the step 1 contract exactly, as
       the single shared source for routes, screens, fixtures, and tests.
@@ -264,21 +264,58 @@ Both recorded in `DECISIONS.md`.
 
 ## Step 3 — Buyer read routes
 
-**Branch:** `task/phase-2b-api-routes`
+**Status: complete 2026-09-02**
 
-- [ ] Implement `src/app/api/v1/properties/route.ts` and
+- [x] Implement `src/app/api/v1/properties/route.ts` and
       `src/app/api/v1/properties/[slug]/route.ts` over the step 2 layer.
-- [ ] Validate and coerce query parameters; reject unknown or malformed values
+- [x] Validate and coerce query parameters; reject unknown or malformed values
       with the documented `{ error: { code, message } }` envelope.
-- [ ] Set caching/revalidation deliberately, given SEO/ISR was an explicit
+      (`src/lib/properties/http.ts`)
+- [x] Set caching/revalidation deliberately, given SEO/ISR was an explicit
       reason for choosing Next.js.
-- [ ] Tests: success, 404, invalid parameters, and price-absence on the wire.
+- [x] Tests: success, 404, invalid parameters, and price-absence on the wire.
 
-**Acceptance:** both routes behave exactly as step 1 documents.
+**Acceptance — met:** both routes behave as step 1 documents, verified against
+real published data. `format:check`, `lint`, `typecheck`, and `build` pass;
+`bun run test` reports **144 passed across 10 files** (105 from step 2, plus 27
+parameter-contract tests needing no database and 12 database-backed wire tests).
+`next build` reports both routes as `ƒ (Dynamic)`, confirming request-time
+execution rather than an accidental prerender.
+
+**The caching decision gate, resolved** (user sign-off, recorded in
+`DECISIONS.md`): neither route exports a route segment config, and cache policy
+is expressed as HTTP `Cache-Control` for a shared cache — listing
+`public, s-maxage=60, stale-while-revalidate=300`, dossier
+`public, s-maxage=300, stale-while-revalidate=3600`, errors `no-store`.
+Three constraints were checked against the Next 16 docs bundled in
+`node_modules` rather than assumed: `cacheComponents` is off, so `GET` handlers
+already run at request time; `dynamic = "force-static"` cannot apply to the
+listing route at all, because a force-static handler cannot read
+`request.nextUrl.searchParams`; and prerendering the dossier route would need
+Postgres reachable at build time. Page-level ISR stays with the dossier _page_
+in step 6, which is where SEO actually lives.
+
+**Decisions taken during implementation, each with a `DECISIONS.md` entry:**
+
+- **The error envelope's `code` was genuinely ambiguous in step 1's contract** —
+  it read as either the HTTP status restated or a failure-class name. Resolved
+  as a machine-readable slug (`invalid_query_parameter`, `property_not_found`,
+  …), and `api-spec.v1.md` amended so the ambiguity does not survive.
+- **Validation repairs nothing.** A non-repeatable parameter given twice, an
+  empty value (`?city=`), and a non-strict integer (`1.5`, `1e2`) are each
+  `422` rather than coerced — the same reasoning that already rejects an
+  over-large `pageSize` instead of clamping it.
+- **The exclusion-list guard now runs in production**, not only in tests.
+  `buyerJsonResponse` scans every successful body immediately before
+  serialisation and fails the request rather than stripping the key. Tested
+  against a planted leak, per the standing rule that a guard which cannot fail
+  proves nothing.
+- **Validation lives in `src/lib/properties/http.ts`, not in the route files.**
+  A `route.ts` imports `@/db`, which throws at import time without
+  `DATABASE_URL`; keeping the parameter contract outside it means the branchiest
+  part of the step is testable with no database, matching how step 2 is split.
 
 ## Step 4 — Shared buyer components
-
-**Branch:** `task/phase-2b-components`
 
 - [ ] Buyer app shell: header, footer, page frame on the 12-column grid with
       documented gutters/margins and the 8px rhythm.
@@ -298,8 +335,6 @@ behaviors, with the two trust rules covered by tests.
 
 ## Step 5 — Browse / listing grid
 
-**Branch:** `task/phase-2b-browse`
-
 - [ ] Property summary card per the design guide: published facts, dossier link,
       no price, and no save/compare wiring yet (Phase 3).
 - [ ] Listing grid with the step 1 filters, pagination, and sort.
@@ -310,7 +345,7 @@ behaviors, with the two trust rules covered by tests.
 
 ## Step 6 — Property dossier
 
-**Branch:** `task/phase-2b-dossier` · **Blocked on the media and PropScoreDial gates.**
+**Blocked on the media and PropScoreDial gates.**
 
 - [ ] Dossier page at the property slug route, organizing facts progressively
       rather than as a table dump: identity and developer, location, possession,
@@ -323,16 +358,12 @@ behaviors, with the two trust rules covered by tests.
 
 ## Step 7 — Landing page
 
-**Branch:** `task/phase-2b-landing`
-
 - [ ] Decision-first landing composed from the shared components, with entry
       points into browse and guided intake.
 - [ ] Replace the remaining `create-next-app` scaffold in `src/app/page.tsx`.
 - [ ] Tests: renders, and its calls to action route correctly.
 
 ## Step 8 — Guided intake UI
-
-**Branch:** `task/phase-2b-intake`
 
 - [ ] Multi-step intake capturing persona priorities, desired BHK, city, and a
       stated budget range, held in client state only.
@@ -344,8 +375,6 @@ behaviors, with the two trust rules covered by tests.
       the budget range.
 
 ## Step 9 — Convergence and documentation
-
-**Branch:** `task/phase-2b-convergence`
 
 This satisfies the roadmap's stated 2A+2B convergence acceptance.
 

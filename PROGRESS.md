@@ -1,5 +1,70 @@
 # Progress
 
+## 2026-09-02 — Phase 2B step 3 complete: the two buyer read routes are live
+
+**Done:** `GET /api/v1/properties` and `GET /api/v1/properties/{slug}` are
+implemented over the step 2 read layer, at
+`src/app/api/v1/properties/route.ts` and
+`src/app/api/v1/properties/[slug]/route.ts`. Both are thin: parse, query,
+respond. Everything with branches — parameter validation, the error envelope,
+the cache policy, and the response builders — lives in
+`src/lib/properties/http.ts`, because a `route.ts` imports `@/db`, which throws
+at import time without `DATABASE_URL`, and the parameter contract should not
+need Postgres to be tested.
+
+**Caching was a real decision, not a default.** Three things were checked
+against the Next 16 docs bundled in `node_modules` rather than assumed:
+`cacheComponents` is off, so `GET` Route Handlers already run at request time;
+`dynamic = "force-static"` cannot apply to the listing route at all, because a
+force-static handler cannot read `request.nextUrl.searchParams` and that route
+is entirely query parameters; and prerendering the dossier route would require
+Postgres reachable at build time. So neither route exports a segment config, and
+caching is expressed as HTTP `Cache-Control` for a shared cache — listing
+`s-maxage=60`, dossier `s-maxage=300`, both with `stale-while-revalidate`, and
+`no-store` on every error so a 404 cannot outlive the publish that resolves it.
+Shared-cache only, no browser `max-age`, so changing a filter never returns
+something the buyer's own browser is holding. Page-level ISR stays with the
+dossier page in step 6, which is where SEO actually lives. `next build` reports
+both routes as `ƒ (Dynamic)`, confirming it.
+
+**One ambiguity in the step 1 contract had to be resolved rather than guessed.**
+The error envelope's `code` field read as either the HTTP status restated or a
+failure-class name, and the spec never said which. It is now a machine-readable
+slug (`invalid_query_parameter`, `unknown_query_parameter`,
+`property_not_found`, `internal_error`), with the HTTP status carrying the
+status and `message` naming the offending parameter — and `api-spec.v1.md` has
+been amended so the ambiguity does not survive the step.
+
+**Validation repairs nothing.** The contract already said an over-large
+`pageSize` is rejected rather than clamped, because a silent clamp lies to the
+caller. The same reasoning was extended and documented: a non-repeatable
+parameter given twice, an empty value (`?city=`), and a loose integer (`1.5`,
+`1e2`, a leading space) are each `422` rather than coerced. The distinction the
+routes turn on is unchanged and now tested from both sides — an unknown lookup
+key (`propertyType=nonsense`) is a valid query answered with an empty page,
+while a malformed value is a broken request answered with `422`.
+
+**The exclusion-list guard now runs in production, not only in tests.**
+`no-price.ts` existed from step 2 but was invoked only by tests, so a leak
+introduced by a later `select()` would be caught only where a test happened to
+walk. Every successful buyer response is now scanned immediately before
+serialisation; a body carrying an excluded key fails with `500` rather than
+being served with the key quietly stripped, and the offending paths are logged
+server-side, never returned. It is tested against a planted leak first — a guard
+that cannot fail proves nothing.
+
+**Verified:** `bun run test` reports **144 passed across 10 files** — the 105
+from step 2, plus 27 parameter-contract tests needing no database and 12
+database-backed wire tests that call the real handlers, with real published
+data, and scan the serialised response body for excluded keys. `format:check`,
+`lint`, `typecheck`, and `build` all pass. Route test fixtures are published
+through the real `publishSubmission` transaction, as in step 2.
+
+**Branching changed at the user's instruction:** Phase 2B now uses one branch,
+`task/phase-2b`, instead of one per step. The step branches were a single linear
+chain wearing four labels, so collapsing them moved no commits and left `main`
+untouched. `AGENTS.md`'s branch rule was amended to match.
+
 ## 2026-09-02 — Phase 2B step 2 complete: typed read layer, fixtures, and a working local database
 
 **Done:** Built the buyer read layer under `src/lib/properties/`: `types.ts`

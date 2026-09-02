@@ -26,7 +26,7 @@ This file is the shared contract for everyone writing code in this repo — the 
 
 ## Commits & branches
 
-- Create a short-lived `task/<short-scope>` branch for each task. Merge completed task branches into `main` at the agreed phase boundary; push the resulting phase baseline to `origin/main` only after its tasklists and verification are complete.
+- Create one short-lived `task/<phase>` branch per agreed phase — not one per step within it — and commit each step to that branch as it completes. Merge the branch into `main` at the phase boundary; push the resulting phase baseline to `origin/main` only after its tasklists and verification are complete. (Phase 2B initially took a branch per step; they were collapsed into `task/phase-2b` on 2026-09-02. See `DECISIONS.md`.)
 - Commit messages describe _why_, not just _what_ — the diff already shows what changed.
 - Never add Claude Code (or any AI agent) as a co-author/trailer on commits.
 - Don't amend or force-push shared history.
