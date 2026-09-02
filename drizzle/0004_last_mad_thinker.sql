@@ -1,0 +1,2 @@
+ALTER TABLE "property_submissions" ADD COLUMN "developer_id" uuid;--> statement-breakpoint
+ALTER TABLE "property_submissions" ADD CONSTRAINT "property_submissions_developer_id_developers_id_fk" FOREIGN KEY ("developer_id") REFERENCES "public"."developers"("id") ON DELETE set null ON UPDATE no action;

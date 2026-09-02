@@ -12,9 +12,11 @@ This directory holds the collaborative product and implementation reference for 
 ## Technical delivery
 
 - [API specification](api/api-spec.v1.md) — versioned client/server contract; each endpoint has an explicit implementation status.
-- [Schema](schema/schema.v1.md) — canonical data model.
+- [Schema v4](schema/schema.v4.md) — active canonical data model; earlier
+  versions remain immutable history.
 - [Roadmap](roadmap.md) — phase-level delivery plan and ownership.
 - [Tasklists](tasklists/) — a separate tasklist is required for every implementation plan.
+- [Data audits](data/) — versioned, review-only analysis of approved external source shapes; raw source data stays outside the repository.
 
 ## Document status
 

@@ -48,6 +48,69 @@ Context: this is a direct instance of the failure mode `AGENTS.md` line 20 exist
 
 Why this entry is longer than usual: it exists specifically to make sure this exact loss doesn't happen again — anyone re-deriving these fields from a whiteboard photo in the future should find them here first.
 
+**2026-09-01 — Private-schema access uses separate PostgreSQL app and service roles.**
+Context: PostgreSQL table owners bypass row-level security by default. The initial local `DATABASE_URL` used the Docker bootstrap/owner role, so RLS with zero policies would not actually prevent regular application code from reading exact prices. Resolution: the normal application connection is `propcompare_app`, which receives public-schema privileges and no `private` schema usage; migrations use the non-runtime `propcompare` admin role; the future discovery/comparison service alone uses `propcompare_service`, a narrowly reserved `BYPASSRLS` role. `private` tables have RLS enabled and forced with zero policies. Why: preserves the already-decided rule that exact prices never reach ordinary app code while using PostgreSQL's own enforcement rather than a convention. Alternatives: retain one owner connection and rely on code discipline — rejected because it defeats the stated RLS boundary.
+
+---
+
+**2026-09-01 — Phase 1 does not use a direct catalog fixture to test the private bucket mapping.**
+Context: `private.unit_price_history` correctly requires an existing published `unit_variants` row. Creating that row with a seed script, migration, or direct SQL insert would violate the one-write-path rule before the Phase 2 publish transaction exists. Resolution: Phase 1 verifies the view definition and effective role/RLS boundary; an end-to-end current-price-to-bucket mapping test is deferred until Phase 2 can create a fixture through `property_submissions` publication. Why: a test convenience cannot become an exception to the project’s primary trust boundary. Alternatives: direct temporary catalog insertion or a special test backdoor — rejected.
+
+---
+
+**2026-09-01 — V1 uses a concise, buyer-facing amenity catalog; uncommon or ambiguous brochure items remain review-only.**
+Context: the legacy OCR audit found 789 distinct amenity labels, including facilities mixed with room details, measurements, marketing language, and nearby-place claims. Resolution: seed a deliberately limited set of roughly 20–30 buyer-useful facility concepts and their approved synonyms; do not create a new filter simply because it occurs in a brochure. Unmatched text remains source-review material and may later justify a catalog addition through an explicit product decision. Why: useful discovery filters need stable, comparable meanings. Alternative: reproduce every brochure label as an amenity — rejected because it would turn the catalog into an unfilterable, inconsistent free-text mirror.
+
+---
+
+**2026-09-01 — Access and safety facilities are buyer-facing amenity filters in V1.**
+Resolution: include security, visitor parking, and service lift in the concise amenity catalog, subject to the same normalized-key and synonym rules as other amenities. Why: they are buyer-relevant and comparable across properties. They are not treated as decorative marketing claims or inferred when absent.
+
+---
+
+**2026-09-01 — V1 amenity catalog size is not capped; canonical normalization, not a numerical limit, prevents duplicates.**
+Context: the earlier concise-catalog decision used a rough 20–30-item starting scope. The product direction is now to retain as many meaningful amenities as are useful, provided their names remain consistent. Resolution: the approved 26-item list is an initial seed, not a ceiling. Each meaningful facility receives one lowercase `snake_case` key and one buyer-facing label; casing, spacing, punctuation, and approved wording variants map through `amenity_synonyms`. A new semantic concept may be added only through a documented catalog review, never automatically from an unmatched OCR string. Non-amenity room details, counts, measurements, brands, nearby places, and marketing claims remain excluded. This supersedes only the numerical cap in the 2026-09-01 concise-catalog decision.
+
+---
+
+**2026-09-01 — Buyer budget matching uses an inclusive ±20% expansion of the buyer's stated range.**
+Resolution: for buyer range `[min, max]`, the Phase 3 service matches current unit prices in `[min × 0.80, max × 1.20]`, inclusive. Thus ₹3–4 crore matches ₹2.4–4.8 crore. The calculation and exact prices remain entirely in the private service-only path; it returns only property/unit identifiers, never a price or derived price range. The existing `private.unit_current_bucket` view remains a coarse classification aid, but the earlier adjacent-bucket candidate-selection approach is superseded because it cannot guarantee this tolerance. The precise service-only matcher receives its own Phase 3 tasklist and review.
+
 ---
 
 **Still open, not yet decided:** admin MFA enforcement timing (schema has the flag, default off); exact publish-transaction implementation; developer self-serve submission UI validation rules; whether `unit_variants.variant_name` needs a stronger identity guarantee across resubmissions (flagged as a known risk in `docs/schema/schema.v1.md`, deferred rather than solved).
+
+---
+
+**2026-09-01 — Budget-bucket bounds move from `public` to `private`; v1 uses fixed internal bands.**
+Context: `budget_buckets` was initially a public lookup, and the normal application role can read all public tables. That contradicts the approved rule that price bounds must never appear in public schema or buyer-facing output. Resolution: schema v2 moves the sole `budget_buckets` table to `private`; the security-invoker `private.unit_current_bucket` joins it internally, and only the dedicated service role may read the resulting classification. The controlled admin seed path owns the initial fixed magnitude bands. Ranges are lower-inclusive and upper-exclusive to prevent overlapping classifications at a boundary. The Phase 3 ±20% private matcher is unchanged and remains the authoritative buyer-range matcher.
+
+---
+
+**2026-09-01 — Brochure OCR is routed by a human-confirmed, versioned page manifest before paid extraction.**
+Context: brochure page boundaries are not unit-variant boundaries. A penthouse or duplex may span lower-floor, upper-floor, and terrace pages, while a brochure may also contain many pages irrelevant to the approved extraction contract. Resolution: cheap PDF text-layer inspection may suggest page scopes, but an uploader must confirm the routing manifest before extraction. A confirmed unit-variant scope contains one proposed variant identity and one or more ordered pages; the OCR adapter must return at most one variant candidate for that scope. Multiple pages therefore remain evidence for one proposed canonical `unit_variants` item rather than becoming separate variants. The routing manifest is stored with a pipeline and field-contract version on the OCR attempt and becomes immutable once queued. It is processing metadata only and never writes to the live catalog. Why: this reduces paid page processing and prevents document layout from silently defining catalog identity. Alternatives: OCR the entire brochure and infer grouping afterward, or treat every floor-plan page as a separate variant — rejected as costly and structurally unreliable.
+
+---
+
+**2026-09-01 — Historical OCR JSON is evaluation evidence only; every selected brochure is reprocessed through the new pipeline.**
+Context: the existing property JSON files were produced by the retired pipeline and may contain exactly the grouping and normalization errors the new flow is intended to prevent. Resolution: historical output may be normalized into a derived comparison report against a new run, but it cannot create `property_submissions`, `property_submission_fields`, or live catalog data. The selected curator-owned brochure set will be processed again with one versioned pipeline/field contract so all reviewable submissions share the same structure. Disagreements are evaluation findings for admin review, not precedence rules in favor of either output. Why: importing historical JSON would preserve old structural errors and create two ingestion authorities. Alternative: reuse apparently complete historical results and rerun only failures — rejected because completeness does not establish structural consistency.
+
+---
+
+**2026-09-01 — Submission-field provenance is one-to-many evidence; OCR attempt status belongs to attempt rows, not source documents.**
+Context: `property_submission_fields.source_page` can cite only one page, but one field—especially the `unit_variants` array—may depend on several brochure pages. `source_documents.ocr_status` also cannot truthfully represent retries or pipeline-version comparisons. Resolution: schema v3 replaces the scalar source-document/page/snippet columns with `property_submission_field_evidence`, whose rows cite a document page and optional JSON value path. It adds versioned `ocr_extraction_jobs`, each holding its confirmed routing manifest and attempt status, and removes aggregate OCR status from `source_documents`. Why: provenance and retry history become reproducible without duplicating a property or variant entity. Alternative: place page arrays inside field values or keep both document and attempt statuses — rejected because those approaches mix provenance into canonical values or create two live statuses for one process.
+
+---
+
+**2026-09-01 — Builder profiles exist independently from builder staff accounts; admin-run ingestion precedes self-serve onboarding.**
+Context: the initial catalog will be curated by admins from builder brochures, including builders that have no account on PropCompare. Later, builders should upload, map pages, review their own OCR draft, and submit it for independent admin approval. Resolution: `developers` is the sole canonical builder/company profile and can be created or selected by an admin without a user account. A future `developer_users` invitation links an authenticated staff user to that existing profile; it never creates a second builder record. New-property submissions store the selected canonical developer profile separately from the raw, evidence-backed `developer.name` OCR field. Initially an owner admin may create, review, approve, and publish an admin-run submission, with all actions audited. Once builder staff are onboarded, they may create and submit drafts only; an admin retains approval and publish authority. Why: the initial data-collection workflow works without fake accounts, while the future portal has a clear ownership boundary. Alternatives: require every builder to sign up before curation, or use OCR spelling as a developer identity — rejected because both block reliable initial ingestion.
+
+---
+
+**2026-09-01 — Published-property updates are additive patches; omission never deletes brochure facts.**
+Context: a later brochure often contains only a subset of a property’s facts, and OCR absence means “not found in this selected evidence,” not “not offered” or “no longer exists.” Resolution: on an existing property, a submission updates only the canonical fields it explicitly carries. Present amenities and specifications add or update evidence-backed facts; omitted ones stay unchanged. Present unit variants upsert only by exact reviewed `variant_name`; a new name adds a variant. Automatic variant deletion, renaming, or fuzzy matching is forbidden in v1 and requires an explicit future review action. A new property receives `not_stated` rows for unmentioned controlled catalog items, while explicitly extracted items become `available`; automatic negative claims are never inferred. Why: preserves catalog integrity while allowing new brochures to improve it incrementally. Alternatives: treat every brochure as a complete replacement or infer removals from missing OCR — rejected because either can silently erase correct published data.
+
+---
+
+**2026-09-01 — Submission review permissions and slug generation are fixed for Phase 2A.**
+Resolution: a submitter moves a draft or changes-requested submission to `submitted`; an admin verifier or owner may move it into review and issue changes, rejection, or approval; only an owner may publish an approved submission. The initial owner-admin workflow may have the same actor in each step, but every transition remains timestamped and attributable. New properties receive a normalized name-derived slug; on a uniqueness conflict, the publisher appends a deterministic short suffix derived from the submission id and retries inside the transaction. Why: early operation remains practical without weakening the future separation between builder submitters and admin publishers.

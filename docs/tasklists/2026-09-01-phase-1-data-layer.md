@@ -1,7 +1,8 @@
 # Tasklist — Phase 1 data layer
 
-**Status:** not started  
-**Owner:** Bhavarth (schema/migrations/private access); Deep (lookup catalog content once shapes land)  
+**Status:** database foundation complete; controlled lookup data pending follow-up task
+**Owner:** Bhavarth (schema/migrations/private access); Deep (lookup catalog content once shapes land)
+**Branch:** `task/phase-1-data-layer`
 **Roadmap:** [Phase 1](../roadmap.md#phase-1--data-layer)
 
 ## Scope
@@ -18,41 +19,41 @@ Translate the canonical schema into Drizzle, generate and apply the first migrat
 
 ## Blockers and prerequisites
 
-- [ ] Docker Desktop engine is running and `docker compose up -d` produces healthy local Postgres.
-- [ ] Local environment is configured from `.env.example` with a safe development `BETTER_AUTH_SECRET`.
-- [ ] Confirm task branch/review process before migration work begins.
+- [x] Docker Desktop engine is running and `docker compose up -d` produces healthy local Postgres.
+- [x] Local environment uses restricted app, admin migration, and reserved service database URLs; the existing Better Auth development secret remains local-only.
+- [x] Work is on the dedicated `task/phase-1-data-layer` branch.
 
 ## Implementation checklist
 
-- [ ] Re-read canonical schema; identify native enums, lookup/public/private tables, FKs, uniqueness, timestamps, and indexes. Record ambiguity before coding.
-- [ ] Define Drizzle schemas without creating a second entity representation or adding unapproved structural fields.
-- [ ] Preserve generated Better Auth ownership; connect references without redesigning auth tables.
-- [ ] Implement `private.unit_price_history` with numeric money fields and deny-by-default RLS.
-- [ ] Implement `private.unit_current_bucket` with canonical current-price/bucket join semantics.
-- [ ] Generate the first Drizzle migration and review SQL for public/private placement, FK order, RLS, and no prohibited catalog-data writes.
-- [ ] Apply migration to local database.
-- [ ] Add a seed mechanism for lookup/contract data only: property/BHK/layout types, amenity/specification catalogs and synonyms, budget buckets, active property-schema fields.
-- [ ] Have Deep populate agreed lookup values against fixed shapes; do not add parallel tables/fields for convenience.
-- [ ] Run the required private-bucket proof using a controlled development fixture, with no price exposed to an application-facing response.
+- [x] Re-read canonical schema; identify native enums, lookup/public/private tables, FKs, uniqueness, timestamps, and indexes.
+- [x] Define Drizzle schemas without a second entity representation or unapproved structural fields.
+- [x] Preserve generated Better Auth ownership; extensions reference its text user IDs without redesigning auth tables.
+- [x] Implement `private.unit_price_history` with numeric money fields, forced zero-policy RLS, and a one-current-price-per-variant index.
+- [x] Implement security-invoker `private.unit_current_bucket` with canonical current-price/bucket join semantics.
+- [x] Generate/review the first Drizzle migration for public/private placement, FK order, RLS, and no catalog-data writes.
+- [x] Apply migrations cleanly to local Postgres.
+- [x] Add idempotent seed plumbing and the explicitly approved property/BHK/layout values.
+- [x] Deep populated approved amenity/specification vocabulary, private fixed budget bands, and OCR field definitions in the completed [lookup catalog data tasklist](2026-09-01-lookup-catalog-data.md).
+- [x] Prove effective app/service role separation, forced RLS, zero private policies, and service-view access. Data-bearing mapping waits for a Phase 2 published fixture; see `DECISIONS.md` (2026-09-01).
 
 ## Verification
 
-- [ ] `bun run format:check`
-- [ ] `bun run lint`
-- [ ] `bun run typecheck`
-- [ ] `bun run test`
-- [ ] Migration applies cleanly to an empty local database.
-- [ ] Lookup seed is idempotent or has a documented safe reset procedure.
-- [ ] A manual development insert into `private.unit_price_history` yields the expected `private.unit_current_bucket` result.
-- [ ] Confirm buyer-facing query paths cannot select exact prices.
+- [x] `bun run format:check`
+- [x] `bun run lint`
+- [x] `bun run typecheck`
+- [x] `bun run test` (1 file, 2 schema-contract tests)
+- [x] Migrations apply cleanly to a fresh local database.
+- [x] Lookup seed runs twice with stable core lookup counts.
+- [x] Direct catalog fixture is intentionally deferred: it would violate the one-write-path rule. Phase 2 will prove mapping through publication.
+- [x] Confirm the normal app role is denied `private` schema usage and the bucket view; exact prices cannot be selected through the current app connection.
 
 ## Documentation and handoff
 
-- [ ] Update API status only for endpoints actually added.
-- [ ] Update `PROGRESS.md` with outcome and verification.
-- [ ] Add a dated `DECISIONS.md` entry for structural/access-control decisions made during work.
-- [ ] Create the next bounded implementation tasklist before starting that implementation.
+- [x] API status unchanged: no product endpoints were added.
+- [x] Update `PROGRESS.md` with outcome and verification.
+- [x] Add dated decisions for the role model and fixture-verification constraint.
+- [x] Create the separate [lookup catalog data tasklist](2026-09-01-lookup-catalog-data.md) before that implementation starts.
 
 ## Completion record
 
-_Complete this section when acceptance criteria pass. Do not replace original scope; create follow-up tasklists for deferred work._
+The database foundation was completed locally on 2026-09-01. Remaining catalog content is deliberately split into the linked data tasklist so it can be sourced and reviewed without schema drift.

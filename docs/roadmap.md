@@ -27,7 +27,7 @@ Phases 2A and 2B run in parallel once Phase 1 lands, so both developers are work
 
 **Area of focus: Deep** — once table shapes exist, populate seed _data_ for the catalogs (amenity/spec lists, budget bucket ranges) against the fixed schema.
 
-**Acceptance:** migrations run clean; seed script populates all lookup tables; a manual insert into `private.unit_price_history` plus a select against `private.unit_current_bucket` proves the view works.
+**Acceptance:** migrations run clean; seed scripts populate lookup tables from approved source data; effective role/RLS checks prove the normal app connection cannot access `private` while the service role can resolve `private.unit_current_bucket`. A data-bearing current-price-to-bucket proof uses a published fixture created by the Phase 2 publish transaction — never a direct catalog insert.
 
 ---
 
@@ -37,9 +37,13 @@ Phases 2A and 2B run in parallel once Phase 1 lands, so both developers are work
 
 - `property_submissions` / `property_submission_fields` / `property_revisions` implementation.
 - The publish transaction — the one write path into live catalog tables.
+- Versioned, human-confirmed brochure page routing before paid OCR; multi-page
+  unit scopes and many-page field evidence follow schema v3.
 - OCR provider integration against `property_schema_fields` (provider choice tracked as a dated `DECISIONS.md` entry once made).
+- Legacy-vs-new OCR evaluation reports remain comparison-only; every selected
+  brochure is rerun through the new pipeline before submission review.
 - `rera_fetch_jobs` scrape job and cross-check logic.
-- Admin UI: submission queue, Data Reconciliation screen (field + OCR confidence + source page + confirm/edit).
+- Admin UI: page-routing workspace, submission queue, and Data Reconciliation screen (field + OCR confidence + all evidence pages + confirm/edit).
 
 ## Phase 2B — Buyer UI against a fixed contract (parallel with 2A)
 
@@ -53,11 +57,11 @@ Phases 2A and 2B run in parallel once Phase 1 lands, so both developers are work
 
 ## Phase 3 — Integration & core buyer flows
 
-**Area of focus: Bhavarth** — the discovery/comparison budget-bucket matching service (the only code path with a service-role connection into `private`).
+**Area of focus: Bhavarth** — the discovery/comparison budget-range matching service (the only code path with a service-role connection into `private`), implementing the documented inclusive ±20% range without returning price data. See [its tasklist](tasklists/2026-09-01-phase-3-budget-range-matching.md).
 
 **Area of focus: Deep** — wire the built UI to real endpoints: comparison feature, saved properties, dossier-unlock phone-OTP gate, enquiry submission, following the contracts Bhavarth defines.
 
-**Acceptance:** a buyer can browse, get intake-matched results by budget bucket (no price ever rendered), compare, save, unlock a dossier via OTP, and submit an enquiry — end to end on real data.
+**Acceptance:** a buyer can browse, get intake-matched results from the inclusive ±20% private budget-range matcher (no price ever rendered), compare, save, unlock a dossier via OTP, and submit an enquiry — end to end on real data.
 
 ---
 
