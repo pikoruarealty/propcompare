@@ -1,5 +1,53 @@
 # Progress
 
+## 2026-09-02 — Phase 2B step 1 complete: buyer read contract specified
+
+**Done:** Both buyer read routes are now fully specified in
+[docs/api/api-spec.v1.md](docs/api/api-spec.v1.md), replacing the one-line
+summaries that blocked every screen in this phase. `GET /api/v1/properties`
+documents its query parameters with types and match semantics, pagination, sort,
+the `PropertySummary` shape, and its error cases;
+`GET /api/v1/properties/{slug}` documents the full `PropertyDossier` shape —
+property facts, developer, location, possession, RERA facts, unit variants with
+per-basis areas and dimensions, controlled amenities and specifications carrying
+their `not_stated` / `explicitly_not_offered` status, and media — plus ordering
+rules and 404 behavior. Both routes moved from Planned to Specified in the route
+table. Documentation only; no code changed.
+
+**Decision gate resolved:** the v1 listing filter set is fixed at `city`,
+`locality`, `propertyType`, `bhk`, `possessionStatus`, and repeatable `amenity`
+— the full set matching `prd.v1.md`'s stated browsing dimensions, chosen over a
+reduced set that would have deferred amenity filtering. `propertyType` and `bhk`
+filter by lookup `key` rather than UUID, keeping listing URLs human-readable and
+stable across a re-seed. Recorded as a dated `DECISIONS.md` entry.
+
+**Two rules written down normatively so they cannot be re-invented later:**
+presence of a row in `properties` _is_ publication — there is no status column,
+and rows only ever arrive through the publish transaction, so "published" needs
+no filter and no one should add one. And the exclusion list now binds both
+routes at any nesting level: no `unit_price_history`, price, price-per-sqft,
+private bucket, submission or review status, provenance, evidence, or OCR
+confidence may appear in a buyer response.
+
+**Judgement calls made while writing the contract**, all derived from existing
+schema or documented rules: `pageSize` caps at 50 and rejects rather than
+silently clamps; repeated `amenity` narrows with AND and matches only
+`status = "available"`, since neither honest-incompleteness state is a claim the
+amenity exists; `sort` offers only `newest` and `name`, as there is no price to
+sort by; an unknown lookup key returns an empty result while a malformed enum or
+page number returns `422`; and the dossier returns every associated
+amenity/specification row regardless of status, so the client can render absence
+explicitly instead of receiving a pre-filtered list.
+
+**Verified:** `bun run format:check` passes. No other check applies — nothing
+executable changed.
+
+**Next up:** step 2 — the typed read layer and fixtures
+(`task/phase-2b-read-layer`): exported TypeScript types mirroring this contract
+exactly, `listPublishedProperties` and `getPublishedPropertyBySlug` as read-only
+Drizzle queries, and fixtures satisfying the same types including a deliberately
+sparse property.
+
 ## 2026-09-02 — Phase 2B step 0 complete: UI tooling baseline
 
 **Done:** Installed dependencies and stood up the buyer-UI toolchain.

@@ -1,6 +1,6 @@
 # Implementation plan — Phase 2B buyer experience
 
-**Status:** step 0 complete (2026-09-02); step 1 is next
+**Status:** step 1 complete (2026-09-02); step 2 is next
 **Owner:** Deep (buyer UI), with Bhavarth owning the read contract in step 1
 **Branch:** this plan on `task/phase-2b-implementation-plan`; each step below takes its own `task/` branch
 **Roadmap:** [Phase 2B](../roadmap.md#phase-2b--buyer-ui-against-a-fixed-contract-parallel-with-2a)
@@ -132,30 +132,32 @@ step.
 
 ## Step 1 — Buyer read API contract (prerequisite)
 
-**Branch:** `task/phase-2b-read-contract` · **Documentation only, no code.**
+**Branch:** `task/phase-2b-read-contract` · **Documentation only, no code.** · **Status: complete 2026-09-02**
 
 `api-spec.v1.md`'s own contract-change process requires a route's request,
 response, access rules, pagination/filter semantics, and errors to be defined
 before a consumer starts work. Today both buyer routes carry only a one-line
 summary, so this step is a hard blocker on every screen.
 
-- [ ] Fully specify `GET /api/v1/properties`: query parameters, the fixed v1
+- [x] Fully specify `GET /api/v1/properties`: query parameters, the fixed v1
       filter set, pagination and sort semantics, the summary response shape, and
       error codes.
-- [ ] Fully specify `GET /api/v1/properties/{slug}`: the dossier response shape
+- [x] Fully specify `GET /api/v1/properties/{slug}`: the dossier response shape
       covering property facts, developer, location, RERA facts, unit variants,
       per-basis areas, dimensions, controlled amenities/specifications with their
       `not_stated` / `explicitly_not_offered` states, and media.
-- [ ] State explicitly that presence of a row in `properties` _is_ publication —
+- [x] State explicitly that presence of a row in `properties` _is_ publication —
       there is no status column — so "published" needs no filter but must be
       documented so no one later invents one.
-- [ ] State the exclusion list normatively: no `unit_price_history` value, price,
+- [x] State the exclusion list normatively: no `unit_price_history` value, price,
       price-per-sqft, bucket, submission, provenance, evidence, or OCR confidence
       may appear in a buyer response.
-- [ ] Resolve the filter-set decision gate and record it in `DECISIONS.md`.
+- [x] Resolve the filter-set decision gate and record it in `DECISIONS.md`.
 
-A proposed starting shape, to be settled in this step rather than treated as
-already agreed:
+**Resolved filter set** (user sign-off, recorded in `DECISIONS.md`): `city`,
+`locality`, `propertyType`, `bhk`, `possessionStatus`, and repeatable `amenity`
+— the full proposed set, not the reduced alternative. `propertyType` and `bhk`
+filter by lookup `key` (e.g. `apartment`, `2bhk`), not by UUID.
 
 ```text
 GET /api/v1/properties
@@ -166,8 +168,31 @@ GET /api/v1/properties/{slug}
   -> PropertyDossier   (404 when the slug is not in the live catalog)
 ```
 
-**Acceptance:** both routes are fully specified in `api-spec.v1.md`; a reviewer
-can build a screen or a mock server from the document alone.
+**Acceptance — met:** both routes are fully specified in `api-spec.v1.md` —
+query parameters with types and match semantics, pagination and sort, full
+`PropertySummary` and `PropertyDossier` response shapes, ordering rules, an
+error table, and a route-spanning normative exclusion list. A reviewer can build
+a screen or a mock server from the document alone. Documentation only; no code
+changed, so no test run applies beyond `format:check`.
+
+**Decisions folded into the contract while writing it** (each derived from
+existing schema or documented rules, not invented scope):
+
+- `pageSize` defaults to 20 and is capped at 50, rejected with `422` rather than
+  silently clamped — a silently clamped value lies to the caller about what it
+  received.
+- Repeated `amenity` narrows with AND semantics and matches only
+  `status = "available"`; `not_stated` and `explicitly_not_offered` never match a
+  filter, because neither is a claim that the amenity exists.
+- `sort` is limited to `newest` and `name`. No relevance or price sort exists in
+  v1 — there is no price in the read layer to sort by.
+- An unknown `propertyType`/`bhk`/`amenity` key returns an empty result set, not
+  an error; a malformed `possessionStatus`, `page`, or `pageSize` returns `422`.
+  The first is a valid query with no matches, the second is a broken request.
+- `amenities` and `specifications` in the dossier return every associated catalog
+  row regardless of status, so the client renders the honest-incompleteness
+  states explicitly rather than receiving a pre-filtered list it cannot
+  distinguish from genuine absence.
 
 ## Step 2 — Typed read layer and fixtures
 

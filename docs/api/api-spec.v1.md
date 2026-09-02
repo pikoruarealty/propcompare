@@ -21,18 +21,143 @@ Authentication/session details are owned by Better Auth; product routes use its 
 
 ## Buyer API
 
-| Method and route                             | Status             | Access                 | Contract                                                                                             |
-| -------------------------------------------- | ------------------ | ---------------------- | ---------------------------------------------------------------------------------------------------- |
-| `GET /api/v1/properties`                     | Planned (Phase 2B) | Public                 | Paginated published-property summaries and supported filters; never exact prices.                    |
-| `GET /api/v1/properties/{slug}`              | Planned (Phase 2B) | Public                 | Published dossier with units, areas, catalog amenities/specifications, media, and public RERA facts. |
-| `POST /api/v1/intake-sessions`               | Planned (Phase 3)  | Anonymous or buyer     | Stores priorities, desired BHK, stated budget range, and city.                                       |
-| `POST /api/v1/discovery/matches`             | Planned (Phase 3)  | Buyer/anonymous intake | Returns property and unit-variant IDs matched by bucket; never price or bucket boundaries.           |
-| `GET, POST, DELETE /api/v1/saved-properties` | Planned (Phase 3)  | Buyer                  | Lists, saves, or removes the buyer's saved properties.                                               |
-| `GET, POST /api/v1/comparisons`              | Planned (Phase 3)  | Buyer                  | Creates/reads comparisons and ordered property/unit items.                                           |
-| `POST /api/v1/enquiries`                     | Planned (Phase 3)  | Buyer                  | Creates an enquiry for a property and optional unit variant.                                         |
-| `POST /api/v1/dossier-unlocks`               | Planned (Phase 3)  | Buyer                  | Records a phone-OTP-verified dossier unlock.                                                         |
+| Method and route                             | Status                                    | Access                 | Contract                                                                                                                  |
+| -------------------------------------------- | ----------------------------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/v1/properties`                     | Specified (Phase 2B, not yet implemented) | Public                 | Paginated published-property summaries and supported filters; never exact prices. Full contract below.                    |
+| `GET /api/v1/properties/{slug}`              | Specified (Phase 2B, not yet implemented) | Public                 | Published dossier with units, areas, catalog amenities/specifications, media, and public RERA facts. Full contract below. |
+| `POST /api/v1/intake-sessions`               | Planned (Phase 3)                         | Anonymous or buyer     | Stores priorities, desired BHK, stated budget range, and city.                                                            |
+| `POST /api/v1/discovery/matches`             | Planned (Phase 3)                         | Buyer/anonymous intake | Returns property and unit-variant IDs matched by bucket; never price or bucket boundaries.                                |
+| `GET, POST, DELETE /api/v1/saved-properties` | Planned (Phase 3)                         | Buyer                  | Lists, saves, or removes the buyer's saved properties.                                                                    |
+| `GET, POST /api/v1/comparisons`              | Planned (Phase 3)                         | Buyer                  | Creates/reads comparisons and ordered property/unit items.                                                                |
+| `POST /api/v1/enquiries`                     | Planned (Phase 3)                         | Buyer                  | Creates an enquiry for a property and optional unit variant.                                                              |
+| `POST /api/v1/dossier-unlocks`               | Planned (Phase 3)                         | Buyer                  | Records a phone-OTP-verified dossier unlock.                                                                              |
 
 Property details may expose identifiers, property/developer facts, location, RERA fields, unit variants, per-basis areas, dimensions, controlled amenity/specification states, and media. They must not expose `unit_price_history`, price values, price-per-square-foot values, or unreviewed submission/provenance data.
+
+### `GET /api/v1/properties`
+
+Paginated listing of published properties. A property is published by virtue of having a row in `properties` — there is no status column on the live catalog tables, so "published" requires no filter and this route never filters on one. `properties` rows only ever come to exist through the `property_submissions` publish transaction, so every row in the table is, by construction, published.
+
+**Query parameters** (all optional):
+
+| Parameter          | Type                            | Notes                                                                                                                                                                                                                                           |
+| ------------------ | ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `page`             | integer, default `1`            | 1-indexed.                                                                                                                                                                                                                                      |
+| `pageSize`         | integer, default `20`, max `50` | Values above 50 are rejected (`422`), not clamped.                                                                                                                                                                                              |
+| `city`             | string                          | Exact match against `properties.city`.                                                                                                                                                                                                          |
+| `locality`         | string                          | Exact match against `properties.locality`. May be combined with `city`.                                                                                                                                                                         |
+| `propertyType`     | string                          | `property_types.key` (e.g. `apartment`). Unknown key returns an empty result set, not an error.                                                                                                                                                 |
+| `bhk`              | string                          | `bhk_types.key` (e.g. `2bhk`). Matches a property with at least one `unit_variants` row of that BHK type.                                                                                                                                       |
+| `possessionStatus` | string                          | One of the `possession_status` enum values: `under_construction`, `ready_to_move`, `nearing_possession`.                                                                                                                                        |
+| `amenity`          | string, repeatable              | `amenity_catalog.key`, e.g. `?amenity=clubhouse&amenity=gym`. Repeating narrows (AND, not OR): a property must have every listed amenity recorded with `status = "available"`. `not_stated` and `explicitly_not_offered` amenities never match. |
+| `sort`             | string, default `newest`        | One of `newest` (`properties.createdAt` descending) or `name` (`properties.name` ascending). No relevance/price sort exists in v1 — there is no price to sort by.                                                                               |
+
+An unknown query parameter, or a value that fails validation (e.g. `possessionStatus=foo`, non-numeric `page`), returns `422` with the standard error envelope naming the offending parameter.
+
+**Response `200`:**
+
+```jsonc
+{
+  "data": [
+    {
+      "id": "uuid",
+      "slug": "string",
+      "name": "string",
+      "propertyType": { "key": "apartment", "label": "Apartment" },
+      "developer": { "id": "uuid", "name": "string" },
+      "city": "string",
+      "locality": "string",
+      "possessionStatus": "under_construction" | "ready_to_move" | "nearing_possession" | null,
+      "possessionDate": "YYYY-MM-DD" | null,
+      "reraRegistered": true,
+      "bhkTypes": [{ "key": "2bhk", "label": "2 BHK" }], // distinct BHK types across the property's unit variants
+      "primaryMedia": { "gcsPath": "string", "mediaType": "photo" } | null
+    }
+  ],
+  "pagination": { "page": 1, "pageSize": 20, "total": 0, "totalPages": 0 }
+}
+```
+
+No summary object contains a price, price-per-square-foot, or bucket value, at any nesting level.
+
+### `GET /api/v1/properties/{slug}`
+
+Full published dossier for one property, resolved by `properties.slug`.
+
+**Response `200`** — a `PropertyDossier`:
+
+```jsonc
+{
+  "id": "uuid",
+  "slug": "string",
+  "name": "string",
+  "description": "string" | null,
+  "propertyType": { "key": "apartment", "label": "Apartment" },
+  "developer": {
+    "id": "uuid",
+    "name": "string",
+    "description": "string" | null,
+    "logoGcsPath": "string" | null,
+    "website": "string" | null
+  },
+  "location": {
+    "city": "string",
+    "locality": "string",
+    "latitude": "string" | null,
+    "longitude": "string" | null,
+    "pincode": "string" | null
+  },
+  "possession": {
+    "status": "under_construction" | "ready_to_move" | "nearing_possession" | null,
+    "possessionDate": "YYYY-MM-DD" | null,
+    "launchDate": "YYYY-MM-DD" | null
+  },
+  "rera": {
+    "registered": true,
+    "registrationNumber": "string" | null,
+    "lastVerifiedAt": "ISO-8601" | null,
+    "projectLandAreaSqft": "string" | null,
+    "carpetAreaRangeMinSqft": "string" | null,
+    "carpetAreaRangeMaxSqft": "string" | null,
+    "constructionProgressPercent": "string" | null
+  },
+  "totalTowers": 0 | null,
+  "totalUnits": 0 | null,
+  "unitVariants": [
+    {
+      "id": "uuid",
+      "variantName": "string",
+      "bhkType": { "key": "2bhk", "label": "2 BHK" } | null,
+      "layoutType": { "key": "string", "label": "string" } | null,
+      "totalUnitsOfVariant": 0 | null,
+      "dimensions": { /* opaque jsonb, room-name -> dimension facts */ } | null,
+      "areas": [{ "basis": "carpet" | "super_built_up" | "built_up", "areaSqft": "string" }]
+    }
+  ],
+  "amenities": [
+    { "key": "string", "label": "string", "category": "string", "status": "available" | "not_stated" | "explicitly_not_offered" }
+  ],
+  "specifications": [
+    { "key": "string", "label": "string", "category": "string", "valueText": "string" | null, "status": "available" | "not_stated" | "explicitly_not_offered" }
+  ],
+  "media": [
+    { "id": "uuid", "mediaType": "photo" | "floor_plan" | "video" | "brochure_pdf", "gcsPath": "string", "caption": "string" | null, "unitVariantId": "uuid" | null, "isPrimary": true }
+  ]
+}
+```
+
+Ordering: `unitVariants` and `media` are returned ordered by their existing `display_order`/creation order in the schema (`property_media.displayOrder`; `unit_variants` by `createdAt`). `amenities` and `specifications` include every catalog row associated with the property regardless of `status` — the honest-incompleteness states (`not_stated`, `explicitly_not_offered`) are data for the client to render explicitly, never filtered out.
+
+A property with no media, no RERA registration, or unit variants missing one or more area bases returns those as empty arrays / `null` fields — never a fabricated value and never an omitted key.
+
+**Errors:**
+
+| Status | Condition                                                                                                              |
+| ------ | ---------------------------------------------------------------------------------------------------------------------- |
+| `404`  | No `properties` row matches the given slug.                                                                            |
+| `422`  | Malformed query parameters on `GET /api/v1/properties` (listing route only; the slug route takes no query parameters). |
+
+**Exclusion list (normative, applies to both routes):** no response body, at any nesting level, may contain `unit_price_history` data, a price, a price-per-square-foot value, a private budget bucket, submission/review status, provenance or evidence records, or OCR confidence. These live exclusively in the `private` schema and the submission-review tables, which the buyer read layer does not query.
 
 ## Admin API
 
