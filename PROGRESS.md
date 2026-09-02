@@ -45,14 +45,28 @@ inserts — the one-write-path rule binds tests too.
 `null`; `bhkTypes` is the distinct set across a property's variants. Both are now
 in `api-spec.v1.md` so the document and the code cannot drift.
 
-**Defect found, deliberately not fixed — needs your decision.** `.gitignore`
-excludes `drizzle/meta/`, so Drizzle's migration journal and snapshots were never
-committed. `bun run db:migrate` consequently fails on every fresh checkout, and
-`db:generate` — with no snapshot to diff against — can emit a migration that
-duplicates existing ones. That is a schema-divergence risk of precisely the class
-this project exists to prevent, so it is surfaced rather than resolved
-unilaterally. Local setup worked around it by applying `drizzle/*.sql` in
-filename order.
+**Defect found and fixed: the migration journal was never committed.**
+`.gitignore` had excluded `drizzle/meta/` since the first Phase 0 baseline, so
+`db:migrate` could not run on a fresh checkout. Reproducing it rather than
+assuming showed the worse half: `db:generate` emitted a _second_ migration
+numbered 0000, colliding with the existing one, and because migration 0001 is
+hand-written SQL that drizzle-kit cannot regenerate, a regenerated baseline
+silently drops the `propcompare_service` grant. Fixed by un-ignoring
+`drizzle/meta/` and reconstructing the journal for all five migrations plus the
+current schema snapshot — verified both ways: `db:generate` now reports no schema
+changes, and `db:migrate` against an empty throwaway database applied all five
+and produced a `pg_dump` structure identical to the working one. Also untracked
+`tsconfig.tsbuildinfo`, a build cache that was committed and churns on every
+typecheck.
+
+**A privilege bug in this session's own setup, caught by that comparison.** The
+hand-written local bootstrap had added `ALTER DEFAULT PRIVILEGES` as a
+convenience, which granted `propcompare_service` write access to all 36 public
+tables — the migrations grant it `SELECT` on `public.unit_variants` alone. The
+migrations were already self-sufficient for privileges. The local database was
+rebuilt through `db:migrate` and now matches the design exactly: the service role
+holds zero write grants on public and one SELECT, and the app role is still
+refused on `private`. Both corrections are recorded in `DECISIONS.md`.
 
 **Next up:** step 3 — the buyer read routes (`task/phase-2b-api-routes`):
 `src/app/api/v1/properties/route.ts` and `[slug]/route.ts` over this layer, query

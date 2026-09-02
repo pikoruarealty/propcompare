@@ -244,14 +244,23 @@ Database-backed read tests seed their properties through the real
 one-write-path rule binds tests too, and a raw INSERT would test a shape the
 publisher cannot actually produce.
 
-**Defect found, not fixed — needs a decision.** `.gitignore` excludes
-`drizzle/meta/`, so Drizzle's migration journal and snapshots were never
-committed. `bun run db:migrate` therefore fails on every fresh checkout (it did
-here), and more seriously `db:generate` has no snapshot to diff against and can
-emit a migration duplicating existing ones — a schema-divergence risk of exactly
-the class this project exists to prevent. Local setup worked around it by applying
-`drizzle/*.sql` in order. Recorded in `docs/local-database-setup.md`; resolving it
-is a migration-workflow decision, so it is surfaced rather than taken unilaterally.
+**Two defects found and fixed after review (both pre-existing on `main`):**
+
+- **The migration journal was never committed.** `.gitignore` excluded
+  `drizzle/meta/` from the first Phase 0 baseline, so `db:migrate` could not run
+  on a fresh checkout, and `db:generate` emitted a second migration numbered 0000
+  colliding with the existing one — which, because migration `0001` is
+  hand-written SQL, would have silently dropped the `propcompare_service` grant.
+  Journal reconstructed for all five migrations with the current schema snapshot;
+  verified by a clean `db:migrate` into an empty database whose `pg_dump`
+  structure matches the working one exactly.
+- **`tsconfig.tsbuildinfo` was tracked**, a build cache rewritten by every
+  `typecheck`. Now ignored and untracked.
+
+Also corrected a privilege bug introduced by this step's own local bootstrap: it
+had granted `propcompare_service` write access to all 36 public tables where the
+migrations grant `SELECT` on one. Local database rebuilt through `db:migrate`.
+Both recorded in `DECISIONS.md`.
 
 ## Step 3 — Buyer read routes
 

@@ -46,20 +46,24 @@ CREATE DATABASE propcompare OWNER propcompare;
 
 Then, connected to `propcompare` as a superuser, apply
 [`docker/postgres-init/01-schemas.sql`](../docker/postgres-init/01-schemas.sql) and
-[`02-roles.sql`](../docker/postgres-init/02-roles.sql), plus the ownership grants the
-container gets for free:
+[`02-roles.sql`](../docker/postgres-init/02-roles.sql), plus the schema ownership the
+container gets for free by running Postgres as `propcompare`:
 
 ```sql
-ALTER SCHEMA private OWNER TO propcompare;
-ALTER SCHEMA public  OWNER TO propcompare;
-
-ALTER DEFAULT PRIVILEGES FOR ROLE propcompare IN SCHEMA public
-  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO propcompare_app, propcompare_service;
-ALTER DEFAULT PRIVILEGES FOR ROLE propcompare IN SCHEMA public
-  GRANT USAGE, SELECT ON SEQUENCES TO propcompare_app, propcompare_service;
-ALTER DEFAULT PRIVILEGES FOR ROLE propcompare IN SCHEMA private
-  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO propcompare_service;
+CREATE SCHEMA private AUTHORIZATION propcompare;
+ALTER SCHEMA public OWNER TO propcompare;
+REVOKE ALL ON SCHEMA private FROM PUBLIC;
+REVOKE CREATE ON SCHEMA public FROM PUBLIC;
+REVOKE ALL ON SCHEMA private FROM propcompare_app;
+GRANT CONNECT ON DATABASE propcompare TO propcompare_app, propcompare_service;
 ```
+
+**Stop there — do not add blanket `ALTER DEFAULT PRIVILEGES` grants.** The migrations
+grant table privileges deliberately and narrowly: `propcompare_app` gets CRUD on the
+public tables, while `propcompare_service` gets `SELECT` on `public.unit_variants` and
+write access to the two `private` tables, and nothing else. A convenience grant here
+silently widens the service role across all 36 public tables and defeats the split the
+next section asks you to verify.
 
 Update the `localhost:5432` in your `.env` if your instance listens elsewhere.
 
@@ -75,12 +79,12 @@ Both seeds are required before the test suite passes: the read-layer and publish
 tests resolve real lookup keys, and the budget-bucket mapping test needs the private
 seed.
 
-> **Caveat — `db:migrate` does not work on a fresh checkout.** `.gitignore` excludes
-> `drizzle/meta/`, so Drizzle's migration journal and snapshots are not in the
-> repository and `drizzle-kit` cannot determine what to apply. Until that is resolved,
-> apply `drizzle/*.sql` in filename order with `psql` as `DATABASE_ADMIN_URL`'s role.
-> Note this also means `db:generate` has no snapshot to diff against and may emit a
-> migration that duplicates existing ones — check its output before committing.
+> **Note on `drizzle/meta/`.** The journal and the latest schema snapshot are tracked
+> in git and must stay that way — they are the migration history, not build output.
+> Snapshots for migrations `0000`–`0003` were never committed and are not
+> reconstructible, so only `0004_snapshot.json` exists. That is sufficient:
+> `drizzle-kit generate` diffs against the newest snapshot only. See `DECISIONS.md`
+> (2026-09-02).
 
 ## Verifying the privilege split
 
