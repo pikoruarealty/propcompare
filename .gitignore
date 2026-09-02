@@ -28,6 +28,11 @@ Thumbs.db
 # Testing
 coverage/
 
+# OCR source/evaluation artifacts — real brochure data stays outside Git.
+*.pdf
+**/ocr-results/
+**/ocr-eval/results/
+
 # Local database data (if running Postgres via local volume)
 .pgdata/
 

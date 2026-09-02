@@ -1,5 +1,38 @@
 # Progress
 
+## 2026-09-02 — OpenRouter OCR adapter implemented; human brochure spot-check pending
+
+**Done:** Implemented the real Claude Sonnet 5 extraction adapter using
+OpenRouter's streaming chat-completions API and native `file-parser` PDF engine.
+The adapter downloads the private source document from GCS, creates one physical
+PDF excerpt per confirmed non-ignored routing scope, validates provider output
+against active `property_schema_fields`, assembles at most one candidate per
+unit-variant scope, and flags unknown non-commercial facts as unmapped evidence.
+Commercial fields or values hard-fail the attempt. The worker transitions the
+versioned OCR job and transactionally creates `needs_review` submission fields
+with page/value-path evidence; no partial evidence or live catalog write occurs.
+
+**Failure policy:** Non-timeout network errors and HTTP 408/429/5xx retry once.
+Invalid JSON, output-length exhaustion, timeouts, other non-stop finishes, and
+evidence-persistence conflicts fail the attempt for human re-routing. No paid
+provider request was made during implementation.
+
+**Developer handoff:** Added `docs/ocr-adapter-usage.md` with environment setup,
+the server-side call sequence, GCS path behavior, failure semantics, and a code
+example for the other developer. Updated the architecture, admin flow,
+documentation map, `.env.example`, and artifact-ignore rules.
+
+**Verified:** `bun run format:check`, `bun run lint`, `bun run typecheck`,
+`bun run test` (48 passed, 5 files), and `git diff --check` pass. Tests generate
+synthetic blank PDFs in memory and use recorded synthetic provider responses;
+the repository contains no brochure PDF or raw per-brochure OCR-result JSON.
+
+**Outstanding:** Human field-level spot-checks against Adani Amaris and Kimana
+Towers remain open from provider selection. The next bounded implementation is
+the authenticated admin trigger/page-picker or the carried publish HTTP route.
+
+---
+
 ## 2026-09-02 — Schema v5 brochure fields implemented and verified
 
 **Done:** Added nullable canonical columns for `properties.total_floors`,
