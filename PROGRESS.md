@@ -90,6 +90,18 @@ step 8, plus 5 for the landing strip); `format:check`, `lint`, `typecheck`,
 `ƒ /intake`, `ƒ /properties`, `● /properties/[slug]`, plus the three `ƒ` API
 routes.
 
+**The branch is not merged, and these numbers are the branch's, not a merged
+result's.** `task/phase-2b` stays unmerged by decision — the merge into `main`
+will be raised as a pull request. Two things found while closing the step that
+the merge will have to handle: `origin/main` moved five commits ahead during the
+phase (`4e998d1` → `9b2726d`) with Phase 2A OCR work, schema v5's four new
+nullable `properties` columns, and migration `0005`, so a local database on
+`0004` needs `bun run db:migrate` first; and three files will conflict —
+`DECISIONS.md` and `PROGRESS.md`, where both sides added entries and both are
+wanted, and `tsconfig.tsbuildinfo`, a tracked build cache whose untracking is
+deliberately left to the pull request. Full detail in the phase plan's
+completion record.
+
 ## 2026-09-07 — Phase 2B step 8 complete: guided intake, and the dead link closed
 
 **Done:** `/intake` exists. Four optional questions — priorities, configuration,

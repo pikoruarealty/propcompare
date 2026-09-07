@@ -810,5 +810,27 @@ static `/` this step would have shipped); reproduce a flaky test rather than
 re-running it (the collation bug in step 7); and prove a guard by planting a
 violation and watching it fail (every guard this phase).
 
+**The phase branch is not merged.** `task/phase-2b` is complete and verified but
+still unmerged, by the maintainer's decision on 2026-09-07: the merge into `main`
+will be raised as a pull request rather than done locally. Two facts the merge
+will have to deal with, both established while closing this step:
+
+- **`origin/main` moved during the phase.** It is five commits ahead of the
+  `main` this branch forked from (`4e998d1` → `9b2726d`), carrying Phase 2A OCR
+  work: schema v5 with four new nullable `properties` columns, migration
+  `0005_military_red_skull.sql`, and changes to `publisher.ts`, `validation.ts`,
+  `seed.ts`, and the OCR adapter. A local database that has only run migrations
+  through `0004` needs `bun run db:migrate` before the merged tree's integration
+  tests will pass.
+- **Three files will conflict.** `DECISIONS.md` and `PROGRESS.md` were appended
+  and prepended on both sides — both sets of entries are wanted, so the
+  resolution is to keep both. `tsconfig.tsbuildinfo` is a TypeScript incremental
+  build cache that is tracked at `origin/main`; it has no reviewable content and
+  will conflict on every branch merge. Untracking it is deliberately left to the
+  pull request rather than bundled into this phase's work.
+
+**Verification numbers in this document describe `task/phase-2b` as it stands,
+not a merged result.** They must be re-run after the merge.
+
 **Follow-ups:** [roadmap Phase 3](../roadmap.md#phase-3--integration--core-buyer-flows),
 [decisions log](../../DECISIONS.md), [progress journal](../../PROGRESS.md).
