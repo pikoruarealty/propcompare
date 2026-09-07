@@ -1,5 +1,17 @@
 # Progress
 
+## 2026-09-07 — Phase 2B integrated locally with the Phase 2A schema-v5 and OCR baseline
+
+**Done:** `origin/main` at `9b2726d` is merged locally into `task/phase-2b`; nothing was pushed and no pull request was created. The decision log preserves main's complete history under "Decisions taken by Bhavarth" and the Phase 2B decisions under "Decisions taken by Deep". This progress journal keeps every Phase 2B entry followed by main's complete prior history.
+
+**Dependency and build-cache conflicts are resolved from sources of truth.** The merged `package.json` retains both main's OCR dependencies and Phase 2B's UI/testing dependencies, and `bun.lock` was regenerated rather than hand-merged; `bun install --frozen-lockfile` subsequently made no changes. The generated `tsconfig.tsbuildinfo` cache stays deleted and is ignored, so typecheck/build can recreate it locally without returning it to version control.
+
+**Schema v5 is now represented by complete migration metadata.** Main's canonical `0005_military_red_skull.sql` was kept unchanged. Drizzle generated an identical candidate migration from the v4 snapshot, so only its `0005_snapshot.json` was retained and the journal entry was pointed at main's canonical filename. `bun run db:generate` now reports no schema changes. Migration `0005` applied successfully to the native PostgreSQL 18 database, the canonical seed added its four v5 field-contract rows, all five Phase 2B properties remained published, and the new nullable columns did not fabricate values for those pre-v5 records.
+
+**The merged suite exposed and closed one Phase 2A privilege gap.** Migration `0003` had created `ocr_extraction_jobs` and `property_submission_field_evidence` after the application-role grants without granting `propcompare_app` the documented public-table CRUD rights. The OCR integration test passed with the admin connection, isolating the failure to privileges. Forward-only migration `0006_grant-app-ocr-tables.sql` grants CRUD only on those two tables to `propcompare_app`; service-role and private-schema access are unchanged. The same test then passed through the normal application connection.
+
+**Verified on the integrated tree and migrated database:** `bun install --frozen-lockfile`, `bun run db:generate`, `bun run db:migrate`, `bun run db:seed`, `format:check`, `lint`, `typecheck`, and `build` pass. `bun run test` reports **412 passed across 28 files**. The production route table remains `ƒ /`, `ƒ /intake`, `ƒ /properties`, `● /properties/[slug]`, and the three dynamic API/auth routes. The intake slider still needs the previously recorded human drag/click check before the pull request is merged.
+
 ## 2026-09-07 — Phase 2B step 9 complete: real properties on the real pages, and the phase closes
 
 **Done:** the convergence step. Five properties are published through the actual
@@ -714,6 +726,147 @@ the fixed v1 filter set for the listing route.
 
 **Next up:** step 0 (tooling baseline — `bun install`, shadcn/ui, jsdom/Testing
 Library) followed by step 1 (the buyer read contract), per the plan.
+
+## 2026-09-07 — Schema v5 and OpenRouter OCR merged as a verified Phase 2A milestone
+
+**Done:** The schema-v5 brochure-field work and the OpenRouter Claude Sonnet 5
+OCR worker are ready to merge as a bounded Phase 2A milestone. The worker makes
+one physically trimmed native-PDF request per confirmed non-ignored scope,
+validates results against the active field contract, creates only reviewable
+submission fields/evidence, and never writes a live catalog row. A parsed JSON
+checkpoint is atomically written to the gitignored local checkpoint directory
+after every successful scope and again before evidence persistence. A
+persistence failure raises `OcrPersistenceError` with the already-paid parsed
+result, which `retryOcrExtractionPersistence` can persist without another
+provider call. Duplicate snippets mapping to the same field/page/value-path are
+merged before insertion.
+
+**Live verification:** An explicitly authorized Adani Amaris run completed
+through the real OpenRouter/Sonnet provider and the real local Postgres worker.
+Four trimmed excerpts (7.21 MB, 1.94 MB, 0.54 MB, and 1.80 MB) were sent instead
+of the 44.09 MB source PDF. OpenRouter reported 31,378 prompt tokens, 29,149
+completion tokens, 16,783 reasoning tokens, and **$0.354246** total cost. The
+transaction completed with 16 `needs_review` submission fields and 25 evidence
+rows. The smoke harness then deleted only its temporary submission/source/job
+rows; the local checkpoint remained available and is gitignored. No brochure
+PDF or raw OCR output was committed.
+
+**Verification:** The live run above proves the real provider-to-Postgres path;
+`bun run db:generate`, lint, typecheck, scoped formatting, and `git diff --check`
+pass on this handoff. The task's focused adapter and ingestion tests cover output
+mapping, malformed/length failures, incremental checkpointing,
+duplicate-evidence consolidation, and submission evidence persistence. A fresh
+full `db:migrate` and DB-backed test-suite rerun is currently blocked because
+Docker Desktop/local Postgres is offline (`ECONNREFUSED`); repository-wide
+`format:check` also reports pre-existing formatting drift outside this milestone.
+
+**Still open (Phase 2A):** Human field-level accuracy comparison for Adani
+Amaris and Kimana Towers; RERA fetch/cross-check; and the admin page-routing,
+submission queue, and reconciliation interfaces. This merge is a Phase 2A
+milestone, not Phase 2A completion.
+
+---
+
+## 2026-09-02 — OpenRouter OCR adapter implemented; human brochure spot-check pending
+
+**Done:** Implemented the real Claude Sonnet 5 extraction adapter using
+OpenRouter's streaming chat-completions API and native `file-parser` PDF engine.
+The adapter downloads the private source document from GCS, creates one physical
+PDF excerpt per confirmed non-ignored routing scope, validates provider output
+against active `property_schema_fields`, assembles at most one candidate per
+unit-variant scope, and flags unknown non-commercial facts as unmapped evidence.
+Commercial fields or values hard-fail the attempt. The worker transitions the
+versioned OCR job and transactionally creates `needs_review` submission fields
+with page/value-path evidence; no partial evidence or live catalog write occurs.
+
+**Failure policy:** Non-timeout network errors and HTTP 408/429/5xx retry once.
+Invalid JSON, output-length exhaustion, timeouts, other non-stop finishes, and
+evidence-persistence conflicts fail the attempt for human re-routing. No paid
+provider request was made during implementation.
+
+**Developer handoff:** Added `docs/ocr-adapter-usage.md` with environment setup,
+the server-side call sequence, GCS path behavior, failure semantics, and a code
+example for the other developer. Updated the architecture, admin flow,
+documentation map, `.env.example`, and artifact-ignore rules.
+
+**Verified:** `bun run format:check`, `bun run lint`, `bun run typecheck`,
+`bun run test` (48 passed, 5 files), and `git diff --check` pass. Tests generate
+synthetic blank PDFs in memory and use recorded synthetic provider responses;
+the repository contains no brochure PDF or raw per-brochure OCR-result JSON.
+
+**Outstanding:** Human field-level spot-checks against Adani Amaris and Kimana
+Towers remain open from provider selection. The next bounded implementation is
+the authenticated admin trigger/page-picker or the carried publish HTTP route.
+
+---
+
+## 2026-09-02 — Schema v5 brochure fields implemented and verified
+
+**Done:** Added nullable canonical columns for `properties.total_floors`,
+`properties.plot_area_sqft`, `developers.profile_narrative`, and
+`unit_variants.units_per_floor` in Drizzle and migration `0005`. Extended the
+active field contract with the three scalar fields and versioned the existing
+composite `unit_variants` row to v5 so `unitsPerFloor` remains attached to its
+variant rather than creating a parallel scalar representation. Submission
+validation accepts the new numeric, integer, narrative, and nested variant
+values; the sole publish transaction writes them for new properties and applies
+the same omission-preserving additive-patch behavior to existing records.
+
+**Verified:** Generated and applied migration `0005`, reseeded the active
+contract, and confirmed a second `bun run db:generate` reports no drift.
+`bun run format:check`, `bun run lint`, `bun run typecheck`, `bun run test`
+(41 passed, 4 files), and `git diff --check` pass. The integration coverage
+publishes all four values and confirms an update that omits them leaves them
+unchanged; unit coverage confirms active-contract acceptance and rejection when
+the applicable contract entry is absent.
+
+**Next up:** Implement the scoped Claude Sonnet 5 via OpenRouter adapter in
+`docs/tasklists/2026-09-02-ocr-provider-integration.md`. No paid brochure run is
+authorized as part of that implementation without explicit confirmation.
+
+---
+
+## 2026-09-02 — OCR provider selected (Claude Sonnet 5); schema v5 and two follow-on tasklists scoped
+
+**Done:** Completed the `docs/tasklists/2026-09-02-ocr-provider-selection.md`
+bake-off (4 models x 3 real brochures via OpenRouter, native-PDF-engine
+plugin). Claude Sonnet 5 was cheapest of the four ($0.253/brochure avg vs.
+Opus 5 $0.561, GPT-5.6 Sol $0.632, GPT-5.6 Terra $0.654) with equivalent
+structural output once requests were scoped per unit-variant rather than
+whole-brochure. Recorded as a dated decision rather than spending the
+available OpenAI key on a redundant run. Also resolved, by explicit user
+decision, that total floors, units-per-floor, non-RERA-gated plot/land area,
+and a developer-profile narrative belong in the canonical schema (matching
+the original whiteboard schema) rather than staying `unmapped_raw_evidence`
+indefinitely — written up as schema v5 (`docs/schema/schema.v5.md`).
+
+Both decisions are recorded in `DECISIONS.md` (2026-09-02 entries: "OCR
+extraction provider is Claude Sonnet 5..." and "Schema v5 adds total
+floors..."). Two follow-on implementation tasklists are scoped and ready to
+start, per `AGENTS.md`'s mandatory pre-implementation tasklist rule — neither
+has been implemented yet:
+
+- `docs/tasklists/2026-09-02-schema-v5-brochure-fields.md` — Drizzle schema/
+  migration for the four new columns, field-contract extension, validation
+  and publisher wiring.
+- `docs/tasklists/2026-09-02-ocr-provider-integration.md` — turns
+  `src/lib/ocr/adapter.ts` from a type-only contract (from the OCR routing
+  foundation task) into a real Claude-Sonnet-5-via-OpenRouter extraction
+  adapter, adapting the scratchpad's `run-comparison.ts` reference script.
+
+**Not yet done:** No code for either tasklist has been written. Human
+spot-checks of field-level (not just structural) accuracy on the Adani
+Amaris and Kimana Towers brochures remain outstanding (carried over from the
+provider-selection tasklist). `room_catalog`/synonym table design (mirroring
+`amenity_catalog`) is unscoped future work. The HTTP route wiring for the
+publish transaction (carried from the prior task) is still open.
+
+**Next up:** Start `task/schema-v5-brochure-fields` (small, low-risk,
+unblocks the extraction adapter's output contract) before
+`task/ocr-provider-integration`, since the adapter should emit against the
+final contract rather than needing a second pass after schema v5 lands.
+
+---
 
 ## 2026-09-01 — Phase 2A submission review and publish transaction completed
 
