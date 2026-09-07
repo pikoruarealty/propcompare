@@ -1,6 +1,6 @@
 # Implementation plan — Phase 2B buyer experience
 
-**Status:** step 5 complete (2026-09-07); step 6 is next, and is blocked on the media and PropScoreDial gates
+**Status:** step 6 complete (2026-09-07); step 7 (landing page) is next. No open decision gates remain — both were resolved by deferral on 2026-09-07.
 **Owner:** Deep (buyer UI), with Bhavarth owning the read contract in step 1
 **Branch:** `task/phase-2b` — one branch for the whole phase, merged into `main` at the phase boundary. Steps 0–2 originally took a branch each; those were collapsed into `task/phase-2b` on 2026-09-02 with no commits moved.
 **Roadmap:** [Phase 2B](../roadmap.md#phase-2b--buyer-ui-against-a-fixed-contract-parallel-with-2a)
@@ -62,18 +62,22 @@ Recorded as dated entries in [DECISIONS.md](../../DECISIONS.md) on 2026-09-02:
 These must be resolved before the step that depends on them. Each resolution
 gets a dated `DECISIONS.md` entry before the code is written.
 
-- [ ] **Media delivery for `property_media.gcsPath`** — blocks step 6. The
-      column stores a GCS path, not a browser-fetchable URL. Decide between a
-      public bucket with direct URLs, signed URLs minted server-side, or a proxy
-      route. Note that no media rows exist yet (the OCR field contract has no
-      media field), so the dossier must render correctly with zero media.
-      **Still open after step 5, deliberately.** The summary card reserves a
-      neutral, textless frame for a card image and renders no `<img>` at all, so
-      this stays a decision step 6 makes rather than one a listing grid settled
-      as a side effect. A test fails if `gcsPath` is rendered as a `src`.
-- [ ] **Whether `PropScoreDial` ships in 2B** — blocks step 6. `prd.v1.md` lists
-      its definition as an open product decision and requires it not imply a
-      fabricated score. Recommendation: defer it out of 2B entirely.
+- [x] **Media delivery for `property_media.gcsPath`** — **resolved 2026-09-07 by
+      deferring it out of Phase 2B entirely** (user sign-off, recorded in
+      `DECISIONS.md`). Two findings drove it: `property_media.media_type`
+      includes `brochure_pdf`, so buyer-facing media can itself be a brochure —
+      the document class that carries price lists — and `ARCHITECTURE.md` puts
+      brochures and buyer media in the same GCS storage, so "public bucket" is
+      not a small decision; and nothing can populate media this phase, since the
+      OCR field contract has no media field and no GCS SDK or credentials are
+      configured. The summary card reserves a neutral frame, the dossier renders
+      zero media correctly and lists the media inventory where rows exist, and
+      tests fail if any `gcsPath` is fetched. A proxy route remains the strongest
+      candidate when the gate is finally taken.
+- [x] **Whether `PropScoreDial` ships in 2B** — **resolved 2026-09-07: deferred
+      out of 2B entirely** (user sign-off, recorded in `DECISIONS.md`), as this
+      plan recommended. No calculation is defined, and a dial built from the
+      current catalog would present a number the data does not support.
 - [x] **Filter set for the listing route** — resolved in step 1 (2026-09-02).
       Fixed at `city`, `locality`, `propertyType`, `bhk`, `possessionStatus`, and
       repeatable `amenity`, matched on lookup `key` rather than UUID. Recorded in
@@ -475,16 +479,68 @@ next-env.d.ts`) rather than committing the dev variant.
 
 ## Step 6 — Property dossier
 
-**Blocked on the media and PropScoreDial gates.**
+**Status: complete 2026-09-07** · Both blocking gates were resolved first, by
+deferral (see Open decision gates above).
 
-- [ ] Dossier page at the property slug route, organizing facts progressively
+- [x] Dossier page at the property slug route, organizing facts progressively
       rather than as a table dump: identity and developer, location, possession,
       RERA facts, unit variants with per-basis areas and room dimensions,
       controlled amenities and specifications with explicit states, and media.
-- [ ] Render correctly with zero media and with absent RERA facts.
-- [ ] No price element anywhere, including in metadata and structured data.
-- [ ] SEO/ISR treatment for the property page.
-- [ ] Tests: full dossier, sparse dossier, price absence, and 404 handling.
+      (`src/app/properties/[slug]/page.tsx`,
+      `src/components/buyer/dossier-screen.tsx`,
+      `src/lib/properties/dossier.ts`)
+- [x] Render correctly with zero media and with absent RERA facts.
+- [x] No price element anywhere, including in metadata and structured data.
+- [x] SEO/ISR treatment for the property page.
+- [x] Tests: full dossier, sparse dossier, price absence, and 404 handling.
+
+**Acceptance — met:** `/properties/{slug}` renders the full dossier from the
+step 2 read layer. `format:check`, `lint`, `typecheck`, and `build` pass;
+`bun run test` reports **345 passed across 22 files** (282 from step 5, plus 63
+for this step). `next build` reports the route as `● (SSG)` — incrementally
+regenerated, and built without a database because no paths are prerendered.
+
+**Verified by running it.** Against properties published through the real
+`publishSubmission` transaction: the full and sparse dossiers, `200` on both
+slugs, `404` on an unknown one, the page title, meta description, and JSON-LD,
+and the zero-media empty state. The seeded rows were removed afterwards.
+
+**Decisions taken, each with a `DECISIONS.md` entry:**
+
+- **ISR, with paths rendered on first visit.** `revalidate = 3600` plus a
+  `generateStaticParams` returning an empty array, `dynamicParams` left at its
+  default. Checked against the Next 16 docs bundled in `node_modules`, which
+  state that returning an array — even an empty one — is what keeps the route
+  statically rendered, and that an empty one renders each path on first visit
+  and caches it. This needs no database at `next build`, which step 3 had
+  already flagged as a blocker for prerendering.
+- **Structured data models a residence, never an offer.** schema.org
+  `ApartmentComplex`, no `Offer` and no price property, run through the same
+  `findForbiddenKeys` guard that protects API responses. An offer exists to
+  state a price. Amenities map honestly: `available` → `value: true`,
+  `explicitly_not_offered` → `value: false`, `not_stated` omitted, since no
+  claim has been made either way.
+- **`rera_registered: false` renders "Not stated", never "Not registered".**
+  Nothing sets the flag, so `false` means "no registration recorded" — not the
+  accusation of non-compliance the other wording would publish.
+- **Unrecorded catalog facts sit behind a counted disclosure.** The amenity
+  catalog has 26 entries and publishing writes a row for every one, so a real
+  property rendered a wall of "Not stated" that buried its few real answers —
+  found by looking at the running page, not by reasoning about it. Stated facts
+  now lead; the rest sit in a `<details>` whose summary names the count. Every
+  row is still in the markup, and it opens without JavaScript.
+- **Coordinates are not displayed.** `latitude`/`longitude` exist for map and
+  locality search later; printing them as text is the database dump this screen
+  exists to avoid.
+- **Opaque `dimensions` jsonb is read defensively.** A room renders only with a
+  non-empty name and two positive finite measurements; any other shape renders
+  nothing. Raw JSON is never shown to a buyer, and a room whose measurements
+  could not be read is never half-rendered.
+
+**Guards verified by planting violations:** deriving built-up area from carpet
+area at a 1.2 ratio failed both the unit test and the rendered-screen test;
+adding an `Offer` to the JSON-LD failed five tests, including the production
+exclusion guard.
 
 ## Step 7 — Landing page
 

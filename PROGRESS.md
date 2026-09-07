@@ -1,5 +1,74 @@
 # Progress
 
+## 2026-09-07 — Phase 2B step 6 complete: the property dossier, and both blocking gates closed
+
+**Done:** `/properties/{slug}` renders the full dossier
+(`src/app/properties/[slug]/page.tsx`,
+`src/components/buyer/dossier-screen.tsx`, `src/lib/properties/dossier.ts`):
+identity and developer, possession and scale, unit variants with per-basis areas
+and room dimensions, amenities and specifications with their explicit states,
+media, RERA facts, location, and the developer's own record — organised
+progressively rather than dumped as a table.
+
+**Both open decision gates were resolved before any code was written, both by
+deferral.** **Media delivery** moves out of Phase 2B: `property_media.media_type`
+includes `brochure_pdf`, so buyer-facing media can itself be a brochure — the
+document class that carries price lists — and `ARCHITECTURE.md` puts brochures
+and buyer media in the same GCS storage, which makes "public bucket" a much
+larger question than it looks. Nothing can populate media this phase anyway,
+since the OCR field contract has no media field and no GCS SDK or credentials
+exist. **`PropScoreDial`** is out of 2B entirely: no calculation is defined, and
+a dial built from the current catalog would present a number the data does not
+support — a decorative trust signal in its most damaging form, because a score
+looks like a measurement.
+
+**The dossier is incrementally statically regenerated.** `revalidate = 3600`
+with a `generateStaticParams` returning an empty array, `dynamicParams` left at
+its default — checked against the Next 16 docs bundled in `node_modules`, which
+state that returning an array, even an empty one, keeps the route statically
+rendered and that an empty one renders each path on first visit. This needs no
+database at `next build`, which step 3 had already flagged as a blocker for
+prerendering, and a newly published property is served on its first request
+rather than 404-ing until a redeploy. `next build` confirms `● (SSG)`.
+
+**Structured data describes a residence, never an offer.** schema.org
+`ApartmentComplex` with no `Offer` and no price property, run through the same
+`findForbiddenKeys` guard that protects API responses — an offer exists to state
+a price, so modelling the page as one would force a choice between fabricating
+one and publishing a conspicuously priceless offer. Amenities map honestly:
+offered is `true`, explicitly refused is `false`, and unrecorded is omitted,
+because no claim has been made either way.
+
+**Two absence rules were decided here.** `rera_registered: false` renders "Not
+stated", never "Not registered" — nothing sets the flag, so false means "no
+registration recorded", not the accusation of non-compliance the other wording
+would publish. And an unpublished area basis is never derived from a published
+one; carpet area is not a fixed ratio of super built-up area, and a computed
+number sitting beside published ones is indistinguishable from a fact.
+
+**A table dump was caught by running the page, not by reasoning about it.** The
+amenity catalog has 26 entries and publishing writes a row for every one, so a
+real property rendered a wall of "Not stated" that buried its two real answers.
+Stated facts now lead the section and the unrecorded ones sit in a `<details>`
+whose summary names the count ("24 not recorded for this property"). Every row
+is still in the markup, grouped and labelled, and it opens without JavaScript —
+progressive disclosure, not concealment.
+
+**Guards verified by planting violations,** per the standing rule: deriving
+built-up area from carpet area at a 1.2 ratio failed both the unit test and the
+rendered-screen test; adding an `Offer` to the JSON-LD failed five tests,
+including the production exclusion guard.
+
+**Verified:** `bun run test` reports **345 passed across 22 files** (282 from
+step 5, plus 63 for this step); `format:check`, `lint`, `typecheck`, and `build`
+all pass. Confirmed against real published data too: both dossiers, `200` on
+each slug and `404` on an unknown one, the title, meta description, and JSON-LD.
+
+**Also worth knowing:** the dossier is the first surface where `VerifiedBadge`
+is reachable at all, since `PropertyDossier` is the only shape carrying the RERA
+registration number that is its evidence. It still cannot appear in real data,
+because nothing sets `rera_registered`.
+
 ## 2026-09-07 — Phase 2B step 5 complete: `/properties` is a real, filterable browse screen
 
 **Done:** The first buyer screen mounted at a route. `src/app/properties/page.tsx`
