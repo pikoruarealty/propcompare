@@ -1,5 +1,79 @@
 # Progress
 
+## 2026-09-07 — Phase 2B step 5 complete: `/properties` is a real, filterable browse screen
+
+**Done:** The first buyer screen mounted at a route. `src/app/properties/page.tsx`
+renders published catalog data through `BrowseScreen`
+(`src/components/buyer/browse-screen.tsx`), with the summary card
+(`property-card.tsx`), the filter form and its removable filter chips
+(`browse-filters.tsx`), the URL arithmetic behind every control
+(`src/lib/properties/browse.ts`), and the filter vocabularies
+(`src/lib/properties/filter-options.ts`). Every filter in the step 1 contract has
+a control, plus pagination, both sorts, and two distinct empty states.
+
+**The page calls the read layer directly rather than fetching its own API.** A
+server component fetching its own HTTP route would need an absolute origin URL
+it has no reliable way to know, add a network hop to every render, and hand back
+JSON typed only by assertion. What the HTTP edge contributes is kept rather than
+skipped: the page validates with the same `parseListParams` the route uses, so it
+cannot accept a query the API would reject, and passes its result through the
+same `assertNoExcludedData` guard, so a price reaching the read layer fails the
+page as loudly as it fails the API. The route's `Cache-Control` policy is
+untouched and still serves its own consumers.
+
+**Filtering is a plain `GET` form, and the page canonicalises what it submits.**
+There is no `"use client"` anywhere in this step. A `GET` form submits every
+control it owns, so "Any city" emits `?city=` — which the contract rejects with
+`422`, correctly, because over the API an empty value is a broken request rather
+than an absent filter. The page drops empty values and explicit defaults and
+redirects when that changed anything, so every filtered view is a clean,
+shareable, bookmarkable address that works before any JavaScript arrives.
+Canonicalisation drops only what a form could not help sending: a malformed
+value still reaches validation and is still reported, and an unknown parameter
+is still rejected as unknown. A rejected query shows the unfiltered catalog with
+a notice carrying the API's own message, rather than a `422` body — the buyer
+following a stale link did nothing wrong.
+
+**Three absences on the card were decided, not overlooked**, and each is held by
+a test that fails if reversed. **No image:** `gcsPath` is a storage path, not a
+URL, and the media-delivery gate still blocks step 6; the card holds a neutral,
+textless, `aria-hidden` frame, which makes no "no photo" claim because a
+property may well have one this build cannot display. **No verified badge:**
+`PropertySummary` carries `reraRegistered` but not the registration number
+`VerifiedBadge` requires as evidence, so the card literally cannot construct a
+verified fact — the badge stays with the dossier rather than widening the step 1
+contract as a side effect of a listing-grid task. **No save or compare:** both
+are Phase 3 and depend on routes that do not exist.
+
+**Filter options are derived from published data, never from the catalog in
+full.** Publishing writes a `property_amenities` row for every catalog amenity —
+the selected ones `available` and the rest `not_stated` — so a status-blind
+query would offer all 26, every unselected one of which returns an empty page
+and reads as a broken screen. Verified by removing the status filter and
+watching the count reach the full catalog, per the standing rule that a guard
+which cannot fail proves nothing. The media reservation was verified the same
+way, by rendering `gcsPath` as an `<img src>`.
+
+**Possession dates are formatted by hand rather than through `Date`.**
+`new Date("2027-01-01")` is UTC midnight, which renders as 31 December 2026 for
+any reader west of Greenwich. Shifting a published date by a day is exactly the
+kind of invented fact this product exists to avoid.
+
+**Verified by running it, not only by testing it.** Against three properties
+published through the real `publishSubmission` transaction: the grid, the
+vocabularies, the sparse property rendering "Not stated", both empty states, the
+AND semantics of two amenity filters, both sorts, and pagination with its inert
+ends. The seeded rows were removed afterwards.
+
+**Verified:** `bun run test` reports **282 passed across 20 files** (191 from
+step 4, plus 91 for this step). `format:check`, `lint`, `typecheck`, and `build`
+all pass, and `next build` reports `/properties` as `ƒ (Dynamic)`.
+
+**Worth knowing:** running `next dev` rewrites the tracked `next-env.d.ts` to
+point at `.next/dev/types/...` where `next build`/`next typegen` point at
+`.next/types/...`. It is generated; restore it rather than committing the dev
+variant.
+
 ## 2026-09-02 — Phase 2B step 4 complete: the buyer shell and the two trust primitives
 
 **Done:** The shared buyer components, under `src/components/buyer/` —

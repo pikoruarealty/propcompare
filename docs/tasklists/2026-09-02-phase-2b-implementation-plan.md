@@ -1,6 +1,6 @@
 # Implementation plan — Phase 2B buyer experience
 
-**Status:** step 4 complete (2026-09-02); step 5 is next
+**Status:** step 5 complete (2026-09-07); step 6 is next, and is blocked on the media and PropScoreDial gates
 **Owner:** Deep (buyer UI), with Bhavarth owning the read contract in step 1
 **Branch:** `task/phase-2b` — one branch for the whole phase, merged into `main` at the phase boundary. Steps 0–2 originally took a branch each; those were collapsed into `task/phase-2b` on 2026-09-02 with no commits moved.
 **Roadmap:** [Phase 2B](../roadmap.md#phase-2b--buyer-ui-against-a-fixed-contract-parallel-with-2a)
@@ -67,6 +67,10 @@ gets a dated `DECISIONS.md` entry before the code is written.
       public bucket with direct URLs, signed URLs minted server-side, or a proxy
       route. Note that no media rows exist yet (the OCR field contract has no
       media field), so the dossier must render correctly with zero media.
+      **Still open after step 5, deliberately.** The summary card reserves a
+      neutral, textless frame for a card image and renders no `<img>` at all, so
+      this stays a decision step 6 makes rather than one a listing grid settled
+      as a side effect. A test fails if `gcsPath` is rendered as a `src`.
 - [ ] **Whether `PropScoreDial` ships in 2B** — blocks step 6. `prd.v1.md` lists
       its definition as an open product decision and requires it not imply a
       fabricated score. Recommendation: defer it out of 2B entirely.
@@ -381,13 +385,93 @@ by a rendered route.
 
 ## Step 5 — Browse / listing grid
 
-- [ ] Property summary card per the design guide: published facts, dossier link,
+**Status: complete 2026-09-07**
+
+- [x] Property summary card per the design guide: published facts, dossier link,
       no price, and no save/compare wiring yet (Phase 3).
-- [ ] Listing grid with the step 1 filters, pagination, and sort.
-- [ ] Empty and no-match states that retain filters and offer refinement rather
+      (`src/components/buyer/property-card.tsx`)
+- [x] Listing grid with the step 1 filters, pagination, and sort.
+      (`src/components/buyer/browse-screen.tsx`, `browse-filters.tsx`,
+      `src/app/properties/page.tsx`)
+- [x] Empty and no-match states that retain filters and offer refinement rather
       than fabricating results.
-- [ ] Responsive behavior down to the 16px mobile margin.
-- [ ] Tests: card content, filter/pagination interaction, empty state.
+- [x] Responsive behavior down to the 16px mobile margin.
+- [x] Tests: card content, filter/pagination interaction, empty state.
+
+**Acceptance — met:** `/properties` renders real published data through the
+step 2 read layer, filterable by every parameter in the step 1 contract, with
+pagination, sort, both empty states, and no price anywhere. `format:check`,
+`lint`, `typecheck`, and `build` pass; `bun run test` reports **282 passed
+across 20 files** (191 from step 4, plus 91 for this step). `next build` reports
+`/properties` as `ƒ (Dynamic)`, which is correct — the screen _is_ its query
+string.
+
+**Verified by running it, not only by testing it.** Against three properties
+published through the real `publishSubmission` transaction: the grid, the
+vocabularies drawn from published data, the sparse property rendering "Not
+stated" twice, both empty states, the AND semantics of two amenity filters,
+both sorts, and pagination with its inert ends. The seeded rows were removed
+afterwards; the catalog is back to empty.
+
+**Three open questions were resolved with the user before any code was written**
+(all recorded in `DECISIONS.md`, 2026-09-07), because each would have been
+expensive to unwind:
+
+- **Data fetching.** The page calls `listPublishedProperties(db, params)`
+  directly rather than fetching its own HTTP API — a same-process server
+  component fetching its own route needs an absolute origin URL it cannot
+  reliably know, adds a hop per render, and returns JSON typed only by
+  assertion. The two things the HTTP edge contributes are kept rather than
+  skipped: the page validates with the same `parseListParams` and guards with
+  the same `assertNoExcludedData` the API route uses, so it cannot be more
+  permissive than the contract it implements.
+- **The card image.** Not built. `gcsPath` is a storage path, not a URL, and the
+  media-delivery gate below still blocks step 6; the card holds a neutral,
+  textless, `aria-hidden` frame so resolving that gate is a one-element change.
+  The frame makes no "no photo" claim — a property may have one this build
+  cannot display.
+- **The verified badge.** Not on the card. `PropertySummary` carries
+  `reraRegistered` but not the registration number that `VerifiedBadge` requires
+  as its evidence, so the card literally cannot construct a verified fact. The
+  badge stays with the dossier rather than widening the step 1 contract as a
+  side effect of a listing-grid task.
+
+**Decisions taken during implementation:**
+
+- **The filter form is a plain `GET` form, and the page canonicalises its
+  output.** A `GET` form submits every control it owns, so "Any city" emits
+  `?city=` — which the contract rejects with `422`, correctly, because over the
+  API an empty value is a broken request rather than an absent filter. The page
+  drops empty values and explicit defaults and redirects when that changed
+  anything, so every filtered view is a clean, shareable address that works
+  before any JavaScript arrives. Canonicalisation drops only what a form could
+  not help sending: a malformed value still reaches validation and is still
+  reported, and an unknown parameter is still rejected as unknown.
+- **A rejected query explains itself rather than failing the page.** A buyer
+  following a stale link gets the unfiltered catalog plus a notice carrying the
+  API's own message, not a `422` body.
+- **Filter vocabularies come from published data** (`filter-options.ts`), not
+  from the catalog in full. Publishing writes a `property_amenities` row for
+  every catalog amenity — selected ones `available`, the rest `not_stated` — so
+  a status-blind query would offer all 26, every unselected one of which returns
+  an empty page.
+- **Possession dates are formatted by hand, not through `Date`.**
+  `new Date("2027-01-01")` is UTC midnight and renders as 31 December for any
+  reader west of Greenwich; silently shifting a published date by a day is
+  exactly the kind of invented fact this product exists to avoid.
+- **`LIST_PARAMETER_NAMES` moved into `http.ts` and is now exported**, so the
+  screen's URL building and the API's validation read one list instead of two
+  that drift.
+
+**Guards were verified by planting violations,** per the standing rule that a
+guard which cannot fail proves nothing: removing the amenity status filter made
+the vocabulary test fail with all 26 catalog amenities offered, and rendering
+`gcsPath` as an `<img src>` made the media-reservation test fail.
+
+**Worth knowing:** running `next dev` rewrites the tracked `next-env.d.ts` to
+point at `.next/dev/types/...`, where `next build`/`next typegen` point at
+`.next/types/...`. It is a generated file; restore it (`git checkout --
+next-env.d.ts`) rather than committing the dev variant.
 
 ## Step 6 — Property dossier
 

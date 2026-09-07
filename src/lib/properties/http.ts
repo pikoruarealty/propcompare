@@ -109,7 +109,13 @@ export const internalErrorResponse = (
   );
 };
 
-const KNOWN_PARAMETERS = new Set([
+/**
+ * Every parameter the listing route accepts, in the order a canonical query
+ * string lists them. Exported because the browse screen builds its own links
+ * against the same contract (`./browse`): two hand-maintained copies of this
+ * list would drift the first time a filter was added.
+ */
+export const LIST_PARAMETER_NAMES = [
   "page",
   "pageSize",
   "city",
@@ -119,7 +125,11 @@ const KNOWN_PARAMETERS = new Set([
   "possessionStatus",
   "amenity",
   "sort",
-]);
+] as const;
+
+export type ListParameterName = (typeof LIST_PARAMETER_NAMES)[number];
+
+const KNOWN_PARAMETERS: ReadonlySet<string> = new Set(LIST_PARAMETER_NAMES);
 
 /** Only `amenity` repeats; repeating anything else is a malformed request. */
 const REPEATABLE_PARAMETERS = new Set(["amenity"]);
