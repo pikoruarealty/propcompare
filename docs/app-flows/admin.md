@@ -23,7 +23,7 @@ Upload brochure
 3. The system records an immutable `source_documents` row and draft submission.
 4. Cheap text-layer inspection may suggest page scopes. The uploader confirms every brochure page as project details, amenities, specifications, one unit-variant group, or ignored.
 5. A unit-variant group may contain several ordered pages and optional page labels such as Lower floor and Upper floor. It still proposes exactly one canonical variant.
-6. The system creates a versioned `ocr_extraction_jobs` attempt from the confirmed routing manifest. OCR reads only active `property_schema_fields`.
+6. The system creates a versioned `ocr_extraction_jobs` attempt from the confirmed routing manifest. The implemented worker sends one native-PDF OpenRouter request per confirmed extraction scope and reads only active `property_schema_fields`; see [OCR adapter usage](../ocr-adapter-usage.md).
 7. Each candidate retains value and confidence in `property_submission_fields`; its one-or-more page citations and snippets live in `property_submission_field_evidence`.
 8. The admin uses reconciliation to confirm, edit, or reject each field against all supporting evidence pages.
 9. The submitter submits the draft. An admin verifier or owner reviews it; only an owner publishes an approved submission. During the initial single-owner workflow, the same owner may perform each attributable step.

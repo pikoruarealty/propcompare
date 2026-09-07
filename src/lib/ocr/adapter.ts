@@ -1,3 +1,6 @@
+import { mkdir, rename, writeFile } from "node:fs/promises";
+import path from "node:path";
+import { PDFDocument } from "pdf-lib";
 import {
   findRoutingScope,
   OcrContractError,
@@ -8,6 +11,7 @@ import {
 export interface ActiveOcrField {
   fieldKey: string;
   dataType: string;
+  allowedValues?: string[];
 }
 
 export interface OcrEvidenceCandidate {
@@ -25,6 +29,7 @@ export interface OcrFieldCandidate {
 
 export interface OcrUnitVariantDetailsCandidate {
   totalUnitsOfVariant?: number;
+  unitsPerFloor?: number;
   areas?: Array<{
     basis: "carpet" | "super_built_up" | "built_up";
     areaSqft: number;
@@ -58,7 +63,33 @@ export interface NewPipelineExtraction {
   unitVariants: OcrUnitVariantCandidate[];
 }
 
+export interface OcrUnmappedEvidenceCandidate {
+  fieldKey: string;
+  value: unknown;
+  scopeKey: string;
+  evidence: OcrEvidenceCandidate[];
+}
+
+export interface OcrProviderExtractionResult {
+  extraction: NewPipelineExtraction;
+  unmappedRawEvidence: OcrUnmappedEvidenceCandidate[];
+  providerRequestIds: string[];
+  usage?: OcrScopeUsage[];
+  checkpointPath?: string;
+}
+
+export interface OcrScopeUsage {
+  scopeKey: string;
+  inputPdfBytes: number;
+  providerRequestId?: string;
+  promptTokens?: number;
+  completionTokens?: number;
+  reasoningTokens?: number;
+  costUsd?: number;
+}
+
 export interface OcrExtractionRequest {
+  jobId?: string;
   sourceDocumentId: string;
   gcsPath: string;
   manifest: OcrRoutingManifest;
@@ -69,7 +100,7 @@ export interface OcrExtractionRequest {
 
 export interface OcrProviderAdapter {
   readonly providerKey: string;
-  extract(request: OcrExtractionRequest): Promise<unknown>;
+  extract(request: OcrExtractionRequest): Promise<OcrProviderExtractionResult>;
 }
 
 export interface SubmissionEvidenceCandidate extends OcrEvidenceCandidate {
@@ -82,6 +113,33 @@ export interface SubmissionFieldCandidate {
   confidence?: number;
   evidence: SubmissionEvidenceCandidate[];
 }
+
+const deduplicateSubmissionEvidence = (
+  evidence: SubmissionEvidenceCandidate[],
+): SubmissionEvidenceCandidate[] => {
+  const unique = new Map<string, SubmissionEvidenceCandidate>();
+  for (const item of evidence) {
+    const key = `${item.pageNumber}\u0000${item.valuePath}`;
+    const existing = unique.get(key);
+    if (existing === undefined) {
+      unique.set(key, item);
+      continue;
+    }
+
+    const snippets = [existing.sourceSnippet, item.sourceSnippet].filter(
+      (snippet): snippet is string =>
+        snippet !== undefined && snippet.trim().length > 0,
+    );
+    const mergedSnippets = [...new Set(snippets)];
+    unique.set(key, {
+      ...existing,
+      ...(mergedSnippets.length === 0
+        ? {}
+        : { sourceSnippet: mergedSnippets.join("\n") }),
+    });
+  }
+  return [...unique.values()];
+};
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
@@ -172,23 +230,30 @@ const parseEvidenceList = (
 };
 
 const validateFieldValue = (
-  dataType: string,
+  field: ActiveOcrField,
   value: unknown,
   path: string,
 ): unknown => {
+  const { dataType } = field;
   const stringTypes = new Set([
     "string",
     "city_name",
     "locality_name",
     "rera_registration_number",
     "specification_text",
-    "property_type_key",
   ]);
   if (stringTypes.has(dataType)) {
     return readNonEmptyString(value, path);
   }
   if (dataType === "positive_integer") {
     return readPositiveInteger(value, path);
+  }
+  if (dataType === "property_type_key") {
+    const key = readNonEmptyString(value, path);
+    if (field.allowedValues && !field.allowedValues.includes(key)) {
+      throw new OcrContractError(`${path} is not an approved property type`);
+    }
+    return key;
   }
   if (dataType === "percentage_0_to_100") {
     if (
@@ -237,6 +302,14 @@ const validateFieldValue = (
     if (new Set(normalized).size !== normalized.length) {
       throw new OcrContractError(`${path} contains duplicate amenity keys`);
     }
+    const unknown = normalized.find(
+      (key) => field.allowedValues && !field.allowedValues.includes(key),
+    );
+    if (unknown !== undefined) {
+      throw new OcrContractError(
+        `${path} contains an unapproved amenity key: ${unknown}`,
+      );
+    }
     return normalized;
   }
   throw new OcrContractError(`unsupported active OCR data type: ${dataType}`);
@@ -276,6 +349,12 @@ const parseVariantDetails = (
     result.totalUnitsOfVariant = readPositiveInteger(
       value.totalUnitsOfVariant,
       `${path}.totalUnitsOfVariant`,
+    );
+  }
+  if (value.unitsPerFloor !== undefined) {
+    result.unitsPerFloor = readPositiveInteger(
+      value.unitsPerFloor,
+      `${path}.unitsPerFloor`,
     );
   }
   if (value.areas !== undefined) {
@@ -390,11 +469,7 @@ export const validateNewPipelineExtraction = (
     );
     return {
       fieldKey,
-      value: validateFieldValue(
-        contract.dataType,
-        candidate.value,
-        `${path}.value`,
-      ),
+      value: validateFieldValue(contract, candidate.value, `${path}.value`),
       ...(confidence === undefined ? {} : { confidence }),
       evidence: parseEvidenceList(
         candidate.evidence,
@@ -485,10 +560,12 @@ export const buildSubmissionFieldCandidates = (
   const extraction = input;
   const result: SubmissionFieldCandidate[] = extraction.fields.map((field) => ({
     ...field,
-    evidence: field.evidence.map((evidence) => ({
-      ...evidence,
-      valuePath: "$",
-    })),
+    evidence: deduplicateSubmissionEvidence(
+      field.evidence.map((evidence) => ({
+        ...evidence,
+        valuePath: "$",
+      })),
+    ),
   }));
 
   if (extraction.unitVariants.length === 0) {
@@ -514,14 +591,16 @@ export const buildSubmissionFieldCandidates = (
   )
     ? Math.min(...variantConfidences)
     : undefined;
-  const evidence = orderedScopes.flatMap((scope) => {
-    const candidate = candidatesByScope.get(scope.scopeKey);
-    if (candidate === undefined) {
-      return [];
-    }
-    const valuePath = `$[${assembled.findIndex((value) => value.variantName === scope.variant.variantName)}]`;
-    return candidate.evidence.map((item) => ({ ...item, valuePath }));
-  });
+  const evidence = deduplicateSubmissionEvidence(
+    orderedScopes.flatMap((scope) => {
+      const candidate = candidatesByScope.get(scope.scopeKey);
+      if (candidate === undefined) {
+        return [];
+      }
+      const valuePath = `$[${assembled.findIndex((value) => value.variantName === scope.variant.variantName)}]`;
+      return candidate.evidence.map((item) => ({ ...item, valuePath }));
+    }),
+  );
   result.push({
     fieldKey: "unit_variants",
     value: assembled,
@@ -529,4 +608,718 @@ export const buildSubmissionFieldCandidates = (
     evidence,
   });
   return result;
+};
+
+const DEFAULT_OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
+const DEFAULT_OPENROUTER_MODEL = "anthropic/claude-sonnet-5";
+const DEFAULT_MAX_COMPLETION_TOKENS = 32_000;
+const DEFAULT_MAX_REASONING_TOKENS = 2_048;
+const DEFAULT_REQUEST_TIMEOUT_MS = 8 * 60 * 1_000;
+
+export type OcrAdapterFailureCode =
+  | "configuration_error"
+  | "source_load_failed"
+  | "provider_error"
+  | "request_timeout"
+  | "output_length"
+  | "invalid_json"
+  | "invalid_response";
+
+export class OcrAdapterError extends Error {
+  constructor(
+    public readonly code: OcrAdapterFailureCode,
+    message: string,
+    public readonly providerRequestId?: string,
+  ) {
+    super(message);
+    this.name = "OcrAdapterError";
+  }
+}
+
+export interface OpenRouterOcrAdapterOptions {
+  loadSourcePdf: (gcsPath: string) => Promise<Uint8Array>;
+  apiKey?: string;
+  model?: string;
+  endpoint?: string;
+  maxCompletionTokens?: number;
+  maxReasoningTokens?: number;
+  requestTimeoutMs?: number;
+  fetch?: typeof fetch;
+  retryDelayMs?: number;
+  checkpointDirectory?: string | false;
+}
+
+interface OpenRouterScopeResponse {
+  fields?: unknown;
+  unitVariant?: unknown;
+  unmappedRawEvidence?: unknown;
+}
+
+interface OpenRouterStreamResult {
+  rawText: string;
+  finishReason?: string;
+  providerRequestId?: string;
+  usage?: {
+    promptTokens?: number;
+    completionTokens?: number;
+    reasoningTokens?: number;
+    costUsd?: number;
+  };
+}
+
+interface OcrScopeCheckpoint {
+  scopeKey: string;
+  pageNumbers: number[];
+  providerRequestId?: string;
+  response: unknown;
+}
+
+const writeCheckpointAtomically = async (
+  checkpointPath: string,
+  value: unknown,
+): Promise<void> => {
+  await mkdir(path.dirname(checkpointPath), { recursive: true });
+  const temporaryPath = `${checkpointPath}.${process.pid}.tmp`;
+  await writeFile(temporaryPath, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+  await rename(temporaryPath, checkpointPath);
+};
+
+const stripCodeFence = (value: string): string =>
+  value
+    .trim()
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/```\s*$/i, "")
+    .trim();
+
+const readConfiguredInteger = (
+  value: number | undefined,
+  fallback: number,
+  name: string,
+): number => {
+  const configured = value ?? fallback;
+  if (!Number.isInteger(configured) || configured <= 0) {
+    throw new OcrAdapterError(
+      "configuration_error",
+      `${name} must be a positive integer`,
+    );
+  }
+  return configured;
+};
+
+const fieldsForScope = (
+  scope: OcrRoutingManifest["scopes"][number],
+  activeFields: ActiveOcrField[],
+): ActiveOcrField[] => {
+  if (scope.kind === "amenities") {
+    return activeFields.filter(
+      (field) => field.fieldKey === "property.amenities",
+    );
+  }
+  if (scope.kind === "specifications") {
+    return activeFields.filter((field) =>
+      field.fieldKey.startsWith("property.specifications."),
+    );
+  }
+  if (scope.kind === "property_details") {
+    return activeFields.filter(
+      (field) =>
+        field.fieldKey !== "unit_variants" &&
+        field.fieldKey !== "property.amenities" &&
+        !field.fieldKey.startsWith("property.specifications."),
+    );
+  }
+  return [];
+};
+
+const createScopePrompt = (
+  scope: OcrRoutingManifest["scopes"][number],
+  activeFields: ActiveOcrField[],
+): string => {
+  const sourcePages = scope.pages.map((page) => page.pageNumber);
+  const scalarFields = fieldsForScope(scope, activeFields);
+  const variantInstruction =
+    scope.kind === "unit_variant"
+      ? `Extract exactly one unit variant for \"${scope.variant.variantName}\". Put its values in unitVariant.details using only: totalUnitsOfVariant (positive integer), unitsPerFloor (positive integer), areas [{basis: carpet|super_built_up|built_up, areaSqft: positive number}], and dimensions {rooms, foyer, balconies}; each room has name and any explicitly printed lengthFt, widthFt, or areaSqft. Combine all excerpt pages into this one variant; never emit a second variant.`
+      : "This is not a unit-variant scope. Return unitVariant as null.";
+
+  return `You extract evidence-backed real-estate brochure facts into a reviewed submission. Return one complete JSON object only, with no markdown or commentary.
+
+Output shape:
+{
+  "fields": [{"fieldKey": string, "value": unknown, "confidence": number, "evidence": [{"pageNumber": number, "sourceSnippet": string}]}],
+  "unitVariant": null | {"details": object, "confidence": number, "evidence": [{"pageNumber": number, "sourceSnippet": string}]},
+  "unmappedRawEvidence": [{"fieldKey": string, "value": unknown, "evidence": [{"pageNumber": number, "sourceSnippet": string}]}]
+}
+
+Rules:
+- Extract only facts explicitly printed on these pages. Never infer, count, summarize marketing copy, or fabricate missing values.
+- Never return a price, currency amount, rate per square foot, or commercial term anywhere, including unmappedRawEvidence.
+- The only active scalar fields for this scope are: ${JSON.stringify(scalarFields)}. Use their exact fieldKey and dataType-compatible value. Omit missing fields.
+- If a useful non-price fact has no active field key, put it in unmappedRawEvidence instead of inventing a destination or silently dropping it.
+- Evidence is mandatory for every returned value. This excerpt maps in order to original brochure pages ${sourcePages.join(", ")}; cite those original one-based page numbers only.
+- Preserve evidence snippets verbatim and keep confidence between 0 and 1.
+- ${variantInstruction}`;
+};
+
+const createScopedPdf = async (
+  sourcePdfBytes: Uint8Array,
+  pageNumbers: number[],
+): Promise<Uint8Array> => {
+  const source = await PDFDocument.load(sourcePdfBytes, {
+    ignoreEncryption: true,
+  });
+  const scoped = await PDFDocument.create();
+  const copiedPages = await scoped.copyPages(
+    source,
+    pageNumbers.map((pageNumber) => pageNumber - 1),
+  );
+  for (const page of copiedPages) scoped.addPage(page);
+  return scoped.save();
+};
+
+const consumeOpenRouterStream = async (
+  response: Response,
+): Promise<OpenRouterStreamResult> => {
+  if (response.body === null) {
+    throw new OcrAdapterError(
+      "invalid_response",
+      "OpenRouter returned a successful response without a stream body",
+    );
+  }
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let pending = "";
+  let rawText = "";
+  let finishReason: string | undefined;
+  let providerRequestId: string | undefined;
+  let usage: OpenRouterStreamResult["usage"];
+
+  const consumeFrame = (frame: string): void => {
+    const data = frame
+      .split(/\r?\n/)
+      .filter((line) => line.startsWith("data:"))
+      .map((line) => line.slice(5).trim())
+      .join("\n");
+    if (data === "" || data === "[DONE]") return;
+    let event: unknown;
+    try {
+      event = JSON.parse(data);
+    } catch {
+      return;
+    }
+    if (!isRecord(event)) return;
+    if (typeof event.id === "string") providerRequestId ??= event.id;
+    const eventUsage = event.usage;
+    if (isRecord(eventUsage)) {
+      const readUsageNumber = (key: string): number | undefined =>
+        typeof eventUsage[key] === "number" ? eventUsage[key] : undefined;
+      const completionDetails = isRecord(eventUsage.completion_tokens_details)
+        ? eventUsage.completion_tokens_details
+        : undefined;
+      usage = {
+        ...(readUsageNumber("prompt_tokens") === undefined
+          ? {}
+          : { promptTokens: readUsageNumber("prompt_tokens") }),
+        ...(readUsageNumber("completion_tokens") === undefined
+          ? {}
+          : { completionTokens: readUsageNumber("completion_tokens") }),
+        ...(completionDetails === undefined ||
+        typeof completionDetails.reasoning_tokens !== "number"
+          ? {}
+          : { reasoningTokens: completionDetails.reasoning_tokens }),
+        ...(readUsageNumber("cost") === undefined
+          ? {}
+          : { costUsd: readUsageNumber("cost") }),
+      };
+    }
+    const choices = event.choices;
+    if (!Array.isArray(choices) || !isRecord(choices[0])) return;
+    const choice = choices[0];
+    if (typeof choice.finish_reason === "string") {
+      finishReason = choice.finish_reason;
+    }
+    if (isRecord(choice.delta) && typeof choice.delta.content === "string") {
+      rawText += choice.delta.content;
+    }
+  };
+
+  while (true) {
+    const { done, value } = await reader.read();
+    pending += decoder.decode(value ?? new Uint8Array(), { stream: !done });
+    const frames = pending.split(/\r?\n\r?\n/);
+    pending = frames.pop() ?? "";
+    for (const frame of frames) consumeFrame(frame);
+    if (done) break;
+  }
+  if (pending.trim() !== "") consumeFrame(pending);
+  return { rawText, finishReason, providerRequestId, usage };
+};
+
+const normalizeProviderEvidence = (
+  value: unknown,
+  scopeKey: string,
+): unknown => {
+  if (!Array.isArray(value)) return value;
+  return value.map((candidate) =>
+    isRecord(candidate) ? { ...candidate, scopeKey } : candidate,
+  );
+};
+
+const assertNoCommercialData = (value: unknown, path: string = "$"): void => {
+  if (typeof value === "string") {
+    if (/₹|\bINR\b|\bRs\.?\s*\d|\b(?:lakh|crore)\b/i.test(value)) {
+      throw new OcrAdapterError(
+        "invalid_response",
+        `commercial data is forbidden in OCR output at ${path}`,
+      );
+    }
+    return;
+  }
+  if (Array.isArray(value)) {
+    value.forEach((item, index) =>
+      assertNoCommercialData(item, `${path}[${index}]`),
+    );
+    return;
+  }
+  if (!isRecord(value)) return;
+  for (const [key, item] of Object.entries(value)) {
+    if (
+      /(?:^|_)(?:price|pricing|rate|cost|amount|currency)(?:_|$)/i.test(key)
+    ) {
+      throw new OcrAdapterError(
+        "invalid_response",
+        `commercial field is forbidden in OCR output at ${path}.${key}`,
+      );
+    }
+    assertNoCommercialData(item, `${path}.${key}`);
+  }
+};
+
+const parseUnmappedCandidate = (
+  value: unknown,
+  index: number,
+  scopeKey: string,
+  manifest: OcrRoutingManifest,
+): OcrUnmappedEvidenceCandidate => {
+  const path = `unmappedRawEvidence[${index}]`;
+  if (!isRecord(value)) {
+    throw new OcrAdapterError("invalid_response", `${path} must be an object`);
+  }
+  const fieldKey = readNonEmptyString(value.fieldKey, `${path}.fieldKey`);
+  return {
+    fieldKey,
+    value: value.value,
+    scopeKey,
+    evidence: parseEvidenceList(
+      normalizeProviderEvidence(value.evidence, scopeKey),
+      `${path}.evidence`,
+      manifest,
+      scopeKey,
+    ),
+  };
+};
+
+const parseScopeResponse = (
+  input: unknown,
+  scope: OcrRoutingManifest["scopes"][number],
+  manifest: OcrRoutingManifest,
+  activeFields: ActiveOcrField[],
+): {
+  fields: OcrFieldCandidate[];
+  unitVariant?: OcrUnitVariantCandidate;
+  unmapped: OcrUnmappedEvidenceCandidate[];
+} => {
+  if (!isRecord(input)) {
+    throw new OcrAdapterError(
+      "invalid_response",
+      `scope ${scope.scopeKey} response must be an object`,
+    );
+  }
+  const response = input as OpenRouterScopeResponse;
+  if (!Array.isArray(response.fields)) {
+    throw new OcrAdapterError("invalid_response", "fields must be an array");
+  }
+  const activeKeys = new Set(activeFields.map((field) => field.fieldKey));
+  const allowedScopeKeys = new Set(
+    fieldsForScope(scope, activeFields).map((field) => field.fieldKey),
+  );
+  const known: OcrFieldCandidate[] = [];
+  const unmapped: OcrUnmappedEvidenceCandidate[] = [];
+
+  for (const [index, candidate] of response.fields.entries()) {
+    if (!isRecord(candidate)) {
+      throw new OcrAdapterError(
+        "invalid_response",
+        `fields[${index}] must be an object`,
+      );
+    }
+    const fieldKey = readNonEmptyString(
+      candidate.fieldKey,
+      `fields[${index}].fieldKey`,
+    );
+    const evidence = normalizeProviderEvidence(
+      candidate.evidence,
+      scope.scopeKey,
+    );
+    if (!activeKeys.has(fieldKey)) {
+      unmapped.push(
+        parseUnmappedCandidate(
+          { ...candidate, evidence },
+          unmapped.length,
+          scope.scopeKey,
+          manifest,
+        ),
+      );
+      continue;
+    }
+    if (!allowedScopeKeys.has(fieldKey)) {
+      throw new OcrAdapterError(
+        "invalid_response",
+        `${fieldKey} is not allowed in scope ${scope.scopeKey}`,
+      );
+    }
+    known.push({
+      fieldKey,
+      value: candidate.value,
+      ...(candidate.confidence === undefined
+        ? {}
+        : {
+            confidence: readConfidence(
+              candidate.confidence,
+              `fields[${index}].confidence`,
+            ),
+          }),
+      evidence: parseEvidenceList(
+        evidence,
+        `fields[${index}].evidence`,
+        manifest,
+        scope.scopeKey,
+      ),
+    });
+  }
+
+  if (Array.isArray(response.unmappedRawEvidence)) {
+    for (const candidate of response.unmappedRawEvidence) {
+      unmapped.push(
+        parseUnmappedCandidate(
+          candidate,
+          unmapped.length,
+          scope.scopeKey,
+          manifest,
+        ),
+      );
+    }
+  } else if (response.unmappedRawEvidence !== undefined) {
+    throw new OcrAdapterError(
+      "invalid_response",
+      "unmappedRawEvidence must be an array",
+    );
+  }
+
+  if (scope.kind !== "unit_variant") {
+    if (response.unitVariant !== null && response.unitVariant !== undefined) {
+      throw new OcrAdapterError(
+        "invalid_response",
+        `scope ${scope.scopeKey} must not return a unit variant`,
+      );
+    }
+    return { fields: known, unmapped };
+  }
+  if (!isRecord(response.unitVariant)) {
+    throw new OcrAdapterError(
+      "invalid_response",
+      `scope ${scope.scopeKey} must return one unit variant`,
+    );
+  }
+  const confidence = readConfidence(
+    response.unitVariant.confidence,
+    "unitVariant.confidence",
+  );
+  return {
+    fields: known,
+    unmapped,
+    unitVariant: {
+      scopeKey: scope.scopeKey,
+      details: parseVariantDetails(
+        response.unitVariant.details,
+        "unitVariant.details",
+      ),
+      ...(confidence === undefined ? {} : { confidence }),
+      evidence: parseEvidenceList(
+        normalizeProviderEvidence(
+          response.unitVariant.evidence,
+          scope.scopeKey,
+        ),
+        "unitVariant.evidence",
+        manifest,
+        scope.scopeKey,
+      ),
+    },
+  };
+};
+
+export const createOpenRouterOcrAdapter = (
+  options: OpenRouterOcrAdapterOptions,
+): OcrProviderAdapter => {
+  const apiKey = options.apiKey ?? process.env.OPENROUTER_API_KEY;
+  if (!apiKey) {
+    throw new OcrAdapterError(
+      "configuration_error",
+      "OPENROUTER_API_KEY is required",
+    );
+  }
+  const model =
+    options.model ??
+    process.env.OPENROUTER_OCR_MODEL ??
+    DEFAULT_OPENROUTER_MODEL;
+  const maxCompletionTokens = readConfiguredInteger(
+    options.maxCompletionTokens,
+    Number(
+      process.env.OPENROUTER_OCR_MAX_COMPLETION_TOKENS ??
+        DEFAULT_MAX_COMPLETION_TOKENS,
+    ),
+    "OPENROUTER_OCR_MAX_COMPLETION_TOKENS",
+  );
+  const maxReasoningTokens = readConfiguredInteger(
+    options.maxReasoningTokens,
+    Number(
+      process.env.OPENROUTER_OCR_MAX_REASONING_TOKENS ??
+        DEFAULT_MAX_REASONING_TOKENS,
+    ),
+    "OPENROUTER_OCR_MAX_REASONING_TOKENS",
+  );
+  const requestTimeoutMs = readConfiguredInteger(
+    options.requestTimeoutMs,
+    Number(
+      process.env.OPENROUTER_OCR_REQUEST_TIMEOUT_MS ??
+        DEFAULT_REQUEST_TIMEOUT_MS,
+    ),
+    "OPENROUTER_OCR_REQUEST_TIMEOUT_MS",
+  );
+  const fetchImplementation = options.fetch ?? globalThis.fetch;
+  const retryDelayMs = options.retryDelayMs ?? 1_000;
+  const configuredCheckpointDirectory =
+    options.checkpointDirectory === false
+      ? undefined
+      : path.resolve(
+          options.checkpointDirectory ??
+            process.env.OCR_CHECKPOINT_DIR ??
+            ".local/ocr-checkpoints",
+        );
+
+  const callScope = async (
+    scope: OcrRoutingManifest["scopes"][number],
+    pdfBytes: Uint8Array,
+    activeFields: ActiveOcrField[],
+  ): Promise<OpenRouterStreamResult> => {
+    const body = JSON.stringify({
+      model,
+      max_tokens: maxCompletionTokens,
+      reasoning: { max_tokens: maxReasoningTokens, exclude: true },
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "file",
+              file: {
+                filename: `${scope.scopeKey}.pdf`,
+                file_data: `data:application/pdf;base64,${Buffer.from(pdfBytes).toString("base64")}`,
+              },
+            },
+            { type: "text", text: createScopePrompt(scope, activeFields) },
+          ],
+        },
+      ],
+      plugins: [{ id: "file-parser", pdf: { engine: "native" } }],
+      response_format: { type: "json_object" },
+      provider: { require_parameters: true },
+      stream: true,
+    });
+
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      let response: Response;
+      try {
+        response = await fetchImplementation(
+          options.endpoint ?? DEFAULT_OPENROUTER_URL,
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${apiKey}`,
+              "Content-Type": "application/json",
+            },
+            body,
+            signal: AbortSignal.timeout(requestTimeoutMs),
+          },
+        );
+      } catch (error) {
+        const isTimeout =
+          error instanceof Error &&
+          (error.name === "TimeoutError" || error.name === "AbortError");
+        if (attempt === 0 && !isTimeout) {
+          await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+          continue;
+        }
+        throw new OcrAdapterError(
+          isTimeout ? "request_timeout" : "provider_error",
+          isTimeout
+            ? `OpenRouter request timed out after ${requestTimeoutMs}ms`
+            : `OpenRouter request failed: ${String(error)}`,
+        );
+      }
+
+      if (!response.ok) {
+        const detail = (await response.text()).slice(0, 2_000);
+        const transient =
+          response.status === 408 ||
+          response.status === 429 ||
+          response.status >= 500;
+        if (attempt === 0 && transient) {
+          await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+          continue;
+        }
+        throw new OcrAdapterError(
+          "provider_error",
+          `OpenRouter returned HTTP ${response.status}: ${detail}`,
+        );
+      }
+      return consumeOpenRouterStream(response);
+    }
+    throw new OcrAdapterError("provider_error", "OpenRouter retry exhausted");
+  };
+
+  return {
+    providerKey: `openrouter:${model}`,
+    async extract(
+      request: OcrExtractionRequest,
+    ): Promise<OcrProviderExtractionResult> {
+      let sourcePdf: Uint8Array;
+      try {
+        sourcePdf = await options.loadSourcePdf(request.gcsPath);
+      } catch (error) {
+        throw new OcrAdapterError(
+          "source_load_failed",
+          `Unable to load source PDF: ${String(error)}`,
+        );
+      }
+
+      const fields: OcrFieldCandidate[] = [];
+      const unitVariants: OcrUnitVariantCandidate[] = [];
+      const unmappedRawEvidence: OcrUnmappedEvidenceCandidate[] = [];
+      const providerRequestIds: string[] = [];
+      const usage: OcrScopeUsage[] = [];
+      const scopeCheckpoints: OcrScopeCheckpoint[] = [];
+      const checkpointPath =
+        request.jobId === undefined ||
+        configuredCheckpointDirectory === undefined
+          ? undefined
+          : path.join(
+              configuredCheckpointDirectory,
+              `${request.jobId.replace(/[^a-zA-Z0-9_-]/g, "_")}.json`,
+            );
+
+      const saveCheckpoint = async (
+        status: "extracting" | "extracted",
+        result?: OcrProviderExtractionResult,
+      ): Promise<void> => {
+        if (checkpointPath === undefined) return;
+        await writeCheckpointAtomically(checkpointPath, {
+          version: 1,
+          status,
+          jobId: request.jobId,
+          sourceDocumentId: request.sourceDocumentId,
+          providerKey: `openrouter:${model}`,
+          updatedAt: new Date().toISOString(),
+          scopes: scopeCheckpoints,
+          ...(result === undefined ? {} : { result }),
+        });
+      };
+
+      for (const scope of request.manifest.scopes) {
+        if (scope.kind === "ignore") continue;
+        const scopedPdf = await createScopedPdf(
+          sourcePdf,
+          scope.pages.map((page) => page.pageNumber),
+        );
+        const stream = await callScope(scope, scopedPdf, request.activeFields);
+        if (stream.providerRequestId) {
+          providerRequestIds.push(stream.providerRequestId);
+        }
+        usage.push({
+          scopeKey: scope.scopeKey,
+          inputPdfBytes: scopedPdf.byteLength,
+          ...(stream.providerRequestId === undefined
+            ? {}
+            : { providerRequestId: stream.providerRequestId }),
+          ...stream.usage,
+        });
+        if (stream.finishReason === "length") {
+          throw new OcrAdapterError(
+            "output_length",
+            `OpenRouter exhausted the output budget for scope ${scope.scopeKey}; human re-routing is required`,
+            stream.providerRequestId,
+          );
+        }
+        if (stream.finishReason !== "stop") {
+          throw new OcrAdapterError(
+            "invalid_response",
+            `OpenRouter ended scope ${scope.scopeKey} with finish_reason=${stream.finishReason ?? "unknown"}`,
+            stream.providerRequestId,
+          );
+        }
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(stripCodeFence(stream.rawText));
+        } catch {
+          throw new OcrAdapterError(
+            "invalid_json",
+            `OpenRouter returned invalid JSON for scope ${scope.scopeKey}`,
+            stream.providerRequestId,
+          );
+        }
+        assertNoCommercialData(parsed);
+        const scopeResult = parseScopeResponse(
+          parsed,
+          scope,
+          request.manifest,
+          request.activeFields,
+        );
+        scopeCheckpoints.push({
+          scopeKey: scope.scopeKey,
+          pageNumbers: scope.pages.map((page) => page.pageNumber),
+          ...(stream.providerRequestId === undefined
+            ? {}
+            : { providerRequestId: stream.providerRequestId }),
+          response: parsed,
+        });
+        await saveCheckpoint("extracting");
+        fields.push(...scopeResult.fields);
+        if (scopeResult.unitVariant) unitVariants.push(scopeResult.unitVariant);
+        unmappedRawEvidence.push(...scopeResult.unmapped);
+      }
+
+      const extraction = validateNewPipelineExtraction(
+        {
+          origin: "new_pipeline",
+          pipelineVersion: request.pipelineVersion,
+          fieldSchemaVersion: request.fieldSchemaVersion,
+          fields,
+          unitVariants,
+        },
+        request.manifest,
+        request.activeFields,
+        request.pipelineVersion,
+        request.fieldSchemaVersion,
+      );
+      const result: OcrProviderExtractionResult = {
+        extraction,
+        unmappedRawEvidence,
+        providerRequestIds,
+        usage,
+        ...(checkpointPath === undefined ? {} : { checkpointPath }),
+      };
+      await saveCheckpoint("extracted", result);
+      return result;
+    },
+  };
 };

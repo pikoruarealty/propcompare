@@ -62,7 +62,7 @@ inference.
 1. A brochure PDF is uploaded → one immutable `source_documents` row and a draft `property_submissions` row.
 2. Cheap text-layer inspection may suggest useful pages. The uploader confirms a versioned routing manifest that assigns every page to property details, amenities, specifications, one unit-variant group, or ignore.
 3. Each `unit_variant` scope may contain several ordered pages. Those pages are one proposed variant context (for example lower and upper penthouse floors), never one variant per page.
-4. A versioned `ocr_extraction_jobs` attempt is queued with the confirmed manifest. OCR extracts active `property_schema_fields` only and rejects all other output.
+4. A versioned `ocr_extraction_jobs` attempt is queued with the confirmed manifest. The server-side worker loads the private GCS object, creates one PDF excerpt per non-ignored scope, and sends each excerpt to Claude Sonnet 5 through OpenRouter's native `file-parser` engine. OCR extracts active `property_schema_fields` only; unknown fields are flagged as unmapped evidence and never inserted.
 5. Each extracted value becomes one `property_submission_fields` row. One or more `property_submission_field_evidence` rows retain its source pages, snippets, and optional JSON value paths.
 6. Admin reviews in the Data Reconciliation UI with all evidence pages side-by-side, then confirms, edits, or rejects each field.
 7. On admin approval, the submission publishes via the one write path above.
@@ -72,6 +72,11 @@ Historical OCR JSON is comparison-only evidence. Every selected brochure is
 rerun through the new versioned pipeline, and only that output can populate a
 submission. A derived legacy-vs-new report may expose discrepancies for
 evaluation but has no catalog or submission write path.
+
+The implemented worker call and environment contract are documented in
+[`docs/ocr-adapter-usage.md`](docs/ocr-adapter-usage.md). Provider or parsing
+failure marks the attempt failed without inserting partial evidence. The HTTP
+trigger and admin page-routing UI remain separate planned work.
 
 ## Budget bucketing (never expose exact price)
 

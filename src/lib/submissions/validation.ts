@@ -34,6 +34,7 @@ export interface SubmissionUnitVariant {
   bhkTypeKey?: string;
   layoutTypeKey?: string;
   totalUnitsOfVariant?: number;
+  unitsPerFloor?: number;
   areas?: SubmissionUnitVariantAreaRow[];
   dimensions?: {
     rooms?: SubmissionRoomDimension[];
@@ -150,6 +151,12 @@ const readUnitVariants = (
         `${itemPath}.totalUnitsOfVariant`,
       );
     }
+    if (candidate.unitsPerFloor !== undefined) {
+      variant.unitsPerFloor = readPositiveInteger(
+        candidate.unitsPerFloor,
+        `${itemPath}.unitsPerFloor`,
+      );
+    }
     if (candidate.areas !== undefined) {
       if (!Array.isArray(candidate.areas)) {
         throw new SubmissionPayloadError(`${itemPath}.areas must be an array`);
@@ -251,6 +258,9 @@ const validateFieldValue = (
   }
   if (dataType === "positive_integer") {
     return readPositiveInteger(value, path);
+  }
+  if (dataType === "positive_number") {
+    return readPositiveNumber(value, path);
   }
   if (dataType === "percentage_0_to_100") {
     if (
