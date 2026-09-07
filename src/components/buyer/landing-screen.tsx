@@ -1,6 +1,9 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { BROWSE_PATH } from "@/lib/properties/browse";
+import type { PropertySummary } from "@/lib/properties/types";
 import { GridRow, PageContainer, PageFrame, PageSection } from "./page-frame";
+import { PropertyCard } from "./property-card";
 import { BUYER_NAV } from "./site-header";
 import { BodyText, DisplayHeading, Eyebrow } from "./typography";
 
@@ -13,10 +16,14 @@ import { BodyText, DisplayHeading, Eyebrow } from "./typography";
  * arrived at. It is not a marketing page and makes no claim the catalog cannot
  * support.
  *
- * It reads no data, deliberately (DECISIONS.md, 2026-09-07): there is nothing
- * here that varies per request or per visitor, so the most-visited page in the
- * product prerenders at build with no database dependency, and no "featured"
- * ordering is invented that the catalog could not justify.
+ * Step 7 shipped it reading no data at all, and deferred a recent-properties
+ * strip to step 9 on the grounds that a content strip should be designed
+ * against real content rather than an empty table. Step 9 published real
+ * properties, and the strip is now here (DECISIONS.md, 2026-09-07): the most
+ * recently published properties, in the catalog's own `newest` order, with no
+ * "featured" ranking invented on top of it. The page is a pure function of that
+ * list — `src/app/page.tsx` reads it — so both the populated and the empty
+ * catalog are testable without a database.
  *
  * The two destinations come from `BUYER_NAV` rather than being written again
  * here, so the header and the landing page cannot drift apart.
@@ -48,7 +55,16 @@ const PRINCIPLES = [
   },
 ] as const;
 
-export function LandingScreen() {
+export interface LandingScreenProps {
+  /**
+   * The most recently published properties, newest first. An empty list is a
+   * real state, not a failure: the catalog starts empty and the page has to
+   * read correctly before anything is published.
+   */
+  recent: PropertySummary[];
+}
+
+export function LandingScreen({ recent }: LandingScreenProps) {
   return (
     <PageFrame>
       <PageContainer>
@@ -112,6 +128,45 @@ export function LandingScreen() {
             </div>
           </GridRow>
         </PageSection>
+
+        {/*
+         * Recently published, in the catalog's own `newest` order. No ranking
+         * is applied on top of it: "recent" is a fact the data carries, while
+         * "featured" or "best" would be an assessment nothing here supports.
+         *
+         * The section disappears entirely when nothing is published, rather
+         * than rendering an empty shelf that reads as a broken page. The
+         * catalog's emptiness is not a claim this page needs to make — browse
+         * says it plainly, and that is where a visitor looking for properties
+         * is going.
+         */}
+        {recent.length > 0 ? (
+          <PageSection
+            data-slot="landing-recent"
+            className="flex flex-col gap-6 pt-0"
+          >
+            <div className="flex flex-wrap items-baseline justify-between gap-4">
+              <DisplayHeading level={2}>Recently published</DisplayHeading>
+              <Link
+                href={BROWSE_PATH}
+                className="text-muted-foreground hover:text-foreground text-sm underline underline-offset-4"
+              >
+                See the whole catalog
+              </Link>
+            </div>
+            <GridRow role="list">
+              {recent.map((property) => (
+                <div
+                  key={property.id}
+                  role="listitem"
+                  className="md:col-span-6 lg:col-span-4"
+                >
+                  <PropertyCard property={property} />
+                </div>
+              ))}
+            </GridRow>
+          </PageSection>
+        ) : null}
 
         <PageSection
           data-slot="landing-principles"

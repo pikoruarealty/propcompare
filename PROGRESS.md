@@ -1,5 +1,95 @@
 # Progress
 
+## 2026-09-07 — Phase 2B step 9 complete: real properties on the real pages, and the phase closes
+
+**Done:** the convergence step. Five properties are published through the actual
+`publishSubmission` transaction and every buyer page has been checked against
+them on a running production server. `docs/roadmap.md`, this journal, and the
+phase plan's completion record are updated; `api-spec.v1.md` was verified rather
+than edited. Phase 2B is complete — all ten steps landed on `task/phase-2b`.
+
+**The seed goes through the one write path.** A throwaway script built an
+approved `property_submissions` row plus confirmed `property_submission_fields`
+for each property and called `publishSubmission`; nothing touched `properties` or
+any child table directly, because the one-write-path rule binds seed scripts as
+firmly as it binds application code. The script was deleted after running, so
+nothing about the seed is committed and `main` gains zero rows of data. The
+properties are left in the local database by decision — steps 5–7 cleaned up
+because they were testing, and this step is the deliverable.
+
+**The set exercises the surface rather than filling it.** Riverstone Greens
+carries all three area bases plus room dimensions; Satyam Skyline has a
+carpet-only variant and a duplex; Aarambh Residency is deliberately sparse — no
+specifications, one amenity; Vraj Bungalows publishes built-up and super built-up
+with **no carpet at all**; Shivalik Plotting Scheme is a plot with **no unit
+variants**. Three possession statuses and three property types across five
+records.
+
+**Verified against the real read layer, not just eyeballed.** Every filter
+returns its expected count — `city=Ahmedabad` 3, `city=Gandhinagar` 2,
+`bhk=3bhk` 2, `propertyType=plot` 1, `possessionStatus=ready_to_move` 2, and
+`amenity=clubhouse+gymnasium` 2, which confirms amenity filters narrow rather
+than widen. `findForbiddenKeys` reports zero forbidden keys across all five
+dossiers and the listing. All five dossiers return `200`, a slug with no property
+still `404`s, and no page renders a rupee figure. **The never-derive rule holds
+on real data**: Vraj Bungalows shows built-up and super built-up and simply has
+no carpet figure, rather than computing one.
+
+**Guided intake has a real vocabulary for the first time.** Its configuration and
+city questions were rendering the "nothing is published yet" message against an
+empty catalog; they now offer Ahmedabad and Gandhinagar, and 2 through 5+ BHK,
+drawn from the same `listFilterOptions` the browse filters use — which is exactly
+why `/intake` was made `force-dynamic` in step 8.
+
+**The landing strip promised in step 7 was built.** Step 7 deferred it on the
+grounds that a content strip should be designed against real content rather than
+an empty table; that condition is now met. `/` shows the six most recently
+published properties through the existing `PropertyCard`, omits the section
+entirely when the catalog is empty rather than rendering an empty shelf, and
+calls it "Recently published" — a fact the data carries — rather than "featured",
+which would be an assessment nothing here supports. This partly supersedes the
+step 7 decision that kept `/` static, and the supersession is marked on the
+original entry.
+
+**A second silent-prerender bug, caught the same way as step 8's.** `/` had to
+become dynamic, and the obvious choice was ISR. It is wrong here: a route with no
+dynamic segment has no `generateStaticParams` escape hatch, so `revalidate`
+prerenders at build and requires Postgres reachable during `next build` — the
+constraint step 3 flagged and step 6 worked around on the dossier. **This was
+measured rather than asserted**: building against an unreachable `DATABASE_URL`
+succeeds with `force-dynamic` and fails with `revalidate = 3600`
+(`Error occurred prerendering page "/"`, `ECONNREFUSED` on the listing count
+query). `/` is now `ƒ (Dynamic)`.
+
+**A contract gap was found and recorded rather than papered over.** No property
+in the catalog can reach the `explicitly_not_offered` amenity state. The publish
+transaction marks every unlisted amenity `not_stated`, and the active field
+contract has only `property.amenities` — an array of keys that _are_ available —
+so nothing can currently assert that a developer answered "we do not offer this".
+The "Not stated" / "Not offered" distinction is implemented, tested and correct
+on the render side; one of the two facts simply has no input path yet. That
+belongs to the phase that owns developer submission. Writing those rows directly
+would both bypass the publish transaction and fabricate a claim about a real
+developer.
+
+**Expected gaps, confirmed correct rather than fixed:** no property shows an
+image, because media delivery was deferred out of 2B by a dated decision and
+nothing can populate `property_media` this phase; and none shows the RERA
+verified badge, because no code path sets `properties.rera_registered` — it waits
+on the GujRERA cross-check job. Both render through the standard absence
+vocabulary, exactly as designed.
+
+**Decision audit, as the checklist requires:** 31 dated entries from 2026-09-02
+and 2026-09-07 cover steps 0–8, and step 9 added three more — the landing strip
+and its supersession, the convergence seed, and the `explicitly_not_offered` gap.
+Every decision made during the phase has an entry.
+
+**Verified:** `bun run test` reports **401 passed across 27 files** (396 from
+step 8, plus 5 for the landing strip); `format:check`, `lint`, `typecheck`,
+`build`, and `git diff --check` all pass. Final route table: `ƒ /`,
+`ƒ /intake`, `ƒ /properties`, `● /properties/[slug]`, plus the three `ƒ` API
+routes.
+
 ## 2026-09-07 — Phase 2B step 8 complete: guided intake, and the dead link closed
 
 **Done:** `/intake` exists. Four optional questions — priorities, configuration,

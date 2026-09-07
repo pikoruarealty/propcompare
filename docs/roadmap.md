@@ -56,6 +56,8 @@ Phases 2A and 2B run in parallel once Phase 1 lands, so both developers are work
 
 **Acceptance (2A + 2B convergence):** a handful of real properties, approved through the actual publish transaction, render correctly on the buyer pages built against fixtures.
 
+**Status: complete 2026-09-07.** All ten steps landed on `task/phase-2b`. The buyer surface is `/` (landing, with a recently-published strip), `/properties` (browse and filters), `/properties/{slug}` (dossier, ISR), and `/intake` (guided intake), over a typed read layer and two public read routes. Acceptance was met by publishing five properties through `publishSubmission` — three possession statuses, three property types, single- and multi-basis areas, a plot with no unit variants, and one deliberately sparse record — and confirming every buyer page renders them against the real read layer with zero price leaks. Deferred out of the phase with dated decisions: media delivery, `PropScoreDial`, and dark mode. See the [implementation plan](tasklists/2026-09-02-phase-2b-implementation-plan.md) for the per-step record.
+
 ---
 
 ## Phase 3 — Integration & core buyer flows

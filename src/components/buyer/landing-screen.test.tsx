@@ -1,5 +1,7 @@
 import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
+import { propertyListFixture } from "@/lib/properties/fixtures";
+import type { PropertySummary } from "@/lib/properties/types";
 import { LandingScreen } from "./landing-screen";
 import { BUYER_NAV } from "./site-header";
 
@@ -8,10 +10,14 @@ import { BUYER_NAV } from "./site-header";
  * and to say enough about the catalog that its deliberate gaps do not read as
  * defects. These tests cover both: that the calls to action go where they
  * should, and that the page makes no claim the catalog cannot support.
+ *
+ * Most of them render an empty catalog, which is both the honest default and
+ * the state the page shipped in for the whole of step 7. The recent-properties
+ * strip added in step 9 has its own block at the bottom.
  */
 
-const renderLanding = () => {
-  const view = render(<LandingScreen />);
+const renderLanding = (recent: PropertySummary[] = []) => {
+  const view = render(<LandingScreen recent={recent} />);
   const main = view.container.querySelector<HTMLElement>("main");
   if (main === null) throw new Error("LandingScreen rendered no main");
   return { ...view, main };
@@ -146,5 +152,85 @@ describe("LandingScreen — claims it is allowed to make", () => {
     const { main } = renderLanding();
 
     expect(main).toHaveTextContent("Gujarat");
+  });
+});
+
+describe("LandingScreen — recently published", () => {
+  it("shows nothing at all when the catalog is empty", () => {
+    const { container } = renderLanding([]);
+
+    // Not an empty shelf: a heading over no cards reads as a broken page, and
+    // the catalog's emptiness is browse's statement to make, not this page's.
+    expect(
+      container.querySelector('[data-slot="landing-recent"]'),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Recently published")).not.toBeInTheDocument();
+  });
+
+  it("shows one card per published property, in the order it was given", () => {
+    const { container } = renderLanding(propertyListFixture.data);
+    const section = container.querySelector<HTMLElement>(
+      '[data-slot="landing-recent"]',
+    );
+    if (section === null) throw new Error("no recent section rendered");
+
+    const cards = section.querySelectorAll('[data-slot="property-card"]');
+    expect(cards).toHaveLength(propertyListFixture.data.length);
+
+    const names = within(section)
+      .getAllByRole("listitem")
+      .map((item) => item.textContent ?? "");
+    propertyListFixture.data.forEach((property, index) => {
+      expect(names[index]).toContain(property.name);
+    });
+  });
+
+  it("calls the strip recent, never featured or best", () => {
+    const { container } = renderLanding(propertyListFixture.data);
+    const section = container.querySelector<HTMLElement>(
+      '[data-slot="landing-recent"]',
+    );
+
+    // "Recent" is a fact the data carries. "Featured", "top" or "best" would be
+    // an assessment nothing in this catalog supports.
+    expect(section?.textContent).toContain("Recently published");
+    expect(section?.textContent).not.toMatch(/featured|top |best|recommended/i);
+  });
+
+  it("offers the whole catalog beside the strip", () => {
+    const { container } = renderLanding(propertyListFixture.data);
+    const section = container.querySelector<HTMLElement>(
+      '[data-slot="landing-recent"]',
+    );
+    if (section === null) throw new Error("no recent section rendered");
+
+    expect(
+      within(section).getByRole("link", { name: "See the whole catalog" }),
+    ).toHaveAttribute("href", "/properties");
+  });
+
+  it("renders no price value on any card", () => {
+    const { container } = renderLanding(propertyListFixture.data);
+    const section = container.querySelector<HTMLElement>(
+      '[data-slot="landing-recent"]',
+    );
+    const text = (section?.textContent ?? "").toLowerCase();
+
+    // Scoped to the strip, and matching on price *values* rather than the word
+    // itself: the page elsewhere explains at length why there are no prices,
+    // and must be allowed to say so.
+    expect(text.length).toBeGreaterThan(0);
+    for (const forbidden of [
+      "₹",
+      "inr",
+      "crore",
+      "lakh",
+      "per sq ft",
+      "psf",
+      "onwards",
+      "starting at",
+    ]) {
+      expect(text).not.toContain(forbidden);
+    }
   });
 });

@@ -1,6 +1,6 @@
 # Implementation plan — Phase 2B buyer experience
 
-**Status:** step 8 complete (2026-09-07); step 9 (convergence and documentation) is next, and closes the phase. No open decision gates remain — both were resolved by deferral on 2026-09-07.
+**Status: complete 2026-09-07.** All ten steps (0–9) landed on `task/phase-2b`. See the [completion record](#completion-record) at the foot of this document. No open decision gates remain.
 **Owner:** Deep (buyer UI), with Bhavarth owning the read contract in step 1
 **Branch:** `task/phase-2b` — one branch for the whole phase, merged into `main` at the phase boundary. Steps 0–2 originally took a branch each; those were collapsed into `task/phase-2b` on 2026-09-02 with no commits moved.
 **Roadmap:** [Phase 2B](../roadmap.md#phase-2b--buyer-ui-against-a-fixed-contract-parallel-with-2a)
@@ -687,24 +687,128 @@ manual click-through before the phase merges.
 
 This satisfies the roadmap's stated 2A+2B convergence acceptance.
 
-- [ ] Publish a handful of real properties through the actual Phase 2A publish
+**Status: complete 2026-09-07**
+
+- [x] Publish a handful of real properties through the actual Phase 2A publish
       transaction — never a direct insert — and confirm the buyer pages render
       them correctly against the real read layer.
-- [ ] Update `api-spec.v1.md` route statuses from Planned to implemented.
-- [ ] Update `docs/roadmap.md`, `PROGRESS.md`, and this plan's completion record.
-- [ ] Confirm every decision made during the phase has a dated `DECISIONS.md`
+- [x] Update `api-spec.v1.md` route statuses from Planned to implemented.
+      Verified rather than edited: both buyer read routes already read
+      `Implemented (Phase 2B step 3)`, and `POST /api/v1/intake-sessions`
+      correctly still reads `Planned (Phase 3)`, which step 8 deliberately
+      honoured by calling nothing.
+- [x] Update `docs/roadmap.md`, `PROGRESS.md`, and this plan's completion record.
+- [x] Confirm every decision made during the phase has a dated `DECISIONS.md`
       entry, per the standing rule that decisions are recorded when made rather
-      than reconstructed later.
+      than reconstructed later. Audited: 31 entries dated 2026-09-02 or
+      2026-09-07 cover steps 0–8, and step 9 added three more.
+
+**Acceptance — met.** Five properties were published through `publishSubmission`
+and every buyer page was checked against them on a running production server.
+`format:check`, `lint`, `typecheck`, `build`, `test` and `git diff --check` all
+pass; `bun run test` reports **401 passed across 27 files**.
+
+**The seed goes through the one write path, like everything else.** A throwaway
+script constructed an approved `property_submissions` row plus confirmed
+`property_submission_fields` for each property and called `publishSubmission`;
+nothing touched `properties` or any child table directly. The script was deleted
+after running, so nothing about the seed is committed. The properties are left in
+the local database by the maintainer's decision — steps 5–7 cleaned up because
+they were testing, while this step is the convergence deliverable.
+
+**The set is chosen to exercise the surface, not to look full:**
+
+| Property                 | Type      | Possession         | Exercises                                    |
+| ------------------------ | --------- | ------------------ | -------------------------------------------- |
+| Riverstone Greens        | Apartment | Ready to move      | All three area bases, room dimensions, foyer |
+| Satyam Skyline           | Apartment | Under construction | Carpet-only variant, a duplex layout type    |
+| Aarambh Residency        | Apartment | Nearing possession | Deliberately sparse — no specs, one amenity  |
+| Vraj Bungalows           | Bungalow  | Ready to move      | Built-up + super built-up with **no** carpet |
+| Shivalik Plotting Scheme | Plot      | Under construction | **No unit variants at all**                  |
+
+**Verified against the real read layer**, not just rendered: every filter returns
+the expected count (`city=Ahmedabad` 3, `city=Gandhinagar` 2, `bhk=3bhk` 2,
+`propertyType=plot` 1, `possessionStatus=ready_to_move` 2,
+`amenity=clubhouse+gymnasium` 2 — confirming amenities narrow rather than widen);
+`findForbiddenKeys` reports zero forbidden keys across all five dossiers and the
+listing; a slug with no property still 404s. **The never-derive rule holds on
+real data**: Vraj Bungalows publishes built-up and super built-up and shows no
+carpet figure rather than computing one.
+
+**The recently-published strip promised in step 7 was built here**, since the
+condition it was waiting on — real content to design against — is now met. `/`
+therefore changes from `○ (Static)` to `ƒ (Dynamic)`, which partly supersedes the
+step 7 decision. It is not ISR: a route with no dynamic segment has no
+`generateStaticParams` escape hatch, so `revalidate` would prerender at build and
+require a live database during `next build`. **That was measured, not assumed** —
+building against an unreachable `DATABASE_URL` succeeds as written and fails with
+`revalidate = 3600`. The strip is omitted entirely when the catalog is empty
+rather than rendering an empty shelf, and is called "Recently published" rather
+than "featured", which would be an assessment nothing here supports.
+
+**A contract gap was found and recorded rather than worked around.** No property
+in the catalog can reach the `explicitly_not_offered` amenity state: the publish
+transaction marks every unlisted amenity `not_stated`, and the active field
+contract has only `property.amenities`, an array of keys that _are_ available.
+The "Not stated" / "Not offered" distinction is implemented, tested and correct
+on the render side; one of the two facts simply has no input path yet. That
+belongs to the phase that owns developer submission, and faking it with a seed
+script would fabricate a claim about a real developer.
+
+**Expected gaps, confirmed as correct rather than fixed:** no property shows an
+image (media delivery deferred out of 2B by a dated decision, and nothing can
+populate `property_media` this phase) and none shows the RERA verified badge
+(no code path sets `properties.rera_registered`; it waits on the GujRERA
+cross-check job). Both render through the standard absence vocabulary.
 
 ## Verification (every step)
 
-- [ ] `bun run format:check`
-- [ ] `bun run lint`
-- [ ] `bun run typecheck`
-- [ ] `bun run test`
-- [ ] `git diff --check`
+- [x] `bun run format:check`
+- [x] `bun run lint`
+- [x] `bun run typecheck`
+- [x] `bun run test`
+- [x] `git diff --check`
+
+Run at the end of every step, and again at the phase boundary. Final run:
+**401 passed across 27 files**, all five checks clean.
 
 ## Completion record
 
-Not started. Steps are checked off above as their branches merge; this section
-records the final outcome, date, and follow-up links when the phase closes.
+**Phase 2B is complete, 2026-09-07.** All ten steps (0–9) landed on
+`task/phase-2b` as one commit each.
+
+**What shipped.** A buyer surface of four screens over a typed read layer and
+two public read routes:
+
+| Route                                                     | Render                                     | Step |
+| --------------------------------------------------------- | ------------------------------------------ | ---- |
+| `/`                                                       | Dynamic (recent strip)                     | 7, 9 |
+| `/properties`                                             | Dynamic (reads searchParams)               | 5    |
+| `/properties/{slug}`                                      | SSG + ISR, revalidate 3600                 | 6    |
+| `/intake`                                                 | Dynamic                                    | 8    |
+| `GET /api/v1/properties`, `GET /api/v1/properties/{slug}` | Request-time, shared-cache `Cache-Control` | 3    |
+
+**Acceptance met.** Five properties published through the real
+`publishSubmission` transaction render correctly on every buyer page, with zero
+forbidden keys reported by the production leak guard and every filter returning
+its expected count. See step 9 above for the set and the numbers.
+
+**Deferred out of the phase, each with a dated decision:** media delivery for
+`property_media.gcsPath`; `PropScoreDial`; dark mode; a documented
+`--destructive` token value.
+
+**Carried into Phase 3 as known gaps:** `POST /api/v1/intake-sessions` and
+matching remain unbuilt, so intake captures answers in client state and hands
+off to browse rather than producing matches; no amenity can reach
+`explicitly_not_offered`, because the active field contract has no input for it;
+and `properties.rera_registered` is never set, so no verified badge appears
+until the GujRERA cross-check job exists.
+
+**The three habits that found the real defects**, all worth keeping: run the
+thing rather than reading it (the dossier table dump, the static `/intake`, the
+static `/` this step would have shipped); reproduce a flaky test rather than
+re-running it (the collation bug in step 7); and prove a guard by planting a
+violation and watching it fail (every guard this phase).
+
+**Follow-ups:** [roadmap Phase 3](../roadmap.md#phase-3--integration--core-buyer-flows),
+[decisions log](../../DECISIONS.md), [progress journal](../../PROGRESS.md).
