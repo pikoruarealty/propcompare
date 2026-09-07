@@ -1,5 +1,45 @@
 # Progress
 
+## 2026-09-07 — Schema v5 and OpenRouter OCR merged as a verified Phase 2A milestone
+
+**Done:** The schema-v5 brochure-field work and the OpenRouter Claude Sonnet 5
+OCR worker are ready to merge as a bounded Phase 2A milestone. The worker makes
+one physically trimmed native-PDF request per confirmed non-ignored scope,
+validates results against the active field contract, creates only reviewable
+submission fields/evidence, and never writes a live catalog row. A parsed JSON
+checkpoint is atomically written to the gitignored local checkpoint directory
+after every successful scope and again before evidence persistence. A
+persistence failure raises `OcrPersistenceError` with the already-paid parsed
+result, which `retryOcrExtractionPersistence` can persist without another
+provider call. Duplicate snippets mapping to the same field/page/value-path are
+merged before insertion.
+
+**Live verification:** An explicitly authorized Adani Amaris run completed
+through the real OpenRouter/Sonnet provider and the real local Postgres worker.
+Four trimmed excerpts (7.21 MB, 1.94 MB, 0.54 MB, and 1.80 MB) were sent instead
+of the 44.09 MB source PDF. OpenRouter reported 31,378 prompt tokens, 29,149
+completion tokens, 16,783 reasoning tokens, and **$0.354246** total cost. The
+transaction completed with 16 `needs_review` submission fields and 25 evidence
+rows. The smoke harness then deleted only its temporary submission/source/job
+rows; the local checkpoint remained available and is gitignored. No brochure
+PDF or raw OCR output was committed.
+
+**Verification:** The live run above proves the real provider-to-Postgres path;
+`bun run db:generate`, lint, typecheck, scoped formatting, and `git diff --check`
+pass on this handoff. The task's focused adapter and ingestion tests cover output
+mapping, malformed/length failures, incremental checkpointing,
+duplicate-evidence consolidation, and submission evidence persistence. A fresh
+full `db:migrate` and DB-backed test-suite rerun is currently blocked because
+Docker Desktop/local Postgres is offline (`ECONNREFUSED`); repository-wide
+`format:check` also reports pre-existing formatting drift outside this milestone.
+
+**Still open (Phase 2A):** Human field-level accuracy comparison for Adani
+Amaris and Kimana Towers; RERA fetch/cross-check; and the admin page-routing,
+submission queue, and reconciliation interfaces. This merge is a Phase 2A
+milestone, not Phase 2A completion.
+
+---
+
 ## 2026-09-02 — OpenRouter OCR adapter implemented; human brochure spot-check pending
 
 **Done:** Implemented the real Claude Sonnet 5 extraction adapter using

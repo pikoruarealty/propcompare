@@ -1,6 +1,7 @@
 # Tasklist — OCR provider integration (Claude Sonnet 5 via OpenRouter)
 
-**Status:** implementation complete; human spot-check pending
+**Status:** implementation and live persistence verification complete; human
+field-accuracy spot-check pending (carried into remaining Phase 2A work)
 **Owner:** Bhavarth
 **Branch:** `task/ocr-provider-integration`
 **Roadmap:** [Phase 2A](../roadmap.md#phase-2a--admin-ingestion--the-trust-boundary)
@@ -103,6 +104,14 @@ enter the repository (see Non-goals).
 - [x] `bun run test`
 - [x] `git diff --check`
 
+**Live verification note (2026-09-07):** With explicit user authorization, the
+Adani Amaris brochure was processed through four trimmed scopes against real
+OpenRouter Claude Sonnet 5 and local Postgres. The job completed with 16
+reviewable submission fields and 25 evidence rows. The adapter checkpointed
+each parsed scope locally before persistence and recorded $0.354246 total
+provider cost. The temporary smoke-test rows were removed afterward; no real
+brochure or raw result was committed.
+
 ## Acceptance criteria
 
 - `src/lib/ocr/adapter.ts` is a real, callable extraction adapter, not a
@@ -120,7 +129,8 @@ enter the repository (see Non-goals).
 - [x] Update `PROGRESS.md` with outcome, verification, and the next bounded
       task (likely the admin page-picker UI or the HTTP route wiring carried
       forward from the submission-publish-flow tasklist).
-- [ ] Complete this tasklist and retain it as project history.
+- [ ] Complete this tasklist and retain it as project history after the
+      carried human field-accuracy spot-check is recorded.
 
 ## Implemented request and failure contract
 
@@ -144,6 +154,12 @@ enter the repository (see Non-goals).
   Commercial fields/values cause a hard failure rather than being retained even
   there. A pre-existing submission field also causes persistence to fail rather
   than silently overwriting reviewed work.
+- Parsed results are atomically checkpointed to the gitignored
+  `OCR_CHECKPOINT_DIR` after every completed scope and before database
+  persistence. A persistence failure keeps the result available through
+  `OcrPersistenceError` / `retryOcrExtractionPersistence`, avoiding another
+  paid provider call.
 
 The only unchecked verification is the explicitly carried-over human comparison
-against the two real brochures. No paid provider call was made in this task.
+against the two real brochures. One explicitly authorized paid Adani Amaris
+verification run is recorded above; no raw provider result is tracked in Git.

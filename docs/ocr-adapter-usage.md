@@ -19,6 +19,8 @@ OPENROUTER_OCR_MODEL=anthropic/claude-sonnet-5
 OPENROUTER_OCR_MAX_COMPLETION_TOKENS=32000
 OPENROUTER_OCR_MAX_REASONING_TOKENS=2048
 OPENROUTER_OCR_REQUEST_TIMEOUT_MS=480000
+# Private, gitignored parsed-result checkpoints. Defaults to this path.
+OCR_CHECKPOINT_DIR=.local/ocr-checkpoints
 
 GCS_BUCKET=your-private-source-document-bucket
 GCS_PROJECT_ID=...
@@ -39,21 +41,40 @@ v1 routing manifest and the active pipeline/field-schema versions. Then call:
 
 ```ts
 import { createOpenRouterOcrAdapter } from "@/lib/ocr/adapter";
-import { executeOcrExtractionJob } from "@/lib/ocr/ingestion";
+import {
+  executeOcrExtractionJob,
+  OcrPersistenceError,
+  retryOcrExtractionPersistence,
+} from "@/lib/ocr/ingestion";
 import { createGcsSourcePdfLoader } from "@/lib/ocr/source-loader";
 
 const adapter = createOpenRouterOcrAdapter({
   loadSourcePdf: createGcsSourcePdfLoader(),
 });
 
-const result = await executeOcrExtractionJob({
-  jobId: queuedOcrJobId,
-  adapter,
-});
+let result;
+try {
+  result = await executeOcrExtractionJob({
+    jobId: queuedOcrJobId,
+    adapter,
+  });
+} catch (error) {
+  if (error instanceof OcrPersistenceError) {
+    // The provider result was successful and remains available. This retries
+    // only the transaction; it does not call OpenRouter again.
+    result = await retryOcrExtractionPersistence({
+      jobId: error.jobId,
+      result: error.result,
+    });
+  } else {
+    throw error;
+  }
+}
 
 // Show these to the reconciliation/admin workflow; they were deliberately
 // not inserted because they have no active canonical destination.
 console.info(result.unmappedRawEvidence);
+console.info(result.usage, result.checkpointPath);
 ```
 
 Call this only from a trusted server worker or future authenticated admin route.
@@ -67,6 +88,12 @@ their `property_submission_field_evidence`. Every inserted field starts as
 
 - Each non-ignored routing scope becomes a physically trimmed PDF excerpt and a
   separate request. A multi-page unit scope still returns exactly one variant.
+- After each parsed scope response, the adapter atomically updates a local
+  JSON checkpoint under `OCR_CHECKPOINT_DIR` (default
+  `.local/ocr-checkpoints`). The final provider-neutral result, scope request
+  IDs, input PDF sizes, tokens, and OpenRouter-reported cost are checkpointed
+  before the database transaction begins. These files are intentionally
+  gitignored and must be handled as private source-derived data.
 - Requests use `anthropic/claude-sonnet-5`, OpenRouter's `file-parser` plugin
   with `pdf.engine: "native"`, JSON-object response format, 32,000 maximum
   completion tokens, and 2,048 maximum reasoning tokens by default.
@@ -79,6 +106,10 @@ their `property_submission_field_evidence`. Every inserted field starts as
   terms are forbidden even in that collection.
 - `provider_job_id` stores the first OpenRouter scope request ID for operator
   lookup; all scope request IDs are returned as `result.providerRequestIds`.
+- If provider extraction succeeds but DB persistence fails, the thrown
+  `OcrPersistenceError` carries the parsed result in memory. Use
+  `retryOcrExtractionPersistence` as shown above; do not rerun OpenRouter for
+  that error. The checkpoint remains available for operator recovery.
 
 Tests use generated blank PDFs and recorded synthetic responses. Do not add a
 real brochure PDF or raw per-brochure provider response as a fixture. Obtain
