@@ -1,6 +1,6 @@
 # Implementation plan — Phase 2B buyer experience
 
-**Status:** step 7 complete (2026-09-07); step 8 (guided intake UI) is next. No open decision gates remain — both were resolved by deferral on 2026-09-07.
+**Status:** step 8 complete (2026-09-07); step 9 (convergence and documentation) is next, and closes the phase. No open decision gates remain — both were resolved by deferral on 2026-09-07.
 **Owner:** Deep (buyer UI), with Bhavarth owning the read contract in step 1
 **Branch:** `task/phase-2b` — one branch for the whole phase, merged into `main` at the phase boundary. Steps 0–2 originally took a branch each; those were collapsed into `task/phase-2b` on 2026-09-02 with no commits moved.
 **Roadmap:** [Phase 2B](../roadmap.md#phase-2b--buyer-ui-against-a-fixed-contract-parallel-with-2a)
@@ -600,14 +600,88 @@ by re-sorting in the application language.**
 
 ## Step 8 — Guided intake UI
 
-- [ ] Multi-step intake capturing persona priorities, desired BHK, city, and a
+**Status: complete 2026-09-07**
+
+- [x] Multi-step intake capturing persona priorities, desired BHK, city, and a
       stated budget range, held in client state only.
-- [ ] The budget range is presented as a stated preference, never as a price or
+      (`src/lib/properties/intake.ts`, `src/components/buyer/intake-flow.tsx`,
+      `src/components/buyer/intake-screen.tsx`, `src/app/intake/page.tsx`)
+- [x] The budget range is presented as a stated preference, never as a price or
       a bucket, and is not sent anywhere in this phase.
-- [ ] Back/forward navigation preserves answers; the flow is skippable per the
+      (`src/components/buyer/stated-range-slider.tsx`)
+- [x] Back/forward navigation preserves answers; the flow is skippable per the
       buyer flow's "intake is optional".
-- [ ] Tests: step navigation, state retention, and that no network call carries
+- [x] Tests: step navigation, state retention, and that no network call carries
       the budget range.
+
+**Acceptance — met:** `/intake` renders the four-question flow inside the shared
+shell and no longer 404s. `format:check`, `lint`, `typecheck`, `build`, and
+`git diff --check` pass; `bun run test` reports **396 passed across 27 files**
+(357 from step 7, plus 39 for this step). `next build` reports `/intake` as
+`ƒ (Dynamic)`, with the rest of the route table unchanged from step 7.
+
+**The priority vocabulary was agreed, not invented.** Nothing in this repo
+defined a "persona priority": the column is unshaped `jsonb`, the PRD says only
+"capture buyer priorities", and the sole concrete hint was a non-normative
+example comment in `schema.v1.md`. Six keys were agreed with the maintainer —
+`family_space`, `location`, `possession_speed`, `amenities`, `privacy`,
+`build_quality` — each carrying a `grounding` line naming the published facts it
+reads, shown to the buyer beside the option, capped at three choices. A priority
+the catalog cannot answer would be a question asked in bad faith, and a
+vocabulary guessed here would have become a second de-facto contract the moment
+Phase 3 built matching against it.
+
+**The first `"use client"` component in the buyer surface, and it deliberately
+does not copy browse.** Browse puts its filter set in the URL so a filtered view
+is a shareable address; intake keeps every answer in `useState` and puts none of
+it in the URL, in storage, or on a server. A query string reaches browser
+history, access logs, and the `Referer` header of every following request, which
+is as close as this application could come to publishing a monetary figure. The
+client boundary stays tight: the frame, heading, and standing copy render on the
+server, and only the flow ships to the browser.
+
+**Intake ends somewhere real without inventing a match.** Matching is Phase 3
+and `POST /api/v1/intake-sessions` remains an explicit non-goal, so the closing
+brief links to `/properties` carrying only city and configuration — the two
+answers that map to filters the read contract actually has. `handoffParams`
+names those two fields one at a time rather than spreading the answers object,
+and the summary states in words which filters the link carries and that the
+stated range is not among them.
+
+**The range control is a slider by the maintainer's explicit choice**, over
+typed figures and preset bands. The concern raised against it was answered in
+the control rather than overruled: five-lakh steps so no exact figure is
+implied, an open-ended top end ("₹5 crore or more"), a "You said …" readout, and
+no property figure ever shown against it. Preset bands were rejected on the
+record — a preset list of ranges is a bucket in all but name, and buckets are
+the private matching mechanism. Built from two overlaid native range inputs
+rather than Radix's `Slider`: each handle is then a real labelled control, and
+Radix's measures itself with `ResizeObserver`, which jsdom does not implement.
+
+**Client state is named to survive the production guard.** `no-price.ts` matches
+`/inr/i` and runs in production, so mirroring `budget_min_inr` / `budget_max_inr`
+would have forced a choice between weakening that guard and carrying an
+unusable shape. The state is `statedRange: { fromLakh, toLakh }`, with a test
+asserting the answers object passes `findForbiddenKeys`.
+
+**Both new guards were verified by planting a violation.** A `fetch` to
+`/api/v1/intake-sessions` on the summary step failed the no-network-call test;
+appending the range to the hand-off URL failed both the parameter-set and the
+unfiltered-catalog assertions. Both plants were reverted and the suite re-run.
+
+**A real bug was caught by reading the route table, not the code.** `next build`
+first reported `/intake` as `○ (Static)`: `listFilterOptions` is a Drizzle query
+rather than a `fetch`, so Next.js could not tell it was uncached and
+`dynamic: "auto"` rendered the page once at build — freezing the questions to
+build-day catalog contents while `/properties` stayed dynamic against the same
+query. Fixed with `export const dynamic = "force-dynamic"`. **A page whose only
+data dependency is an ORM call will prerender silently; check the route table
+against the previous step's every time.**
+
+**Not verified visually.** No browser automation is available in this
+environment, so the slider's overlay CSS was checked by confirming the compiled
+rules are present in the production stylesheet, not by dragging it. Worth a
+manual click-through before the phase merges.
 
 ## Step 9 — Convergence and documentation
 

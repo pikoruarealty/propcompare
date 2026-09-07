@@ -1,5 +1,97 @@
 # Progress
 
+## 2026-09-07 — Phase 2B step 8 complete: guided intake, and the dead link closed
+
+**Done:** `/intake` exists. Four optional questions — priorities, configuration,
+city, and the range the buyer is working with — then a brief that restates every
+answer and hands off to `/properties`. `src/lib/properties/intake.ts` holds the
+vocabulary and the URL arithmetic, `src/components/buyer/intake-flow.tsx` is the
+flow, `src/components/buyer/stated-range-slider.tsx` is the range control,
+`src/components/buyer/intake-screen.tsx` is the screen, and
+`src/app/intake/page.tsx` is the route. The `/intake` link the header has
+carried since step 4, and the landing page since step 7, no longer 404s.
+
+**"Persona priorities" had no definition anywhere in this repo, so one was
+agreed rather than invented.** `buyer_intake_sessions.persona_priorities` is
+unshaped `jsonb`; the PRD says "capture buyer priorities"; `buyer.md` says
+"choose persona priorities"; the only concrete hint was a non-normative example
+comment in `schema.v1.md`. Guessing here would have created a second de-facto
+contract the moment Phase 3 built matching against it. Six keys were agreed with
+the maintainer, each carrying a `grounding` line naming the published facts it
+reads, shown to the buyer beside the option. A priority the catalog cannot
+answer would be a question asked in bad faith.
+
+**This is the first `"use client"` component in the buyer surface, and it
+deliberately does not copy the browse screen.** Browse puts its whole filter set
+in the URL so a filtered view is a shareable address. Intake does the opposite:
+every answer lives in `useState` and none of it reaches the URL, storage, or a
+server. A query string lands in browser history, in access logs, and in the
+`Referer` header of every following request — which is as close as this
+application could come to publishing a monetary figure. The client boundary is
+drawn as tightly as it goes: the frame, the heading, and the standing copy all
+still render on the server.
+
+**Intake ends somewhere real without inventing a match.** Matching is Phase 3
+and `POST /api/v1/intake-sessions` is an explicit non-goal, so the brief links
+to `/properties` carrying only the two answers that map to filters the read
+contract actually has — city and configuration. `handoffParams` names those two
+fields one at a time rather than spreading the answers, so a future field cannot
+reach the URL by an inattentive edit, and the summary says in words which
+filters the link carries and that the stated range is not among them.
+
+**The range is a slider, by the maintainer's explicit choice**, over the two
+alternatives put to them. The concern raised against it — that a slider implies
+precise rupee figures on a site that publishes none — was answered in the
+control rather than overruled: it steps in five-lakh notches, its top end is
+open-ended ("₹5 crore or more") so it never puts a ceiling in the buyer's mouth,
+it reads back as "You said …", and nothing is ever shown as costing it. Preset
+bands were rejected on the record; a preset list of ranges is a bucket in all
+but name. It is built from two overlaid native range inputs rather than Radix's
+`Slider`, so each handle is a real labelled control — Radix's measures itself
+with `ResizeObserver`, which jsdom does not implement, and the one interactive
+control in this phase would have been the one its tests could not drive.
+
+**The client state is named to survive the production guard, not to dodge it.**
+`no-price.ts` matches `/inr/i` and runs in production. Mirroring the column
+names `budget_min_inr` / `budget_max_inr` in client state would trip it, leaving
+a choice between weakening the product's central structural guard and carrying a
+shape nothing could be handed. The state is `statedRange: { fromLakh, toLakh }`,
+and a test asserts the whole answers object passes `findForbiddenKeys`.
+
+**Both new guards were verified by planting a violation and watching them
+fail.** A `fetch("/api/v1/intake-sessions", …)` added to the summary step failed
+the "makes no network call at any point in the flow" test; appending the range
+to the hand-off URL failed both the parameter-set assertion and the
+unfiltered-catalog assertion. Both plants were reverted and the suite re-run.
+
+**A real bug was found by running the build, not by reading the code.**
+`next build` reported `/intake` as `○ (Static)`: `listFilterOptions` is a
+Drizzle query rather than a `fetch`, so Next.js could not tell it was uncached
+and `dynamic: "auto"` rendered the page once at build — freezing the questions
+to whatever was published on build day, while `/properties` stayed dynamic
+against the same query. Fixed with `export const dynamic = "force-dynamic"`;
+the route table now reports `ƒ /intake`. Found by checking the route table
+against the one recorded at step 7 rather than assuming a new page would behave.
+
+**Verified:** `bun run test` reports **396 passed across 27 files** (357 from
+step 7, plus 39 for this step); `format:check`, `lint`, `typecheck`, `build`,
+and `git diff --check` all pass. The route table is otherwise unchanged from
+step 7. Confirmed against the running production server: `/intake` returns
+`200` and server-renders the first question, the standing exit, and the
+"nothing is saved or sent" copy.
+
+**Not verified visually:** no browser automation is available in this
+environment, so the slider's overlay CSS — two transparent range inputs with
+`pointer-events` re-enabled on their thumbs — was checked by confirming the
+compiled rules are present in the production stylesheet
+(`::-webkit-slider-thumb`, `::-moz-range-thumb`, both `pointer-events` values),
+not by dragging it. Worth a manual click-through before the phase merges.
+
+**Known and expected:** the catalog is still empty, so the configuration and
+city questions render their "nothing is published yet" message rather than
+options. That path is covered by a test, the flow still completes through it,
+and step 9 is where real published properties arrive.
+
 ## 2026-09-07 — Phase 2B step 7 complete: the landing page, and the last of the scaffold
 
 **Done:** `/` is the buyer landing page
