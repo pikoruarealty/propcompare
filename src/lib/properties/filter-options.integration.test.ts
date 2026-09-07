@@ -143,9 +143,6 @@ afterAll(async () => {
   await db.delete(users).where(eq(users.id, testUserId));
 });
 
-const isSortedAscending = (values: string[]): boolean =>
-  values.every((value, index) => index === 0 || values[index - 1]! <= value);
-
 describe("listFilterOptions — locations", () => {
   it("offers every city that has a published property", () => {
     expect(options.cities).toContain(testCity);
@@ -166,8 +163,24 @@ describe("listFilterOptions — locations", () => {
   });
 
   it("orders options so the controls read predictably", () => {
-    expect(isSortedAscending(options.cities)).toBe(true);
-    expect(isSortedAscending(options.localities)).toBe(true);
+    // Asserted on this test's own two localities, which differ at their first
+    // letter and so order the same way under any collation.
+    //
+    // Deliberately NOT asserted by re-sorting the whole list in JavaScript.
+    // Postgres orders by the database collation — English_India.1252 on this
+    // checkout — which is case-insensitive, while JavaScript's comparison
+    // operators use code-point order. The two disagree as soon as values
+    // differ in case: Postgres puts "North a1b2" before "North Locality",
+    // JavaScript puts it after. An earlier version of this test compared the
+    // database's ordering against JavaScript's own and failed roughly half the
+    // time, depending on whether a random fixture suffix happened to start
+    // with a letter or a digit. The ordering was never wrong; the assertion
+    // was measuring it with the wrong ruler.
+    const north = options.localities.indexOf(northLocality);
+    const south = options.localities.indexOf(southLocality);
+
+    expect(north).toBeGreaterThanOrEqual(0);
+    expect(south).toBeGreaterThan(north);
   });
 });
 

@@ -1,5 +1,70 @@
 # Progress
 
+## 2026-09-07 — Phase 2B step 7 complete: the landing page, and the last of the scaffold
+
+**Done:** `/` is the buyer landing page
+(`src/components/buyer/landing-screen.tsx`, `src/app/page.tsx`): the
+proposition, two entry points into browse and guided intake, four principles
+describing how the catalog treats facts, a section on why no prices appear, and
+the real scope of what is covered. The `create-next-app` scaffold that had
+survived in `src/app/page.tsx` since Phase 0 is gone, along with the five
+unreferenced starter SVGs in `public/` — which were being served publicly from
+a property site.
+
+**The landing reads no data, deliberately.** A strip of recently published
+properties was the obvious alternative and would have reused `PropertyCard`
+against the existing `newest` ordering honestly. But nothing on this page varies
+by request, visitor, or catalog state, so the most-visited page in the product
+prerenders at build with no database dependency — consistent with the reasoning
+that kept build-time Postgres out of the dossier's ISR — and no "featured"
+ordering is invented that the catalog could not justify. Worth revisiting in
+step 9, when real published properties exist to design a content strip against
+rather than an empty table.
+
+**The page says only what the product can support.** Its four principles each
+restate a rule enforced elsewhere in this codebase rather than making a promise:
+areas are never converted between bases, facts are reviewed before publication,
+gaps are stated rather than filled, and RERA is a cross-check rather than a
+badge. Tests assert the page promises no shortlist, no saved properties, and no
+side-by-side comparison — all three are Phase 3, and a landing page advertising
+them would be describing a product that is not there.
+
+**The price stance gets a section rather than a footnote.** A buyer who cannot
+find a price will assume the data is broken unless told it is deliberate, and
+the footer's single line was not enough to carry that.
+
+**Calls to action come from `BUYER_NAV`.** The header has linked `/properties`
+and `/intake` since step 4; the landing destructures the same constant rather
+than restating the paths, with a test asserting the rendered hrefs match. Two
+hand-written copies of a route are the smallest version of the divergence
+problem this project exists to prevent.
+
+**Verified:** `bun run test` reports **357 passed across 23 files** (345 from
+step 6, plus 12 for this step); `format:check`, `lint`, `typecheck`, and `build`
+all pass, with `/` reported as `○ (Static)`. Confirmed against the running app:
+`/` and `/properties` return `200`, and `/next.svg` now correctly returns `404`.
+
+**Known and expected:** `/intake` returns `404` until step 8 lands. The header
+has carried that link since step 4, and nothing merges to `main` before the
+phase boundary.
+
+**A flaky test from step 5 was found and fixed.** The full suite failed once
+during this step's verification and passed on a re-run — a re-run is not an
+answer, so it was reproduced: `filter-options.integration.test.ts`'s ordering
+assertion failed in three of five isolated runs. The cause was in the test, not
+the code. It compared Postgres's ordering against JavaScript's own by
+re-sorting the list, but Postgres orders by the database collation —
+`English_India.1252` on this checkout, confirmed by querying `pg_database`
+rather than assumed — which is case-insensitive, while JavaScript's comparison
+operators use code-point order. The two disagree whenever values differ in
+case, so a random fixture suffix beginning with a letter (`"North a1b2"` versus
+`"North Locality"`) flipped the expected order. The assertion now checks the
+relative order of two localities that differ at their first letter, which is
+the same under any collation. Worth remembering more generally: a database's
+ordering must never be asserted by re-sorting in the application language.
+Confirmed with six consecutive clean runs of the integration files and three of
+the full suite.
+
 ## 2026-09-07 — Phase 2B step 6 complete: the property dossier, and both blocking gates closed
 
 **Done:** `/properties/{slug}` renders the full dossier

@@ -1,6 +1,6 @@
 # Implementation plan — Phase 2B buyer experience
 
-**Status:** step 6 complete (2026-09-07); step 7 (landing page) is next. No open decision gates remain — both were resolved by deferral on 2026-09-07.
+**Status:** step 7 complete (2026-09-07); step 8 (guided intake UI) is next. No open decision gates remain — both were resolved by deferral on 2026-09-07.
 **Owner:** Deep (buyer UI), with Bhavarth owning the read contract in step 1
 **Branch:** `task/phase-2b` — one branch for the whole phase, merged into `main` at the phase boundary. Steps 0–2 originally took a branch each; those were collapsed into `task/phase-2b` on 2026-09-02 with no commits moved.
 **Roadmap:** [Phase 2B](../roadmap.md#phase-2b--buyer-ui-against-a-fixed-contract-parallel-with-2a)
@@ -544,10 +544,59 @@ exclusion guard.
 
 ## Step 7 — Landing page
 
-- [ ] Decision-first landing composed from the shared components, with entry
+**Status: complete 2026-09-07**
+
+- [x] Decision-first landing composed from the shared components, with entry
       points into browse and guided intake.
-- [ ] Replace the remaining `create-next-app` scaffold in `src/app/page.tsx`.
-- [ ] Tests: renders, and its calls to action route correctly.
+      (`src/components/buyer/landing-screen.tsx`, `src/app/page.tsx`)
+- [x] Replace the remaining `create-next-app` scaffold in `src/app/page.tsx`.
+- [x] Tests: renders, and its calls to action route correctly.
+
+**Acceptance — met:** `/` renders the buyer landing inside the shared shell.
+`format:check`, `lint`, `typecheck`, and `build` pass; `bun run test` reports
+**357 passed across 23 files** (345 from step 6, plus 12 for this step).
+`next build` reports `/` as `○ (Static)`.
+
+**The landing reads no data, deliberately.** A strip of recently published
+properties was the obvious alternative and would have reused `PropertyCard`
+honestly, but nothing on this page varies by request, visitor, or catalog
+state — so the most-visited page in the product prerenders with no database
+dependency, and no "featured" ordering is invented that the catalog could not
+justify. Revisit the content strip in step 9, when real published properties
+exist to design it against rather than an empty table.
+
+**The page says only what the product can support.** Its four principles each
+restate a rule enforced elsewhere in the codebase — areas are never converted
+between bases, facts are reviewed before publication, gaps are stated rather
+than filled, and RERA is a cross-check rather than a badge. Tests assert it
+promises no shortlist, no saved properties, and no side-by-side comparison,
+since all three are Phase 3.
+
+**The price stance gets a section, not a footnote.** A buyer who cannot find a
+price will assume the data is broken unless told it is deliberate; the footer's
+single line was not enough to carry that.
+
+**Calls to action come from `BUYER_NAV`**, so the header and the landing page
+cannot drift apart, with a test asserting it. Note `/intake` returns `404`
+until step 8 — expected, the header has carried the same link since step 4, and
+nothing merges to `main` before the phase boundary.
+
+**Scaffold fully removed:** `src/app/page.tsx` no longer holds the
+`create-next-app` starter, and the five unreferenced starter SVGs
+(`next`, `vercel`, `globe`, `file`, `window`) were deleted from `public/`,
+where they were being served publicly from a property site.
+
+**A flaky step 5 test was found and fixed here.** The suite failed once during
+verification; rather than re-run and move on, it was reproduced — the ordering
+assertion in `filter-options.integration.test.ts` failed in three of five
+isolated runs. The test, not the code, was wrong: it checked Postgres's ordering
+by re-sorting the list in JavaScript, but Postgres orders by the database
+collation (`English_India.1252` here, confirmed by querying `pg_database`),
+which is case-insensitive, while JavaScript uses code-point order. A random
+fixture suffix starting with a letter flipped the expected order. It now
+asserts the relative order of two values that differ at their first letter,
+which holds under any collation. **A database's ordering must never be asserted
+by re-sorting in the application language.**
 
 ## Step 8 — Guided intake UI
 
