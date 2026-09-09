@@ -47,11 +47,16 @@ Phases 2A and 2B run in parallel once Phase 1 lands, so both developers are work
 
 ## Phase 2B — Buyer UI against a fixed contract (parallel with 2A)
 
-**Area of focus: Deep**, against a read API/query contract for published properties that Bhavarth defines up front so this can proceed against fixtures without waiting on 2A's writers.
+**Execution plan:** [2026-09-02 Phase 2B implementation plan](tasklists/2026-09-02-phase-2b-implementation-plan.md) — ten ordered steps, one branch each.
+
+**Area of focus: Deep**, against a read API/query contract for published properties that Bhavarth defines up front. That contract is step 1 of the execution plan and blocks all screen work.
 
 - Landing page, property dossier (detail) page, browse/listing grid, guided-intake flow UI (persona priorities, budget range capture) — all built to `docs/design/design-tokens.md`.
+- Since Phase 2A landed first, the read layer is now built as real Drizzle queries rather than fixtures alone, with fixtures kept as typed test doubles — see the 2026-09-02 entry in `DECISIONS.md`.
 
 **Acceptance (2A + 2B convergence):** a handful of real properties, approved through the actual publish transaction, render correctly on the buyer pages built against fixtures.
+
+**Status: complete 2026-09-07.** All ten steps landed on `task/phase-2b`. The buyer surface is `/` (landing, with a recently-published strip), `/properties` (browse and filters), `/properties/{slug}` (dossier, ISR), and `/intake` (guided intake), over a typed read layer and two public read routes. Acceptance was met by publishing five properties through `publishSubmission` — three possession statuses, three property types, single- and multi-basis areas, a plot with no unit variants, and one deliberately sparse record — and confirming every buyer page renders them against the real read layer with zero price leaks. Deferred out of the phase with dated decisions: media delivery, `PropScoreDial`, and dark mode. See the [implementation plan](tasklists/2026-09-02-phase-2b-implementation-plan.md) for the per-step record.
 
 ---
 

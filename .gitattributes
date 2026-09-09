@@ -1,0 +1,21 @@
+# Normalize line endings across platforms.
+#
+# Git already stores this repository's text content with LF. Without this file,
+# a Windows checkout (core.autocrlf=true) materializes CRLF in the working tree,
+# which makes `bun run format:check` fail on every file even when the content is
+# correctly formatted — Prettier's endOfLine default is "lf".
+#
+# `text=auto eol=lf` keeps stored content unchanged and makes every checkout LF,
+# so the same verification commands behave identically for both developers and
+# both AI agents regardless of platform.
+* text=auto eol=lf
+
+# Binary assets must never be line-ending converted.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.woff binary
+*.woff2 binary
