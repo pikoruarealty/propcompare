@@ -32,7 +32,9 @@ This also means the screen calls the HTTP route rather than the read layer, whic
 
 That cannot be implemented in this slice. The catalog's maximum price lives in `private.unit_price_history`, reachable only by the service-role connection; for the client to bound the request by it, the browser would have to be told a real price, which `assertNoExcludedData` fails in production. It has to be resolved server-side, inside the matcher that already holds that connection.
 
-**Requested of Bhavarth (not built here):** `POST /api/v1/discovery/matches` accepts an unbounded upper end — `maxInr` omitted, or an explicit `maxUnbounded: true` — and `matchPropertiesByBudgetRange` resolves it against the catalog's current maximum current price. The resolved figure is never returned in the response, so the existing no-leak guarantee is untouched. Until then, this slice sends the stated figure and the results header discloses the span actually searched, so the cap is visible rather than silent. The conversion is isolated in one function (`matchRequestBody`) specifically so the swap is a one-function change.
+**Requested of Bhavarth, and since delivered.** The request was: `POST /api/v1/discovery/matches` accepts an unbounded upper end — `maxInr` omitted, or an explicit `maxUnbounded: true` — with `matchPropertiesByBudgetRange` resolving it against the catalog's current maximum current price, the resolved figure never returned. That landed the same day (`938f907`, `DECISIONS.md` 2026-09-18), with `maxInr`/`maxUnbounded` mutually exclusive and one required, so an omitted bound is a `422` rather than a silently wide search.
+
+**Resolved.** The interim — sending the stated ₹5 crore and disclosing the resulting ceiling — is gone. `matchRequestBody` now sends `maxUnbounded: true` for a range left at the top of the scale, and the results header confirms there is no upper limit instead of apologising for one. The swap touched `matchRequestBody`, `isOpenEndedTop`, `describeSearchedSpan`, and one paragraph of copy, which is what isolating it was for.
 
 ## Implementation checklist
 
@@ -83,6 +85,6 @@ bunx prettier --check <authored files>
 
 Three `DECISIONS.md` entries recorded: results render inline in `/intake`; the screen calls the HTTP route rather than the read layer, and why that does not contradict 2026-09-07; and the open-top contract gap with its interim behaviour.
 
-**Open follow-up, owned by Bhavarth:** `POST /api/v1/discovery/matches` accepting an unbounded upper end, so the slider's "₹5 crore or more" is bounded by the catalog's highest published price rather than by the stated figure. Until then the UI discloses the ceiling it actually searched. Swapping in the real behaviour touches `matchRequestBody` and `isOpenEndedTop` only.
+**2026-09-18, later the same day — the open-top follow-up is closed.** Bhavarth's `maxUnbounded` contract landed (`938f907`), so the interim was removed rather than left to rot: the request now carries `maxUnbounded: true` for an open top end, the searched span reads "₹80 lakh and upwards" with no invented ceiling, and the disclosure confirms the absence of a limit instead of explaining one away. Three tests changed and three were added, including an end-to-end one through the real flow. Full suite after merging Bhavarth's backend: **564 passed across 41 files** — which required applying migration `0007` locally first, since the new auth-backed route tests fail against a database without `accounts.issuer`.
 
-**Blocked, not started:** the other three of Deep's Phase 3 UI slices — comparison, saved properties, the dossier-unlock OTP gate, and enquiry submission — all wait on routes that do not exist yet.
+**No longer blocked:** Deep's other Phase 3 UI slices — comparison, saved properties, the dossier-unlock OTP gate, and enquiry submission — now have routes to build against as of `7fd7789`. Each needs its own tasklist first, per `docs/tasklists/README.md`; none is started.
