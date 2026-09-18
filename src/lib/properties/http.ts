@@ -37,6 +37,7 @@ import {
 export type ApiErrorCode =
   | "unknown_query_parameter"
   | "invalid_query_parameter"
+  | "invalid_request_body"
   | "property_not_found"
   | "internal_error";
 
