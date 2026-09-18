@@ -1,5 +1,40 @@
 # Progress
 
+## 2026-09-18 — Continuation handoff: Phase 2A follow-ups deferred; start Phase 3
+
+**Repository state:** Local `main` was fast-forwarded to `origin/main` at
+`508291c` (the merged Phase 2B baseline). Do not recreate or re-merge Phase 2B.
+The five real local convergence properties, schema v5, migration `0006`, the
+buyer read surface, and the OpenRouter OCR foundation are already present.
+
+**Deferred, not done:** The remaining Phase 2A work is non-blocking for the
+next buyer-delivery phase but remains required before operating an OCR-driven
+admin ingestion workflow: (1) a human field-level accuracy review for Adani
+Amaris and Kimana Towers, (2) the GujRERA fetch/cross-check job, and (3) the
+admin page-routing, submission-queue, and reconciliation interfaces. The OCR
+tasklist retains these unchecked; no OCR result may skip review or the sole
+`property_submissions` publish transaction.
+
+**Next bounded task:** Start Phase 3 on a fresh
+`task/phase-3-budget-range-matching` branch. Read `AGENTS.md`, this entry,
+`DECISIONS.md`'s private-price and ±20% entries, and
+`docs/tasklists/2026-09-01-phase-3-budget-range-matching.md`. Update that old
+tasklist before code if the now-available Phase 2B API/UI integration changes
+its scope. The service-only matcher must query only current private price rows,
+apply inclusive `[min × 0.80, max × 1.20]`, and return only published
+property/unit identifiers—never exact prices, bounds, buckets, or derived
+commercial values. Keep the normal application connection unable to query
+`private`.
+
+**Local-worktree note:** `.claude/` is unrelated and untracked. The four local
+`drizzle/meta/0000`–`0003_snapshot.json` files became visible as untracked when
+the Phase 2B `.gitignore` changed; preserve them unless their owner explicitly
+asks to remove or add them. Before implementation, use
+`docs/local-database-setup.md` to confirm the native/Docker Postgres service is
+up, then run the tasklist's full migration, role-boundary, and test checks.
+
+---
+
 ## 2026-09-07 — Phase 2B integrated locally with the Phase 2A schema-v5 and OCR baseline
 
 **Done:** `origin/main` at `9b2726d` is merged locally into `task/phase-2b`; nothing was pushed and no pull request was created. The decision log preserves main's complete history under "Decisions taken by Bhavarth" and the Phase 2B decisions under "Decisions taken by Deep". This progress journal keeps every Phase 2B entry followed by main's complete prior history.
