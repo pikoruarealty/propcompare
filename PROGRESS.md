@@ -1,5 +1,22 @@
 # Progress
 
+## 2026-09-18 — Handoff to Deep: pull `task/phase-3-budget-range-matching`, backend is Bhavarth's for this phase
+
+**Branch to pull:** `task/phase-3-budget-range-matching`, already pushed to `origin`. Do not base new work on `origin/main` — it is 4 commits behind this branch (it's missing both the Phase 3 continuation handoff docs and everything below). This branch contains everything from the merged Phase 2B baseline (`508291c`) plus this phase's work so far; nothing has been merged to `main` yet, and per `AGENTS.md` nothing will be until the whole phase's tasklists and verification are complete.
+
+**What's ready to build UI against:** `POST /api/v1/discovery/matches` is implemented and tested — full request/response contract in `docs/api/api-spec.v1.md` (search for that route), implementation notes in `docs/tasklists/2026-09-18-discovery-matches-endpoint.md`. It takes `{ minInr, maxInr, city?, bhk?, page?, pageSize? }` in a POST body and returns the same `{ data, pagination }` shape as `GET /api/v1/properties` — no price, bound, or bucket ever in the response, and the request is not persisted anywhere.
+
+**Scope split for the rest of Phase 3, settled today (see `DECISIONS.md` 2026-09-18):** `roadmap.md` previously said Deep "wires the built UI to real endpoints... following the contracts Bhavarth defines" without ever saying who builds the four remaining routes (`saved-properties`, `comparisons`, `enquiries`, `dossier-unlocks`) — that gap is now closed. **All Phase 3 backend, including those four routes, is Bhavarth's.** Deep's Phase 3 scope is UI only:
+
+- Comparison feature, saved properties, dossier-unlock phone-OTP gate, enquiry submission screens, against the four routes above once they exist.
+- Pointing `/intake`'s handoff at `POST /api/v1/discovery/matches` instead of its current placeholder link to `/properties` (city + bhk only) — see the 2026-09-07 `DECISIONS.md` entry explaining why that placeholder exists; it was written explicitly to be replaced once matching shipped.
+
+**Not built yet, so don't build UI against them as if they exist:** `saved-properties`, `comparisons`, `enquiries`, `dossier-unlocks` — none of the four have a route, a schema decision beyond what's already in `docs/schema/schema.v5.md`, or a tasklist yet. If UI work depends on one of these before Bhavarth gets to it, that's a sequencing conversation to have directly rather than either side guessing at the missing contract.
+
+**Also not built, deferred, informational only:** the pre-login intake cookie flow (`docs/tasklists/2026-09-18-pre-login-intake-cookie.md`) — direction is agreed but nothing is implemented. If Deep's UI work touches the login/signup flow or intake's client state before that lands, read that tasklist first; it explains why raw budget figures are deliberately kept out of anything that persists or travels in a header today.
+
+**Before starting UI implementation:** per `docs/tasklists/README.md`, Deep's slice needs its own scoped tasklist in `docs/tasklists/` (linked to the relevant app-flow/design/API references) before code — none exists yet for this UI work.
+
 ## 2026-09-18 — `POST /api/v1/discovery/matches` implemented; migration tooling bug fixed
 
 **Done:** the HTTP route wiring the private budget-range matcher up to a buyer
