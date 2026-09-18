@@ -139,6 +139,19 @@ Context: the original whiteboard schema included total storeys/floors, units-per
 
 ---
 
+**2026-09-18 — Remaining Phase 2A OCR/admin follow-ups are deferred, not treated as completion gates for buyer-delivery Phase 3.**
+Context: schema v5, the review-gated OpenRouter OCR worker, and the complete
+Phase 2B buyer read surface are merged on `main`, while human OCR field-accuracy
+review, GujRERA cross-checking, and the admin routing/reconciliation interfaces
+remain unimplemented. Resolution: advance to Phase 3's service-only budget
+matcher without marking those items done. They stay explicitly open before an
+OCR-driven admin operation can be relied upon; in particular, no OCR output may
+bypass `property_submissions` review/publish or cause a RERA trust claim. Why:
+these are operational/trust improvements, not dependencies of the isolated
+private matcher or already-shipping buyer read path. Alternatives: label Phase
+2A complete or silently drop the work — rejected because either would conceal
+real verification and operational gaps.
+
 ## Decisions taken by Deep
 
 **2026-09-02 — Phase 2B builds the real Drizzle read layer now; fixtures are typed test doubles, not a parallel data path.**
