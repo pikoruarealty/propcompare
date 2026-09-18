@@ -1,6 +1,6 @@
 # API specification — v1
 
-**Status:** partly implemented. The two buyer read routes (`GET /api/v1/properties` and `GET /api/v1/properties/{slug}`) are implemented as of Phase 2B step 3 (2026-09-02), alongside the Better Auth catch-all route. `POST /api/v1/discovery/matches` is implemented as of Phase 3 (2026-09-18). Everything else below documents planned work, not an existing API; each route's own row states which it is.
+**Status:** mostly implemented. The two buyer read routes (`GET /api/v1/properties` and `GET /api/v1/properties/{slug}`) are implemented as of Phase 2B step 3 (2026-09-02). `POST /api/v1/discovery/matches`, `GET/POST/DELETE /api/v1/saved-properties`, `GET/POST /api/v1/comparisons`, `POST /api/v1/enquiries`, and `POST /api/v1/dossier-unlocks` are implemented as of Phase 3 (2026-09-18), alongside the Better Auth catch-all route. Only `POST /api/v1/intake-sessions` remains unbuilt this phase; its own row explains why.
 
 ## Contract rules
 
@@ -27,10 +27,10 @@ Authentication/session details are owned by Better Auth; product routes use its 
 | `GET /api/v1/properties/{slug}`              | Implemented (Phase 2B step 3)     | Public                 | Published dossier with units, areas, catalog amenities/specifications, media, and public RERA facts. Full contract below.                                                                                                                                  |
 | `POST /api/v1/intake-sessions`               | Planned                           | Anonymous or buyer     | Not built by Phase 3. Pre-login intake capture instead goes through a short-lived cookie, claimed into `buyer_intake_sessions` at login; see `DECISIONS.md` (2026-09-18) and `docs/tasklists/2026-09-18-pre-login-intake-cookie.md`.                       |
 | `POST /api/v1/discovery/matches`             | Implemented (Phase 3, 2026-09-18) | Buyer/anonymous intake | Stateless: the buyer's stated budget range travels in the request body only, nothing is persisted. Returns published property summaries whose current price falls in the inclusive ±20% range; never price, bounds, or bucket values. Full contract below. |
-| `GET, POST, DELETE /api/v1/saved-properties` | Planned (Phase 3)                 | Buyer                  | Lists, saves, or removes the buyer's saved properties.                                                                                                                                                                                                     |
-| `GET, POST /api/v1/comparisons`              | Planned (Phase 3)                 | Buyer                  | Creates/reads comparisons and ordered property/unit items.                                                                                                                                                                                                 |
-| `POST /api/v1/enquiries`                     | Planned (Phase 3)                 | Buyer                  | Creates an enquiry for a property and optional unit variant.                                                                                                                                                                                               |
-| `POST /api/v1/dossier-unlocks`               | Planned (Phase 3)                 | Buyer                  | Records a phone-OTP-verified dossier unlock.                                                                                                                                                                                                               |
+| `GET, POST, DELETE /api/v1/saved-properties` | Implemented (Phase 3, 2026-09-18) | Buyer                  | Lists, saves, or removes the buyer's saved properties. Full contract below.                                                                                                                                                                                |
+| `GET, POST /api/v1/comparisons`              | Implemented (Phase 3, 2026-09-18) | Buyer                  | Creates/reads comparisons and ordered property/unit items. Full contract below.                                                                                                                                                                            |
+| `POST /api/v1/enquiries`                     | Implemented (Phase 3, 2026-09-18) | Buyer                  | Creates an enquiry for a property and optional unit variant. Full contract below.                                                                                                                                                                          |
+| `POST /api/v1/dossier-unlocks`               | Implemented (Phase 3, 2026-09-18) | Buyer, phone-verified  | Records a phone-OTP-verified dossier unlock. Full contract below.                                                                                                                                                                                          |
 
 Property details may expose identifiers, property/developer facts, location, RERA fields, unit variants, per-basis areas, dimensions, controlled amenity/specification states, and media. They must not expose `unit_price_history`, price values, price-per-square-foot values, or unreviewed submission/provenance data.
 
@@ -186,28 +186,124 @@ An unknown body field, a non-numeric `minInr`/`maxInr`, a non-positive or non-fi
 
 This route is never cached (`Cache-Control: no-store`) — the buyer's stated range is per-request input, not a cacheable resource.
 
+### Buyer-account routes: session and caching
+
+The four routes below (`saved-properties`, `comparisons`, `enquiries`, `dossier-unlocks`) all require a session — `401` with `unauthenticated` when absent. The session is read with `auth.api.getSession({ headers, query: { disableCookieCache: true } })` (`src/lib/buyer/session.ts`), bypassing Better Auth's cookie-cache optimization so a revoked session cannot still authorize a write. Every query is scoped by the session's own `userId`, never a caller-supplied one — there is no way for one buyer to read or act on another's saved properties, comparisons, or enquiries. None of the four is ever cached (`Cache-Control: no-store`), since every response is scoped to the caller's identity. See `docs/tasklists/2026-09-18-buyer-account-routes.md`.
+
+### `GET, POST, DELETE /api/v1/saved-properties`
+
+A buyer's saved properties.
+
+**`GET`** — paginated, newest-saved first. Query parameters: `page` (default `1`) and `pageSize` (default `20`, max `50`), validated the same way as the listing route's own (`422` `invalid_query_parameter`/`unknown_query_parameter` on a bad or unrecognized one). Response `200`:
+
+```jsonc
+{
+  "data": [
+    {
+      "savedAt": "ISO-8601",
+      "property": {/* PropertySummary, see GET /api/v1/properties */},
+    },
+  ],
+  "pagination": { "page": 1, "pageSize": 20, "total": 0, "totalPages": 0 },
+}
+```
+
+**`POST`** — body `{ "propertyId": "uuid" }`. `404` `property_not_found` if the id doesn't resolve to a published property. Idempotent: saving an already-saved property returns the existing row's `savedAt` rather than refreshing it or erroring. Response `200`: one entry in the same shape as a `GET` row.
+
+**`DELETE`** — body `{ "propertyId": "uuid" }`. `404` `saved_property_not_found` if that property isn't currently saved by the caller — never a silent no-op, and never `403`, which would confirm whether some other buyer has it saved. Response `204`, no body.
+
+### `GET, POST /api/v1/comparisons`
+
+A buyer's comparisons and their ordered property/unit items. Creates and reads only — no `PATCH`/item-mutation route; a comparison is created once with its full item list.
+
+**`POST`** — body:
+
+```jsonc
+{ "items": [{ "propertyId": "uuid", "unitVariantId": "uuid" /* optional */ }, ...] }
+```
+
+`items` must be a non-empty array of at most 10 entries. `displayOrder` is assigned from array position. `404` `property_not_found` if any `propertyId` isn't published; `404` `unit_variant_not_found` if a given `unitVariantId` doesn't exist or doesn't belong to that entry's `propertyId`. Response `200`:
+
+```jsonc
+{
+  "id": "uuid",
+  "createdAt": "ISO-8601",
+  "items": [
+    {
+      "propertyId": "uuid",
+      "unitVariantId": "uuid" | null,
+      "displayOrder": 0,
+      "property": { /* PropertySummary */ }
+    }
+  ]
+}
+```
+
+**`GET`** — every comparison the caller owns, oldest first, each in the same shape as `POST`'s response. Response `200`: `{ "data": [...] }`. Not paginated — the api-spec deliberately keeps this unbounded rather than inventing a page size nothing has asked for; revisit if a buyer's comparison count ever makes that wrong.
+
+### `POST /api/v1/enquiries`
+
+Creates an enquiry for a property and an optional unit variant. Body:
+
+```jsonc
+{ "propertyId": "uuid", "unitVariantId": "uuid", "message": "string" } // unitVariantId and message optional
+```
+
+`404` `property_not_found` / `unit_variant_not_found` on the same terms as `comparisons`. Always created with `status: "new"` — the body cannot set status; only admin/developer review transitions it later, outside this route. Response `200`:
+
+```jsonc
+{
+  "id": "uuid",
+  "propertyId": "uuid",
+  "unitVariantId": "uuid" | null,
+  "status": "new" | "contacted" | "closed",
+  "message": "string" | null,
+  "createdAt": "ISO-8601"
+}
+```
+
+### `POST /api/v1/dossier-unlocks`
+
+Records a phone-OTP-verified dossier unlock. Does not itself perform OTP verification — Better Auth's `phoneNumber` plugin (`/api/auth/[...all]`) owns sending/verifying the code and setting the session's `phoneNumberVerified`; the client verifies via that flow first, then calls this route. Body:
+
+```jsonc
+{ "propertyId": "uuid" }
+```
+
+`403` `phone_not_verified` if the session's phone is not verified. `404` `property_not_found` if the id doesn't resolve to a published property. Idempotent on the existing `(user_id, property_id)` pairing: a repeat unlock call returns the original `otpVerifiedAt` rather than erroring or refreshing it. Response `200`:
+
+```jsonc
+{ "propertyId": "uuid", "otpVerifiedAt": "ISO-8601" }
+```
+
 ### Error codes
 
 All implemented buyer routes return the standard envelope, `{ "error": { "code": "...", "message": "..." } }`.
 
-| Status | `code`                    | Condition                                                                                                                           |
-| ------ | ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `404`  | `property_not_found`      | No `properties` row matches the given slug.                                                                                         |
-| `422`  | `unknown_query_parameter` | A query parameter the route does not define. `message` names it.                                                                    |
-| `422`  | `invalid_query_parameter` | A defined parameter whose value fails validation, or a non-repeatable parameter given twice. `message` names it.                    |
-| `422`  | `invalid_request_body`    | `POST /api/v1/discovery/matches` only: malformed JSON, an unknown body field, or a field that fails validation. `message` names it. |
-| `500`  | `internal_error`          | An unexpected server failure. `message` is deliberately generic; detail is logged server-side, never returned.                      |
+| Status | `code`                     | Condition                                                                                                                                      |
+| ------ | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `401`  | `unauthenticated`          | The buyer-account routes (`saved-properties`, `comparisons`, `enquiries`, `dossier-unlocks`) with no valid session.                            |
+| `403`  | `phone_not_verified`       | `POST /api/v1/dossier-unlocks` when the session's phone is not verified.                                                                       |
+| `404`  | `property_not_found`       | No `properties` row matches the given slug or id.                                                                                              |
+| `404`  | `unit_variant_not_found`   | A given `unitVariantId` doesn't exist, or doesn't belong to the given property (`comparisons`, `enquiries`).                                   |
+| `404`  | `saved_property_not_found` | `DELETE /api/v1/saved-properties` when the property isn't currently saved by the caller.                                                       |
+| `404`  | `comparison_not_found`     | Reserved for a future per-id comparison lookup; unused so far, since `GET /api/v1/comparisons` only ever lists the caller's own.               |
+| `422`  | `unknown_query_parameter`  | A query parameter the route does not define. `message` names it.                                                                               |
+| `422`  | `invalid_query_parameter`  | A defined parameter whose value fails validation, or a non-repeatable parameter given twice. `message` names it.                               |
+| `422`  | `invalid_request_body`     | Malformed JSON, an unknown body field, or a field that fails validation, on any route taking a JSON body. `message` names the offending field. |
+| `500`  | `internal_error`           | An unexpected server failure. `message` is deliberately generic; detail is logged server-side, never returned.                                 |
 
 ### Caching
 
-All three implemented routes are request-time handlers; none exports a Next.js route segment config, and none is prerendered. Cache policy is expressed as HTTP `Cache-Control` for a shared cache (CDN or reverse proxy) to honour — the directives are shared-cache only, with no browser `max-age`, so a buyer changing a filter is never served a response their own browser is holding. The matches route carries per-request buyer input in its body rather than the URL, so it is never cached at all, not even briefly.
+All implemented routes are request-time handlers; none exports a Next.js route segment config, and none is prerendered. Cache policy is expressed as HTTP `Cache-Control` for a shared cache (CDN or reverse proxy) to honour on the two public catalog routes — the directives are shared-cache only, with no browser `max-age`, so a buyer changing a filter is never served a response their own browser is holding. Every other route carries per-request or per-identity input, so none of them is ever cached at all, not even briefly.
 
-| Response                                    | `Cache-Control`                                     |
-| ------------------------------------------- | --------------------------------------------------- |
-| `200` from the listing route                | `public, s-maxage=60, stale-while-revalidate=300`   |
-| `200` from the dossier route                | `public, s-maxage=300, stale-while-revalidate=3600` |
-| `200` from `POST /api/v1/discovery/matches` | `no-store`                                          |
-| Any error response                          | `no-store`                                          |
+| Response                                        | `Cache-Control`                                     |
+| ----------------------------------------------- | --------------------------------------------------- |
+| `200` from the listing route                    | `public, s-maxage=60, stale-while-revalidate=300`   |
+| `200` from the dossier route                    | `public, s-maxage=300, stale-while-revalidate=3600` |
+| `200` from `POST /api/v1/discovery/matches`     | `no-store`                                          |
+| Any response from the four buyer-account routes | `no-store`                                          |
+| Any error response                              | `no-store`                                          |
 
 Errors are never cached so that a `404` cannot outlive the publish that resolves it. Page-level ISR for the buyer-facing property page is a separate decision, taken with that page rather than with this API. See the 2026-09-02 entry in `DECISIONS.md`.
 

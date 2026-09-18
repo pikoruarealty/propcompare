@@ -1,6 +1,6 @@
 {
-  "id": "051ea213-46ee-47ed-9f40-ba7939fc1caf",
-  "prevId": "3823eed7-a050-4ae9-ae80-515ebedd08f5",
+  "id": "263406f0-7a72-416b-a422-6393cfa0063d",
+  "prevId": "6cfce640-b919-412a-8471-8cc2d530fcc3",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -22,6 +22,12 @@
         },
         "provider_id": {
           "name": "provider_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "issuer": {
+          "name": "issuer",
           "type": "text",
           "primaryKey": false,
           "notNull": true
@@ -1196,6 +1202,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "profile_narrative": {
+          "name": "profile_narrative",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "logo_gcs_path": {
           "name": "logo_gcs_path",
           "type": "text",
@@ -1824,9 +1836,21 @@
           "primaryKey": false,
           "notNull": false
         },
+        "total_floors": {
+          "name": "total_floors",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
         "total_units": {
           "name": "total_units",
           "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "plot_area_sqft": {
+          "name": "plot_area_sqft",
+          "type": "numeric",
           "primaryKey": false,
           "notNull": false
         },
@@ -3809,6 +3833,12 @@
         },
         "total_units_of_variant": {
           "name": "total_units_of_variant",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "units_per_floor": {
+          "name": "units_per_floor",
           "type": "integer",
           "primaryKey": false,
           "notNull": false

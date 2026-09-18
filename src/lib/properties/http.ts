@@ -39,6 +39,11 @@ export type ApiErrorCode =
   | "invalid_query_parameter"
   | "invalid_request_body"
   | "property_not_found"
+  | "unit_variant_not_found"
+  | "saved_property_not_found"
+  | "comparison_not_found"
+  | "unauthenticated"
+  | "phone_not_verified"
   | "internal_error";
 
 export interface ApiErrorBody {

@@ -1,5 +1,62 @@
 # Progress
 
+## 2026-09-18 — Phase 3 backend complete: saved-properties, comparisons, enquiries, dossier-unlocks
+
+**Done:** the four remaining Phase 3 buyer routes
+(`docs/tasklists/2026-09-18-buyer-account-routes.md`), closing out all of
+Bhavarth's Phase 3 backend scope. `src/lib/buyer/` holds the query layer
+(`saved-properties.ts`, `comparisons.ts`, `enquiries.ts`,
+`dossier-unlocks.ts`, shared `types.ts`), `src/lib/buyer/http.ts` validates
+each route's body/query, and `src/lib/buyer/session.ts` is the first place in
+this codebase that reads a Better Auth session from a Route Handler
+(`auth.api.getSession({ headers, query: { disableCookieCache: true } })` —
+bypassing the cookie-cache optimization so a revoked session can't still
+authorize a write). All four routes live under `src/app/api/v1/`, require a
+session (`401 unauthenticated`), scope every query by the session's own
+`userId`, and are never cached. `dossier-unlocks` additionally gates on the
+session's `phoneNumberVerified` flag (`403 phone_not_verified`) rather than
+reimplementing OTP — Better Auth's existing `phoneNumber` plugin owns that.
+
+**Two pre-existing, unrelated bugs surfaced and fixed as a side effect of
+being the first code to read a session** (both recorded in `DECISIONS.md`
+2026-09-18): `accounts` was missing a column (`issuer`) the installed Better
+Auth version (1.7.2, "account identity is scoped by issuer") requires —
+every `getSession`/`signUpEmail` call was failing outright with
+`BetterAuthError: The field "issuer" does not exist`. Added
+`issuer text not null` via migration `0007` (safe with no default — the
+local `accounts` table had zero rows). Separately, `bun run db:generate`
+failed with a snapshot-collision error because `drizzle/meta/0004_snapshot.json`'s
+`prevId` pointed at the zero UUID instead of `0003`'s real id — a Phase 2B
+merge leftover, distinct from the `created_at`/migration-tracking bug fixed
+earlier today. Fixed with a one-line pointer correction; `db:generate` then
+produced exactly the expected one-column migration.
+
+**Tests use a real signed session, not a faked one.** New
+`src/lib/buyer/test-support.ts` signs a throwaway buyer up through Better
+Auth's own `auth.api.signUpEmail({ ..., asResponse: true })` and extracts the
+genuinely signed `Set-Cookie` value, so every route's integration tests
+exercise `requireBuyerSession` exactly as a real browser request would.
+29 new tests across `http.test.ts` and four `route.integration.test.ts`
+files cover: 401 with no session, ownership scoping (a second buyer never
+sees or acts on the first's rows), 404 on a nonexistent/mismatched
+property or unit variant, save/unlock idempotency, and the phone-verification
+gate. Full suite: **507 passed across 39 files**. `format:check` (on
+authored/touched files — the same repo-wide pre-existing drift noted in
+earlier entries applies), `lint`, and `typecheck` all pass.
+
+**Documentation:** `docs/api/api-spec.v1.md` now fully documents all four
+routes (request/response shapes, error cases), with the error-codes and
+caching tables extended accordingly. `docs/tasklists/2026-09-18-buyer-account-routes.md`
+has the full implementation record.
+
+**What's left in Phase 3:** all backend is now done. Remaining work is
+entirely Deep's UI wiring (comparison feature, saved properties, OTP
+dossier-unlock gate, enquiry submission, and pointing `/intake`'s handoff at
+`POST /api/v1/discovery/matches`) plus the still-deferred pre-login intake
+cookie flow (`docs/tasklists/2026-09-18-pre-login-intake-cookie.md`, agreed
+direction only, not implemented). `docs/roadmap.md`'s Phase 3 acceptance
+line stays open until that UI work lands.
+
 ## 2026-09-18 — Handoff to Deep: pull `task/phase-3-budget-range-matching`, backend is Bhavarth's for this phase
 
 **Branch to pull:** `task/phase-3-budget-range-matching`, already pushed to `origin`. Do not base new work on `origin/main` — it is 4 commits behind this branch (it's missing both the Phase 3 continuation handoff docs and everything below). This branch contains everything from the merged Phase 2B baseline (`508291c`) plus this phase's work so far; nothing has been merged to `main` yet, and per `AGENTS.md` nothing will be until the whole phase's tasklists and verification are complete.
