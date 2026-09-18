@@ -1,5 +1,49 @@
 # Progress
 
+## 2026-09-18 — Status audit: empty catalog, no ingestion/login UI; Phase 2A scope redefined to close the gap
+
+**What was found, not assumed:** a direct check of the local database showed
+every content table empty — zero `properties`, `developers`,
+`property_submissions`, `ocr_extraction_jobs`, `source_documents`. The five
+Phase 2B convergence properties were always script-created and never
+persisted; this session's Docker reset removed even that. More load-bearing:
+**no UI anywhere in this codebase can create a property.** The only path
+that has ever worked is a maintainer running a one-off script that calls
+`publishSubmission()` directly. Phase 2A's admin review/approval UI was
+deferred at the 2026-09-07 Phase 2B integration point; Phase 4's developer
+portal never started; and there is no login/signup screen anywhere, despite
+today's Phase 3 buyer-account routes all requiring a session.
+
+**Decision (user sign-off, recorded in full in `DECISIONS.md`):** rather
+than keep seeding the real catalog through throwaway scripts, finish the
+actual product path instead. The developer self-serve upload/review flow —
+originally Phase 4 — is pulled forward and merged into finishing Phase 2A,
+since the admin review step was always designed to be agnostic to whether
+an admin or a developer created the submission
+(`docs/app-flows/admin.md` step 9). "Finish Phase 2A" now means, in order:
+login/signup UI (buyer phone-OTP, staff email/password — both implemented
+in Better Auth, neither has a screen), the developer portal's
+upload → routing → OCR-draft-review → submit flow, the admin
+queue → reconciliation → approve → publish UI, and the never-started
+`rera_fetch_jobs` scrape/cross-check job. The one item staying explicitly
+deferred is the human field-level OCR accuracy spot-check on Adani Amaris
+and Kimana Towers (`docs/tasklists/2026-09-02-ocr-provider-integration.md`'s
+sole unchecked line) — it gets easier once the reconciliation UI exists, so
+it's left for after rather than blocking this work.
+
+**New tasklist:** `docs/tasklists/2026-09-18-phase-2a-completion.md` — the
+ordered implementation plan, with three open decisions flagged rather than
+guessed at: the brochure/media GCS storage strategy (already flagged
+expensive-to-reverse in the 2026-09-07 dossier-media-gate `DECISIONS.md`
+entry, and now actually blocking, since step 2 needs somewhere to put an
+uploaded file), the page-routing UI's interaction model, and the admin
+builder-profile creation/staff-invitation flow. `docs/roadmap.md`'s Phase
+2A and Phase 4 sections, and `docs/app-flows/admin.md`/`developer.md`'s
+status lines, are updated to match. Per the user's direction, once this
+tasklist completes, the remaining work (Deep's Phase 3 UI wiring, Phase 4's
+now-narrowed portfolio dashboard, Phase 5) continues in a new session
+against an updated tasklist.
+
 ## 2026-09-18 — `discovery/matches` supports an unbounded upper end (requested from Deep's side)
 
 **Done:** `POST /api/v1/discovery/matches` now accepts `maxUnbounded: true` in

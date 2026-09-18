@@ -1,6 +1,6 @@
 # Developer portal flow
 
-**Status:** planned for Phase 4. Do not implement this ahead of the admin review/publish boundary it depends on.
+**Status:** the submission-creating half of this flow (staff sign-in, portfolio link, brochure upload, page routing, OCR-draft review, submit/track) is pulled forward into finishing Phase 2A as of 2026-09-18 — see that dated `DECISIONS.md` entry and `docs/tasklists/2026-09-18-phase-2a-completion.md`. It still depends on the admin review/publish boundary this file's own permissions section describes, which is being built in the same push. The portfolio/analytics dashboard (step 4's "review portfolio completeness/interest analytics") remains Phase 4, narrowed — see `docs/roadmap.md`.
 
 ## Purpose
 
