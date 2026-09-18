@@ -46,3 +46,5 @@ The HTTP route that wires the already-built private budget-range matcher up to a
 ## Completion record
 
 **2026-09-18 — Done.** Implemented `src/lib/matching/discovery.ts`, `src/lib/matching/http.ts`, and `src/app/api/v1/discovery/matches/route.ts`, plus 29 new tests across three files. Full suite: 455/455 passing; format, lint, typecheck all clean. Follow-ups tracked separately: UI wiring of `/intake` to this route, and the pre-login intake cookie flow (`docs/tasklists/2026-09-18-pre-login-intake-cookie.md`).
+
+**2026-09-18 — Extension: unbounded upper end.** Requested from Deep's side while building the intake UI. `minInr`/`maxInr` becomes a discriminated union with `{ minInr, maxUnbounded: true }`; the private matcher resolves the ceiling against the catalog's current maximum current price in a single in-database subquery, never as a JS value — see the dedicated `DECISIONS.md` entry for the full shape and why. 15 new tests across `budget-range.test.ts`, `budget-range.integration.test.ts`, `discovery.integration.test.ts`, `http.test.ts`, and `route.integration.test.ts`. `docs/api/api-spec.v1.md`'s request-body section updated. Full suite: 522/522 passing.

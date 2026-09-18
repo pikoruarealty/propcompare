@@ -26,12 +26,26 @@ import { unitPriceHistory } from "@/db/schema/private";
 
 export type ServiceDb = PostgresJsDatabase<Record<string, never>>;
 
-export interface BudgetRangeMatchParams {
-  /** The buyer's stated lower bound, in whole INR. Must be positive. */
-  minInr: number;
-  /** The buyer's stated upper bound, in whole INR. Must be positive and >= minInr. */
-  maxInr: number;
-}
+/**
+ * `maxInr` is the buyer's stated upper bound. `maxUnbounded: true` instead
+ * requests "no upper limit" — resolved, inside Postgres, against the
+ * catalog's current maximum *current* price (2026-09-18 DECISIONS.md entry).
+ * That resolved figure is a derived commercial value like any bound or
+ * bucket: it is used only inside the `WHERE` clause below and is never
+ * selected, returned, or logged — the caller cannot get it back even by
+ * accident, because this function never has it as a JS value to leak.
+ */
+export type BudgetRangeMatchParams =
+  | {
+      /** The buyer's stated lower bound, in whole INR. Must be positive. */
+      minInr: number;
+      /** The buyer's stated upper bound, in whole INR. Must be positive and >= minInr. */
+      maxInr: number;
+    }
+  | {
+      minInr: number;
+      maxUnbounded: true;
+    };
 
 export interface BudgetRangeMatch {
   propertyId: string;
@@ -46,28 +60,35 @@ export class InvalidBudgetRangeError extends Error {
 }
 
 const assertValidRange = (params: BudgetRangeMatchParams): void => {
-  const { minInr, maxInr } = params;
-  if (
-    !Number.isFinite(minInr) ||
-    !Number.isFinite(maxInr) ||
-    minInr <= 0 ||
-    maxInr <= 0
-  ) {
+  const { minInr } = params;
+  if (!Number.isFinite(minInr) || minInr <= 0) {
     throw new InvalidBudgetRangeError(
-      "minInr and maxInr must be finite positive numbers",
+      "minInr must be a finite positive number",
     );
   }
-  if (minInr > maxInr) {
-    throw new InvalidBudgetRangeError("minInr must be <= maxInr");
+  if ("maxInr" in params) {
+    const { maxInr } = params;
+    if (!Number.isFinite(maxInr) || maxInr <= 0) {
+      throw new InvalidBudgetRangeError(
+        "maxInr must be a finite positive number",
+      );
+    }
+    if (minInr > maxInr) {
+      throw new InvalidBudgetRangeError("minInr must be <= maxInr");
+    }
   }
 };
 
 /**
  * Matches published unit variants whose *current* price (the
  * `unit_price_history` row with no `effective_to`) falls inside the
- * inclusive range `[minInr * 0.80, maxInr * 1.20]`. The multiplication is
- * done in Postgres against the `numeric` column, not in JavaScript, so the
- * boundary comparison never crosses a floating-point value.
+ * inclusive range `[minInr * 0.80, upperBound]`, where `upperBound` is
+ * `maxInr * 1.20` for a stated max, or the catalog's current maximum current
+ * price for `maxUnbounded`. Both the multiplication and the `maxUnbounded`
+ * resolution happen in Postgres against the `numeric` column, not in
+ * JavaScript, so the boundary comparison never crosses a floating-point
+ * value and the resolved figure never exists as a value this function could
+ * return.
  *
  * A property is published by virtue of having a `properties` row — see the
  * note on that in `src/lib/properties/queries.ts` — so no separate status
@@ -79,6 +100,15 @@ export const matchPropertiesByBudgetRange = async (
   params: BudgetRangeMatchParams,
 ): Promise<BudgetRangeMatch[]> => {
   assertValidRange(params);
+
+  const upperBound =
+    "maxInr" in params
+      ? sql`${unitPriceHistory.priceInr} <= (${params.maxInr}::numeric * 1.20)`
+      : sql`${unitPriceHistory.priceInr} <= (
+          select max(${unitPriceHistory.priceInr})
+          from ${unitPriceHistory}
+          where ${unitPriceHistory.effectiveTo} is null
+        )`;
 
   const rows = await db
     .selectDistinct({
@@ -94,7 +124,7 @@ export const matchPropertiesByBudgetRange = async (
       and(
         isNull(unitPriceHistory.effectiveTo),
         sql`${unitPriceHistory.priceInr} >= (${params.minInr}::numeric * 0.80)`,
-        sql`${unitPriceHistory.priceInr} <= (${params.maxInr}::numeric * 1.20)`,
+        upperBound,
       ),
     );
 
