@@ -10,7 +10,11 @@ import type {
   PropertyListResult,
   PropertySummary,
 } from "@/lib/properties/types";
-import { matchPropertiesByBudgetRange, type ServiceDb } from "./budget-range";
+import {
+  matchPropertiesByBudgetRange,
+  type BudgetRangeMatchParams,
+  type ServiceDb,
+} from "./budget-range";
 
 /**
  * The discovery/comparison side of Phase 3
@@ -27,14 +31,18 @@ import { matchPropertiesByBudgetRange, type ServiceDb } from "./budget-range";
  * used only internally here is not part of that contract.
  */
 
-export interface DiscoveryMatchParams {
-  minInr: number;
-  maxInr: number;
+/**
+ * `maxInr` (a stated upper bound) and `maxUnbounded: true` ("no upper
+ * limit", resolved server-side against the catalog's current maximum current
+ * price — 2026-09-18 DECISIONS.md entry) are mutually exclusive, mirroring
+ * `BudgetRangeMatchParams`.
+ */
+export type DiscoveryMatchParams = {
   city?: string;
   bhk?: string;
   page: number;
   pageSize: number;
-}
+} & BudgetRangeMatchParams;
 
 const emptyResult = (page: number, pageSize: number): PropertyListResult => ({
   data: [],
@@ -53,10 +61,11 @@ export const matchPublishedProperties = async (
   serviceDb: ServiceDb,
   params: DiscoveryMatchParams,
 ): Promise<PropertyListResult> => {
-  const matches = await matchPropertiesByBudgetRange(serviceDb, {
-    minInr: params.minInr,
-    maxInr: params.maxInr,
-  });
+  const rangeParams: BudgetRangeMatchParams =
+    "maxInr" in params
+      ? { minInr: params.minInr, maxInr: params.maxInr }
+      : { minInr: params.minInr, maxUnbounded: true };
+  const matches = await matchPropertiesByBudgetRange(serviceDb, rangeParams);
 
   const matchedPropertyIds = [...new Set(matches.map((m) => m.propertyId))];
   if (matchedPropertyIds.length === 0) {

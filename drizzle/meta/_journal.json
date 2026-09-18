@@ -50,6 +50,13 @@
       "when": 1788783021381,
       "tag": "0006_grant-app-ocr-tables",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1789731190715,
+      "tag": "0007_small_gamma_corps",
+      "breakpoints": true
     }
   ]
 }

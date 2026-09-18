@@ -180,6 +180,65 @@ export const loadPrimaryMediaByProperty = async (
   return byProperty;
 };
 
+/**
+ * Published `PropertySummary` rows for an arbitrary set of property ids,
+ * keyed by id rather than ordered — callers with their own ordering (a saved
+ * list by `savedAt`, a comparison by `displayOrder`) map over their own id
+ * list and look each one up here, rather than this function guessing an
+ * order. Ids with no matching published property are simply absent from the
+ * map, never a thrown error — the caller decides whether that's a 404.
+ */
+export const loadPropertySummariesByIds = async (
+  db: ReadDb,
+  propertyIds: string[],
+): Promise<Map<string, PropertySummary>> => {
+  const map = new Map<string, PropertySummary>();
+  if (propertyIds.length === 0) return map;
+
+  const rows = await db
+    .select({
+      id: properties.id,
+      slug: properties.slug,
+      name: properties.name,
+      city: properties.city,
+      locality: properties.locality,
+      possessionStatus: properties.possessionStatus,
+      possessionDate: properties.possessionDate,
+      reraRegistered: properties.reraRegistered,
+      propertyTypeKey: propertyTypes.key,
+      propertyTypeLabel: propertyTypes.label,
+      developerId: developers.id,
+      developerName: developers.name,
+    })
+    .from(properties)
+    .innerJoin(propertyTypes, eq(propertyTypes.id, properties.propertyTypeId))
+    .innerJoin(developers, eq(developers.id, properties.developerId))
+    .where(inArray(properties.id, propertyIds));
+
+  const [bhkByProperty, primaryMediaByProperty] = await Promise.all([
+    loadBhkTypesByProperty(db, propertyIds),
+    loadPrimaryMediaByProperty(db, propertyIds),
+  ]);
+
+  for (const row of rows) {
+    map.set(row.id, {
+      id: row.id,
+      slug: row.slug,
+      name: row.name,
+      propertyType: { key: row.propertyTypeKey, label: row.propertyTypeLabel },
+      developer: { id: row.developerId, name: row.developerName },
+      city: row.city,
+      locality: row.locality,
+      possessionStatus: row.possessionStatus ?? null,
+      possessionDate: row.possessionDate ?? null,
+      reraRegistered: row.reraRegistered,
+      bhkTypes: bhkByProperty.get(row.id) ?? [],
+      primaryMedia: primaryMediaByProperty.get(row.id) ?? null,
+    });
+  }
+  return map;
+};
+
 /** `GET /api/v1/properties` — paginated published-property summaries. */
 export const listPublishedProperties = async (
   db: ReadDb,

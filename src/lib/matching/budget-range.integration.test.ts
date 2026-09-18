@@ -189,3 +189,54 @@ describe("matchPropertiesByBudgetRange", () => {
     ).rejects.toThrow();
   });
 });
+
+describe("matchPropertiesByBudgetRange — maxUnbounded", () => {
+  it("includes a unit priced far above any stated max, as long as it's within the catalog's current max", async () => {
+    // The anchor raises the catalog's current max to at least ₹5 crore; the
+    // target sits below the anchor but far above what any bounded [min*0.80,
+    // max*1.20] search in this suite would reach, proving the resolved
+    // ceiling tracks live data rather than a hardcoded stand-in.
+    const anchor = await publishVariantWithPrice(
+      "Unbounded anchor unit",
+      "500000000",
+    );
+    const target = await publishVariantWithPrice(
+      "Unbounded target unit",
+      "450000000",
+    );
+    const matches = await matchPropertiesByBudgetRange(serviceDb, {
+      minInr: 30_000_000,
+      maxUnbounded: true,
+    });
+    expect(matches).toContainEqual(target);
+    expect(matches).toContainEqual(anchor);
+  });
+
+  it("still enforces the inclusive lower bound", async () => {
+    const { propertyId, unitVariantId } = await publishVariantWithPrice(
+      "Unbounded below-lower-bound unit",
+      "1000000",
+    );
+    const matches = await matchPropertiesByBudgetRange(serviceDb, {
+      minInr: 30_000_000,
+      maxUnbounded: true,
+    });
+    expect(matches).not.toContainEqual({ propertyId, unitVariantId });
+  });
+
+  it("returns only identifiers, never the resolved ceiling or any price data", async () => {
+    await publishVariantWithPrice("Unbounded shape-check unit", "60000000");
+    const matches = await matchPropertiesByBudgetRange(serviceDb, {
+      minInr: 30_000_000,
+      maxUnbounded: true,
+    });
+    expect(matches.length).toBeGreaterThan(0);
+    expect(findForbiddenKeys(matches)).toEqual([]);
+    for (const match of matches) {
+      expect(Object.keys(match).sort()).toEqual([
+        "propertyId",
+        "unitVariantId",
+      ]);
+    }
+  });
+});
