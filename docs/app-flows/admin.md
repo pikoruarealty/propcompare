@@ -1,6 +1,6 @@
 # Admin and verification portal flow
 
-**Status:** planned for Phase 2A.
+**Status:** planned for Phase 2A. Being built alongside the developer portal's submission-creating half (2026-09-18 `DECISIONS.md` entry, `docs/tasklists/2026-09-18-phase-2a-completion.md`), so the "Future builder self-serve journey" section below is no longer future — it is in scope now, concurrently with this file's own admin-side flow.
 
 ## Purpose
 
