@@ -64,6 +64,8 @@ Phases 2A and 2B run in parallel once Phase 1 lands, so both developers are work
 
 **Area of focus: Bhavarth** — the discovery/comparison budget-range matching service (the only code path with a service-role connection into `private`), implementing the documented inclusive ±20% range without returning price data. See [its tasklist](tasklists/2026-09-01-phase-3-budget-range-matching.md).
 
+**Status (Bhavarth's piece): complete 2026-09-18.** `src/lib/matching/budget-range.ts` and the `propcompare_service`-only connection in `src/db/service.ts` implement the inclusive `[min × 0.80, max × 1.20]` matcher against `private.unit_price_history`, returning only `{ propertyId, unitVariantId }`. Boundary and role-denial behavior is verified by database-backed tests; see `PROGRESS.md`'s 2026-09-18 entry. The HTTP endpoint that wires this into `POST /api/v1/discovery/matches` is still open — this phase's tasklist covered only the matching service itself.
+
 **Area of focus: Deep** — wire the built UI to real endpoints: comparison feature, saved properties, dossier-unlock phone-OTP gate, enquiry submission, following the contracts Bhavarth defines.
 
 **Acceptance:** a buyer can browse, get intake-matched results from the inclusive ±20% private budget-range matcher (no price ever rendered), compare, save, unlock a dossier via OTP, and submit an enquiry — end to end on real data.
