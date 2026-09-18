@@ -1,6 +1,6 @@
 # API specification — v1
 
-**Status:** partly implemented. The two buyer read routes (`GET /api/v1/properties` and `GET /api/v1/properties/{slug}`) are implemented as of Phase 2B step 3 (2026-09-02), alongside the Better Auth catch-all route. Everything else below documents planned work, not an existing API; each route's own row states which it is.
+**Status:** partly implemented. The two buyer read routes (`GET /api/v1/properties` and `GET /api/v1/properties/{slug}`) are implemented as of Phase 2B step 3 (2026-09-02), alongside the Better Auth catch-all route. `POST /api/v1/discovery/matches` is implemented as of Phase 3 (2026-09-18). Everything else below documents planned work, not an existing API; each route's own row states which it is.
 
 ## Contract rules
 
@@ -21,16 +21,16 @@ Authentication/session details are owned by Better Auth; product routes use its 
 
 ## Buyer API
 
-| Method and route                             | Status                        | Access                 | Contract                                                                                                                  |
-| -------------------------------------------- | ----------------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `GET /api/v1/properties`                     | Implemented (Phase 2B step 3) | Public                 | Paginated published-property summaries and supported filters; never exact prices. Full contract below.                    |
-| `GET /api/v1/properties/{slug}`              | Implemented (Phase 2B step 3) | Public                 | Published dossier with units, areas, catalog amenities/specifications, media, and public RERA facts. Full contract below. |
-| `POST /api/v1/intake-sessions`               | Planned (Phase 3)             | Anonymous or buyer     | Stores priorities, desired BHK, stated budget range, and city.                                                            |
-| `POST /api/v1/discovery/matches`             | Planned (Phase 3)             | Buyer/anonymous intake | Returns property and unit-variant IDs matched by bucket; never price or bucket boundaries.                                |
-| `GET, POST, DELETE /api/v1/saved-properties` | Planned (Phase 3)             | Buyer                  | Lists, saves, or removes the buyer's saved properties.                                                                    |
-| `GET, POST /api/v1/comparisons`              | Planned (Phase 3)             | Buyer                  | Creates/reads comparisons and ordered property/unit items.                                                                |
-| `POST /api/v1/enquiries`                     | Planned (Phase 3)             | Buyer                  | Creates an enquiry for a property and optional unit variant.                                                              |
-| `POST /api/v1/dossier-unlocks`               | Planned (Phase 3)             | Buyer                  | Records a phone-OTP-verified dossier unlock.                                                                              |
+| Method and route                             | Status                            | Access                 | Contract                                                                                                                                                                                                                                                   |
+| -------------------------------------------- | --------------------------------- | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/v1/properties`                     | Implemented (Phase 2B step 3)     | Public                 | Paginated published-property summaries and supported filters; never exact prices. Full contract below.                                                                                                                                                     |
+| `GET /api/v1/properties/{slug}`              | Implemented (Phase 2B step 3)     | Public                 | Published dossier with units, areas, catalog amenities/specifications, media, and public RERA facts. Full contract below.                                                                                                                                  |
+| `POST /api/v1/intake-sessions`               | Planned                           | Anonymous or buyer     | Not built by Phase 3. Pre-login intake capture instead goes through a short-lived cookie, claimed into `buyer_intake_sessions` at login; see `DECISIONS.md` (2026-09-18) and `docs/tasklists/2026-09-18-pre-login-intake-cookie.md`.                       |
+| `POST /api/v1/discovery/matches`             | Implemented (Phase 3, 2026-09-18) | Buyer/anonymous intake | Stateless: the buyer's stated budget range travels in the request body only, nothing is persisted. Returns published property summaries whose current price falls in the inclusive ±20% range; never price, bounds, or bucket values. Full contract below. |
+| `GET, POST, DELETE /api/v1/saved-properties` | Planned (Phase 3)                 | Buyer                  | Lists, saves, or removes the buyer's saved properties.                                                                                                                                                                                                     |
+| `GET, POST /api/v1/comparisons`              | Planned (Phase 3)                 | Buyer                  | Creates/reads comparisons and ordered property/unit items.                                                                                                                                                                                                 |
+| `POST /api/v1/enquiries`                     | Planned (Phase 3)                 | Buyer                  | Creates an enquiry for a property and optional unit variant.                                                                                                                                                                                               |
+| `POST /api/v1/dossier-unlocks`               | Planned (Phase 3)                 | Buyer                  | Records a phone-OTP-verified dossier unlock.                                                                                                                                                                                                               |
 
 Property details may expose identifiers, property/developer facts, location, RERA fields, unit variants, per-basis areas, dimensions, controlled amenity/specification states, and media. They must not expose `unit_price_history`, price values, price-per-square-foot values, or unreviewed submission/provenance data.
 
@@ -163,26 +163,51 @@ A property with no media, no RERA registration, or unit variants missing one or 
 
 The slug route takes no query parameters; any it receives are ignored rather than rejected. The `422` contract belongs to the listing route alone.
 
+### `POST /api/v1/discovery/matches`
+
+Published property summaries whose current unit price falls in the buyer's inclusive `[minInr × 0.80, maxInr × 1.20]` range — the ±20% expansion decided 2026-09-01 — optionally narrowed by `city` and `bhk`, the two filters guided intake collects today. Stateless: nothing about the request is persisted anywhere (2026-09-18 `DECISIONS.md` entry). See `docs/tasklists/2026-09-18-discovery-matches-endpoint.md`.
+
+**Request body:**
+
+```jsonc
+{
+  "minInr": 3000000, // required, finite positive number
+  "maxInr": 4000000, // required, finite positive number, >= minInr
+  "city": "string", // optional, non-empty
+  "bhk": "2bhk", // optional, non-empty, a bhk_types.key
+  "page": 1, // optional, default 1
+  "pageSize": 20, // optional, default 20, max 50
+}
+```
+
+An unknown body field, a non-numeric `minInr`/`maxInr`, a non-positive or non-finite value, `minInr > maxInr`, an empty `city`/`bhk`, or an out-of-range `page`/`pageSize` all return `422` with `invalid_request_body` and a message naming the offending field. Malformed JSON also returns `422` with the same code.
+
+**Response `200`:** the same `{ "data": [...], "pagination": {...} }` shape as `GET /api/v1/properties` (see above) — a `PropertySummary` array. No price, bound, or bucket value appears at any nesting level. When no published unit falls in range, `data` is an honest empty array with `total: 0` rather than a fabricated result (`docs/app-flows/buyer.md`'s "No matching inventory" exception path).
+
+This route is never cached (`Cache-Control: no-store`) — the buyer's stated range is per-request input, not a cacheable resource.
+
 ### Error codes
 
-Both buyer routes return the standard envelope, `{ "error": { "code": "...", "message": "..." } }`.
+All implemented buyer routes return the standard envelope, `{ "error": { "code": "...", "message": "..." } }`.
 
-| Status | `code`                    | Condition                                                                                                        |
-| ------ | ------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `404`  | `property_not_found`      | No `properties` row matches the given slug.                                                                      |
-| `422`  | `unknown_query_parameter` | A query parameter the route does not define. `message` names it.                                                 |
-| `422`  | `invalid_query_parameter` | A defined parameter whose value fails validation, or a non-repeatable parameter given twice. `message` names it. |
-| `500`  | `internal_error`          | An unexpected server failure. `message` is deliberately generic; detail is logged server-side, never returned.   |
+| Status | `code`                    | Condition                                                                                                                           |
+| ------ | ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `404`  | `property_not_found`      | No `properties` row matches the given slug.                                                                                         |
+| `422`  | `unknown_query_parameter` | A query parameter the route does not define. `message` names it.                                                                    |
+| `422`  | `invalid_query_parameter` | A defined parameter whose value fails validation, or a non-repeatable parameter given twice. `message` names it.                    |
+| `422`  | `invalid_request_body`    | `POST /api/v1/discovery/matches` only: malformed JSON, an unknown body field, or a field that fails validation. `message` names it. |
+| `500`  | `internal_error`          | An unexpected server failure. `message` is deliberately generic; detail is logged server-side, never returned.                      |
 
 ### Caching
 
-Both routes are request-time handlers; neither exports a Next.js route segment config, and neither is prerendered. Cache policy is expressed as HTTP `Cache-Control` for a shared cache (CDN or reverse proxy) to honour — the directives are shared-cache only, with no browser `max-age`, so a buyer changing a filter is never served a response their own browser is holding.
+All three implemented routes are request-time handlers; none exports a Next.js route segment config, and none is prerendered. Cache policy is expressed as HTTP `Cache-Control` for a shared cache (CDN or reverse proxy) to honour — the directives are shared-cache only, with no browser `max-age`, so a buyer changing a filter is never served a response their own browser is holding. The matches route carries per-request buyer input in its body rather than the URL, so it is never cached at all, not even briefly.
 
-| Response                     | `Cache-Control`                                     |
-| ---------------------------- | --------------------------------------------------- |
-| `200` from the listing route | `public, s-maxage=60, stale-while-revalidate=300`   |
-| `200` from the dossier route | `public, s-maxage=300, stale-while-revalidate=3600` |
-| Any error response           | `no-store`                                          |
+| Response                                    | `Cache-Control`                                     |
+| ------------------------------------------- | --------------------------------------------------- |
+| `200` from the listing route                | `public, s-maxage=60, stale-while-revalidate=300`   |
+| `200` from the dossier route                | `public, s-maxage=300, stale-while-revalidate=3600` |
+| `200` from `POST /api/v1/discovery/matches` | `no-store`                                          |
+| Any error response                          | `no-store`                                          |
 
 Errors are never cached so that a `404` cannot outlive the publish that resolves it. Page-level ISR for the buyer-facing property page is a separate decision, taken with that page rather than with this API. See the 2026-09-02 entry in `DECISIONS.md`.
 

@@ -1,5 +1,55 @@
 # Progress
 
+## 2026-09-18 — `POST /api/v1/discovery/matches` implemented; migration tooling bug fixed
+
+**Done:** the HTTP route wiring the private budget-range matcher up to a buyer
+response (`docs/tasklists/2026-09-18-discovery-matches-endpoint.md`). New
+`src/lib/matching/discovery.ts` (`matchPublishedProperties`) composes the
+service-role matcher with the public catalog read layer: it resolves matched
+property ids via `matchPropertiesByBudgetRange`, then — via the app
+connection only — loads published `PropertySummary` rows for those ids,
+narrowed by optional `city`/`bhk` and paginated the same way
+`listPublishedProperties` does. `ListPropertiesParams`/`listPublishedProperties`
+were deliberately left untouched (that type is the guarded public contract
+for `GET /api/v1/properties`); only the generic per-property-id loaders
+(`loadBhkTypesByProperty`, `loadPrimaryMediaByProperty`, `bhkFilter`) were
+exported from `queries.ts` for reuse. New `src/lib/matching/http.ts` validates
+the POST body (`minInr`/`maxInr` required positive numbers with
+`minInr <= maxInr`, optional `city`/`bhk`/`page`/`pageSize`) and a new
+`invalid_request_body` `ApiErrorCode` was added to the shared envelope in
+`src/lib/properties/http.ts`. The route itself
+(`src/app/api/v1/discovery/matches/route.ts`) is stateless — no
+`buyer_intake_sessions` write — and always `Cache-Control: no-store`, since
+the buyer's stated range is per-request body input, not a cacheable resource.
+`docs/api/api-spec.v1.md` now documents the route in full and corrects the
+`POST /api/v1/intake-sessions` row, which this phase does not build (pre-login
+capture goes through a cookie instead — see below).
+
+**Design decision surfaced and resolved before implementation:** whether this
+endpoint persists the buyer's stated budget range. Resolved (user sign-off,
+recorded in `DECISIONS.md` 2026-09-18): the endpoint stays fully stateless.
+Separately, pre-login intake answers (city, budget, configuration) will move
+to a narrowly-scoped, short-lived, `httpOnly` cookie and get claimed into
+`buyer_intake_sessions` at login, for buyer-behavior insight — direction
+agreed, implementation deferred to its own stub tasklist
+(`docs/tasklists/2026-09-18-pre-login-intake-cookie.md`), since it touches the
+auth/login flow, which `AGENTS.md` requires review for regardless of author.
+
+**Tests:** 29 new — `src/lib/matching/http.test.ts` (body validation, no
+database), `src/lib/matching/discovery.integration.test.ts` (range boundary,
+city/bhk narrowing, honest empty result, no forbidden keys), and
+`src/app/api/v1/discovery/matches/route.integration.test.ts` (the real route
+handler, a real `JSON.stringify` round trip, cache headers, malformed-JSON and
+invalid-body `422`s). Full suite: **455 passed across 33 files**. `format:check`
+(on authored/touched files only — the same repo-wide pre-existing drift noted
+in the entry below applies), `lint`, and `typecheck` all pass.
+
+**Migration tooling silent-failure root cause found and fixed, separately from
+the endpoint work.** `drizzle-kit migrate` had been silently exiting 1 with no
+error text since at least the Phase 2B merge; root cause and fix are recorded
+in the entry directly below and in `DECISIONS.md` (2026-09-18). `bun run
+db:migrate` now succeeds cleanly and is idempotent on repeat runs.
+
 ## 2026-09-18 — Phase 3 private budget-range matcher implemented
 
 **Done:** the service-only ±20% matcher from
@@ -38,20 +88,30 @@ repo-wide formatting pass.
 2026-09-01 "Buyer budget matching uses an inclusive ±20% expansion" entry's
 worked example exactly and does not change the private service boundary.
 
-**Migration tooling note, not a Phase 3 blocker:** `bun run db:migrate`
-(`drizzle-kit migrate`) exits 1 with no error text after the NOTICE lines,
-even after a fresh `bun install`. `drizzle.__drizzle_migrations` has 6 rows
-but the journal lists 7 entries through `0006_grant-app-ocr-tables.sql`; that
-migration's actual effect (`propcompare_app` CRUD on `ocr_extraction_jobs`
-and `property_submission_field_evidence`) is already present on the live
-database, so schema state matches "migrated through v5 plus 0006" as the
-database owner described, and every Phase 3 test ran cleanly against it. The
-CLI's silent failure looks like a bookkeeping gap (0006 applied out-of-band
-without its tracking row) rather than a missing schema change, but the root
-cause of the silent exit was not found — left for whoever next needs to run
-`drizzle-kit migrate` rather than fixed here, since editing migration
-tracking state is exactly the kind of thing `AGENTS.md` asks to surface
-rather than patch inline.
+**Migration tooling silent-failure root cause found and fixed.** `drizzle-kit
+migrate` uses `drizzle-orm/postgres-js/migrator`'s `migrate()`, whose skip
+logic is `select ... order by created_at desc limit 1` compared against each
+migration's journal `when` value — not a hash lookup. The
+`drizzle.__drizzle_migrations` row for migration `0005`
+(`0005_military_red_skull.sql`) held its real apply-time timestamp
+(`created_at = 1788353878280`), which is _earlier_ than `0005`'s own journal
+`when` (`1788782563902`) — a mismatch left over from the Phase 2B journal
+reconciliation described in the 2026-09-07 entry below. Every `db:migrate`
+run therefore concluded `0005` hadn't been applied yet and tried to re-run
+it, failing on `column "profile_narrative" of relation "developers" already
+exists` — and `drizzle-kit`'s CLI swallows that error outright
+(`renderWithTask`'s catch in `node_modules/drizzle-kit/bin.cjs` calls
+`terminal.reject(err)` then `process.exit(1)` without ever printing `err`,
+which is why nothing showed up on stderr). Migration `0006`'s GRANT was never
+reached by any prior `db:migrate` run; it was live on the database only
+because it had been applied out-of-band. Fix: `UPDATE
+drizzle.__drizzle_migrations SET created_at = 1788782563902 WHERE id = 6`
+(the metadata-only correction bringing that row in line with `0005`'s own
+journal timestamp), then a normal `bun run db:migrate` applied `0006`
+cleanly and recorded its row correctly. A second `db:migrate` run is now a
+clean no-op, and the full suite (426/426) still passes. This was a metadata
+correction to migration bookkeeping, not a schema or data change, so it
+didn't need a `DECISIONS.md` entry.
 
 ## 2026-09-18 — Continuation handoff: Phase 2A follow-ups deferred; start Phase 3
 

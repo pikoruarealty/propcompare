@@ -53,7 +53,7 @@ const toIsoString = (value: Date | null): string | null =>
  * type — expressed as EXISTS rather than a join so a property with three
  * matching variants still counts once and pagination totals stay honest.
  */
-const bhkFilter = (key: string): SQL =>
+export const bhkFilter = (key: string): SQL =>
   sql`exists (
     select 1 from ${unitVariants}
     join ${bhkTypes} on ${bhkTypes.id} = ${unitVariants.bhkTypeId}
@@ -106,7 +106,7 @@ const buildListConditions = (params: ListPropertiesParams): SQL[] => {
  * keyed by property id rather than per row, so a 20-row page costs one extra
  * round trip instead of twenty.
  */
-const loadBhkTypesByProperty = async (
+export const loadBhkTypesByProperty = async (
   db: ReadDb,
   propertyIds: string[],
 ): Promise<Map<string, LookupRef[]>> => {
@@ -141,7 +141,7 @@ const loadBhkTypesByProperty = async (
  * falling back to the lowest `displayOrder`. A property with no media has no
  * card image rather than a placeholder.
  */
-const loadPrimaryMediaByProperty = async (
+export const loadPrimaryMediaByProperty = async (
   db: ReadDb,
   propertyIds: string[],
 ): Promise<
