@@ -1,5 +1,58 @@
 # Progress
 
+## 2026-09-18 — Phase 3 private budget-range matcher implemented
+
+**Done:** the service-only ±20% matcher from
+`docs/tasklists/2026-09-01-phase-3-budget-range-matching.md`. New
+`src/db/service.ts` holds the sole `BYPASSRLS` `propcompare_service` connection
+(mirrors the `@/db` app-role module's guard pattern, refusing to start if
+`DATABASE_SERVICE_URL` is unset or equals `DATABASE_URL`). New
+`src/lib/matching/budget-range.ts` exports `matchPropertiesByBudgetRange(db,
+{ minInr, maxInr })`, which validates positive `minInr <= maxInr` before
+touching the database, then joins `private.unit_price_history` (current row
+only, `effective_to is null`) to `unit_variants` and filters with
+`price_inr between minInr * 0.80 and maxInr * 1.20` computed in Postgres
+against the `numeric` column — never in JavaScript. It deliberately does not
+use `private.unit_current_bucket`, per the 2026-09-01 decision that adjacent
+buckets can't guarantee the exact tolerance at their edges. The result shape
+is `{ propertyId, unitVariantId }` only; no price, bound, or bucket field is
+selected, so there is nothing for `findForbiddenKeys` to catch — confirmed
+directly by a dedicated shape test.
+
+**Tests exercise the real boundary and the real role split.**
+`src/lib/matching/budget-range.test.ts` proves validation happens before any
+query (a throwing `Proxy` stands in for `db`). The database-backed
+`budget-range.integration.test.ts` publishes each fixture through the real
+`publishSubmission` transaction, writes its price via the service connection
+(matching `publisher.integration.test.ts`'s existing pattern), and checks the
+lower/upper inclusive boundaries plus the just-outside exclusions, the
+no-price-leak shape check, and that the normal `propcompare_app` connection
+is still denied on `private.unit_price_history`. Full suite: **426 passed
+across 30 files** (14 new). `format:check`, `lint`, and `typecheck` all pass;
+formatting was applied only to the newly authored files, since `format:check`
+also flags ~45 pre-existing files across the repo that this task did not
+touch — that drift is unrelated to Phase 3 and is left for whoever owns a
+repo-wide formatting pass.
+
+**No `DECISIONS.md` entry needed.** The implementation matches the
+2026-09-01 "Buyer budget matching uses an inclusive ±20% expansion" entry's
+worked example exactly and does not change the private service boundary.
+
+**Migration tooling note, not a Phase 3 blocker:** `bun run db:migrate`
+(`drizzle-kit migrate`) exits 1 with no error text after the NOTICE lines,
+even after a fresh `bun install`. `drizzle.__drizzle_migrations` has 6 rows
+but the journal lists 7 entries through `0006_grant-app-ocr-tables.sql`; that
+migration's actual effect (`propcompare_app` CRUD on `ocr_extraction_jobs`
+and `property_submission_field_evidence`) is already present on the live
+database, so schema state matches "migrated through v5 plus 0006" as the
+database owner described, and every Phase 3 test ran cleanly against it. The
+CLI's silent failure looks like a bookkeeping gap (0006 applied out-of-band
+without its tracking row) rather than a missing schema change, but the root
+cause of the silent exit was not found — left for whoever next needs to run
+`drizzle-kit migrate` rather than fixed here, since editing migration
+tracking state is exactly the kind of thing `AGENTS.md` asks to surface
+rather than patch inline.
+
 ## 2026-09-18 — Continuation handoff: Phase 2A follow-ups deferred; start Phase 3
 
 **Repository state:** Local `main` was fast-forwarded to `origin/main` at

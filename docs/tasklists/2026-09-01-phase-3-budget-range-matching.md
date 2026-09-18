@@ -1,8 +1,8 @@
 # Tasklist — Phase 3 budget-range matching
 
-**Status:** planned — do not implement during Phase 1
+**Status:** done — private matcher implemented and verified
 **Owner:** Bhavarth
-**Branch:** to be created from the Phase 3 baseline
+**Branch:** task/phase-3-budget-range-matching
 **Depends on:** Phase 2 publish transaction and approved budget-bucket seed data
 
 ## Product contract
@@ -13,16 +13,16 @@ Exact price values, bounds, and bucket calculations must never appear in an API 
 
 ## Implementation checklist
 
-- [ ] Create a service-only private matcher that considers only the current price record for each published unit.
-- [ ] Validate positive buyer bounds with `min <= max` before querying private data.
-- [ ] Keep normal application connections unable to access `private`.
-- [ ] Preserve `private.unit_current_bucket` as coarse classification only; do not use adjacent buckets as the tolerance implementation.
-- [ ] Ensure the query path returns identifiers only, without price fields or derived price ranges.
-- [ ] Test the lower and upper inclusive boundaries with a fixture published through `property_submissions`.
-- [ ] Test that normal app queries remain denied and that service output contains no price data.
-- [ ] Record the final implementation shape in `DECISIONS.md` if it changes the private service boundary.
+- [x] Create a service-only private matcher that considers only the current price record for each published unit. (`src/lib/matching/budget-range.ts`, `src/db/service.ts`)
+- [x] Validate positive buyer bounds with `min <= max` before querying private data.
+- [x] Keep normal application connections unable to access `private`.
+- [x] Preserve `private.unit_current_bucket` as coarse classification only; do not use adjacent buckets as the tolerance implementation.
+- [x] Ensure the query path returns identifiers only, without price fields or derived price ranges.
+- [x] Test the lower and upper inclusive boundaries with a fixture published through `property_submissions`.
+- [x] Test that normal app queries remain denied and that service output contains no price data.
+- [x] Record the final implementation shape in `DECISIONS.md` if it changes the private service boundary. (Not needed — implementation matches the 2026-09-01 decision's worked example exactly; no boundary change.)
 
 ## Handoff
 
-- [ ] Run format, lint, typecheck, tests, and the private-role integration tests.
-- [ ] Update `PROGRESS.md` and the Phase 3 roadmap acceptance when complete.
+- [x] Run format, lint, typecheck, tests, and the private-role integration tests.
+- [x] Update `PROGRESS.md` and the Phase 3 roadmap acceptance when complete.
