@@ -1,5 +1,47 @@
 # Progress
 
+## 2026-09-18 — Storage adapter layer built, GCS-backed; `source-loader.ts` retired
+
+**Done:** `src/lib/storage/adapter.ts` defines `StorageAdapter`
+(`upload`/`download`/`delete`) and `StorageAdapterError`, mirroring the
+`OcrAdapterError`/provider-adapter convention already established in
+`src/lib/ocr/adapter.ts`. `src/lib/storage/gcs-adapter.ts`'s
+`createGcsStorageAdapter` implements it against `@google-cloud/storage`,
+reusing the exact path convention (`gs://bucket/object`, or a bare path
+resolved against a configured default bucket) and env vars (`GCS_PROJECT_ID`,
+`GCS_CLIENT_EMAIL`, `GCS_PRIVATE_KEY`, `GCS_BUCKET`) the old code already
+used — no change to `source_documents.gcs_path`/`property_media.gcs_path`
+values or the schema. `src/lib/ocr/source-loader.ts`, the one prior direct,
+uninterfaced GCS call, is deleted — confirmed zero callers and zero test
+coverage before removing it, so this is a straight consolidation, not a
+second path left standing.
+
+**Why now:** the user is evaluating moving hosting off GCP to a Hostinger
+VPS and asked for an adapter layer so a provider switch later means writing
+one new adapter, not auditing every call site — the same reasoning already
+applied to OCR provider choice in this codebase. See
+`docs/tasklists/2026-09-18-storage-adapter.md`.
+
+**Deliberately not decided here:** the buyer-facing URL-resolution strategy
+(public bucket vs. signed URL vs. proxy route) — `download()` returns bytes,
+not a browsable URL. That was flagged as an open, expensive-to-reverse gate
+in the 2026-09-07 dossier-media-gate `DECISIONS.md` entry and stays open; a
+`getSignedReadUrl`-style method belongs on this interface once it's decided,
+not guessed at now. `docs/tasklists/2026-09-18-phase-2a-completion.md`'s
+open-decisions section is updated to reflect what's resolved vs. still open.
+
+**Tests:** 12 new (`src/lib/storage/gcs-adapter.test.ts`) — path resolution
+(`gs://` form, bare-path-plus-default-bucket, missing-bucket and malformed-path
+errors), each operation's call into a stubbed GCS client, error mapping (404 →
+`object_not_found`, other failures → `provider_error`, never a raw SDK error
+leaking through), and configuration validation. No real GCS connection
+required. Full suite: **576 passed across 42 files**. `format:check`, `lint`,
+`typecheck` all pass.
+
+**Nothing calls `upload()` in real code yet** — that's the Phase 2A
+completion tasklist's developer-portal brochure-upload step, which now has
+an interface to build against.
+
 ## 2026-09-18 — Status audit: empty catalog, no ingestion/login UI; Phase 2A scope redefined to close the gap
 
 **What was found, not assumed:** a direct check of the local database showed
