@@ -9,7 +9,10 @@ import {
   MAX_PRIORITIES,
   PRIORITY_OPTIONS,
   QUESTION_STEP_COUNT,
+  RANGE_MAX_LAKH,
 } from "@/lib/properties/intake";
+import { propertyListFixture } from "@/lib/properties/fixtures";
+import type { PropertyListResult } from "@/lib/properties/types";
 import { IntakeFlow } from "./intake-flow";
 
 /**
@@ -215,8 +218,12 @@ describe("IntakeFlow — answer retention", () => {
   });
 });
 
-describe("IntakeFlow — the stated range never leaves the device", () => {
-  it("makes no network call at any point in the flow", async () => {
+describe("IntakeFlow — the stated range never leaves the device unasked", () => {
+  it("makes no network call anywhere in the questions or the brief", async () => {
+    // Tightened rather than dropped now that matching exists: answering the
+    // questions and reading the brief must still reach no server. Only the
+    // buyer's explicit "See your matches" may, and that is asserted below.
+    //
     // Throwing rather than recording silently: a call made during render would
     // otherwise be reported only at the end, long after the state that made it.
     const fetchSpy = vi.fn(() => {
@@ -243,7 +250,7 @@ describe("IntakeFlow — the stated range never leaves the device", () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  it("carries only city and configuration into the hand-off link", async () => {
+  it("puts no monetary figure in any link, even once a range is stated", async () => {
     const user = renderFlow();
 
     await next(user);
@@ -258,15 +265,23 @@ describe("IntakeFlow — the stated range never leaves the device", () => {
     );
     await next(user);
 
-    const href = screen
-      .getByRole("link", { name: /See matching properties/ })
-      .getAttribute("href");
+    // With a range stated the ending is an action, not a link — the range goes
+    // in a request body. The failure this guards is a monetary figure reaching
+    // browser history, an access log, or the `Referer` header of the next
+    // request, so no href anywhere on the brief may carry one.
+    expect(
+      screen.queryByRole("link", { name: /See matching properties/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /See your matches/ }),
+    ).toBeVisible();
 
-    expect(href).toBe("/properties?city=Ahmedabad&bhk=3bhk");
-    // The failure this guards is a monetary figure reaching browser history,
-    // an access log, or the `Referer` header of the next request.
-    expect(href).not.toContain("205");
-    expect(href).not.toContain("50");
+    for (const link of screen.getAllByRole("link")) {
+      const href = link.getAttribute("href") ?? "";
+      expect(href).not.toContain("205");
+      expect(href).not.toContain("50");
+      expect(href).not.toMatch(/inr|lakh|crore|budget|price/i);
+    }
   });
 
   it("says plainly what the hand-off link does and does not carry", async () => {
@@ -296,6 +311,201 @@ describe("IntakeFlow — the stated range never leaves the device", () => {
     expect(
       screen.getByText(/this opens the full catalog/i),
     ).toBeInTheDocument();
+  });
+});
+
+describe("IntakeFlow — running a match", () => {
+  /** Drives the flow to the brief with a range, a city, and a configuration. */
+  const advanceWithRange = async (
+    user: ReturnType<typeof userEvent.setup>,
+    upperLakh = "150",
+  ) => {
+    await next(user); // priorities -> configuration
+    await user.click(screen.getByRole("radio", { name: "2 BHK" }));
+    await next(user); // configuration -> city
+    await user.click(screen.getByRole("radio", { name: "Ahmedabad" }));
+    await next(user); // city -> range
+    await user.click(screen.getByRole("button", { name: "State a range" }));
+    fireEvent.change(
+      screen.getByLabelText("Upper end of the range you are working with"),
+      { target: { value: upperLakh } },
+    );
+    await next(user); // range -> summary
+  };
+
+  const stubMatches = (result: PropertyListResult = propertyListFixture) => {
+    // Typed rather than inferred, so `mock.calls` carries the url and the init
+    // that `sentBody` and the assertions below read off it.
+    const fetchSpy = vi.fn<
+      (url: string, init: RequestInit) => Promise<Response>
+    >(async () => Response.json(result));
+    vi.stubGlobal("fetch", fetchSpy);
+    return fetchSpy;
+  };
+
+  const seeMatches = async (user: ReturnType<typeof userEvent.setup>) =>
+    user.click(screen.getByRole("button", { name: /See your matches/ }));
+
+  const sentBody = (fetchSpy: ReturnType<typeof stubMatches>, call = 0) =>
+    JSON.parse(fetchSpy.mock.calls[call][1].body as string);
+
+  it("sends the stated range and the filterable answers, and nothing else", async () => {
+    const fetchSpy = stubMatches();
+    const user = renderFlow();
+    await advanceWithRange(user);
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+    await seeMatches(user);
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchSpy.mock.calls[0];
+    expect(url).toBe("/api/v1/discovery/matches");
+    expect(init.method).toBe("POST");
+    expect(sentBody(fetchSpy)).toEqual({
+      minInr: 5_000_000,
+      maxInr: 15_000_000,
+      city: "Ahmedabad",
+      bhk: "2bhk",
+      page: 1,
+      pageSize: 20,
+    });
+  });
+
+  it("sends the open top end as unbounded, never as the figure the handle sits on", async () => {
+    const fetchSpy = stubMatches();
+    const user = renderFlow();
+    await advanceWithRange(user, String(RANGE_MAX_LAKH));
+    await seeMatches(user);
+
+    const body = sentBody(fetchSpy);
+    expect(body.maxUnbounded).toBe(true);
+    expect(body).not.toHaveProperty("maxInr");
+    // The buyer who declines to name a ceiling must not be given one.
+    expect(await screen.findByText(/no upper limit/)).toBeVisible();
+  });
+
+  it("renders the matched properties beneath the brief, not instead of it", async () => {
+    stubMatches();
+    const user = renderFlow();
+    await advanceWithRange(user);
+    await seeMatches(user);
+
+    expect(
+      await screen.findByRole("heading", { name: "What matches your brief" }),
+    ).toBeVisible();
+    // The brief is what makes "go back and widen the range" actionable, so it
+    // stays on screen beside its results.
+    expect(screen.getByRole("heading", { name: "Your brief" })).toBeVisible();
+    expect(screen.getAllByRole("listitem")).toHaveLength(
+      propertyListFixture.data.length,
+    );
+  });
+
+  it("discards a rendered result the moment an answer changes", async () => {
+    stubMatches();
+    const user = renderFlow();
+    await advanceWithRange(user);
+    await seeMatches(user);
+    expect(
+      await screen.findByRole("heading", { name: "What matches your brief" }),
+    ).toBeVisible();
+
+    await back(user); // summary -> range
+    fireEvent.change(
+      screen.getByLabelText("Upper end of the range you are working with"),
+      { target: { value: "300" } },
+    );
+    await next(user); // range -> summary
+
+    // A grid left standing beside an edited brief is a claim about a search
+    // that was never run.
+    expect(
+      screen.queryByRole("heading", { name: "What matches your brief" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("clears the results when the buyer starts again", async () => {
+    stubMatches();
+    const user = renderFlow();
+    await advanceWithRange(user);
+    await seeMatches(user);
+    await screen.findByRole("heading", { name: "What matches your brief" });
+
+    await user.click(screen.getByRole("button", { name: "Start again" }));
+
+    expect(screen.getByText("Step 1 of 4")).toBeVisible();
+    expect(
+      screen.queryByRole("heading", { name: "What matches your brief" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("asks for the next page without putting it in a URL", async () => {
+    const fetchSpy = stubMatches({
+      data: propertyListFixture.data,
+      pagination: { page: 1, pageSize: 2, total: 6, totalPages: 3 },
+    });
+    const user = renderFlow();
+    await advanceWithRange(user);
+    await seeMatches(user);
+
+    await user.click(await screen.findByRole("button", { name: /Next/ }));
+
+    expect(sentBody(fetchSpy, 1).page).toBe(2);
+  });
+
+  it("shows a failed search as a failure, never as an empty catalog", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json(
+          { error: { code: "invalid_request_body", message: "minInr …" } },
+          { status: 422 },
+        ),
+      ),
+    );
+    const user = renderFlow();
+    await advanceWithRange(user);
+    await seeMatches(user);
+
+    expect(await screen.findByText("That search did not run")).toBeVisible();
+    expect(
+      screen.queryByText(/Nothing published matches/),
+    ).not.toBeInTheDocument();
+    // The endpoint's message names contract fields, `minInr` among them.
+    expect(document.body.textContent).not.toMatch(/minInr/);
+  });
+
+  it("keeps the flow alive when the network fails outright", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new TypeError("Failed to fetch");
+      }),
+    );
+    const user = renderFlow();
+    await advanceWithRange(user);
+    await seeMatches(user);
+
+    expect(await screen.findByText(/could not be loaded/)).toBeVisible();
+    // Every answer survives a failed request.
+    expect(briefValue("City")).toBe("Ahmedabad");
+    expect(briefValue("The range you stated")).toBe("₹50 lakh to ₹1.5 crore");
+  });
+
+  it("renders no match action, and sends nothing, without a stated range", async () => {
+    const fetchSpy = stubMatches();
+    const user = renderFlow();
+    await advanceToSummary(user);
+
+    // The endpoint requires both bounds; a default range invented here would be
+    // a figure the buyer deliberately declined to state.
+    expect(
+      screen.queryByRole("button", { name: /See your matches/ }),
+    ).not.toBeInTheDocument();
+    await user.click(
+      screen.getByRole("link", { name: /See matching properties/ }),
+    );
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 });
 
