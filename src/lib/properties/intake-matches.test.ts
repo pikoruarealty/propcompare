@@ -82,6 +82,7 @@ describe("matchRequestBody", () => {
     const contractFields = new Set([
       "minInr",
       "maxInr",
+      "maxUnbounded",
       "city",
       "bhk",
       "page",
@@ -102,6 +103,33 @@ describe("matchRequestBody", () => {
     for (const key of Object.keys(body ?? {})) {
       expect(contractFields).toContain(key);
     }
+  });
+
+  it("sends maxUnbounded rather than the figure the top handle sits on", () => {
+    const body = matchRequestBody(
+      answersWith({ statedRange: { fromLakh: 100, toLakh: RANGE_MAX_LAKH } }),
+    );
+
+    // "₹5 crore or more" means the open end, not ₹5 crore. Sending the literal
+    // figure would cap a buyer who explicitly declined to name a ceiling.
+    expect(body).toEqual({
+      minInr: 10_000_000,
+      maxUnbounded: true,
+      page: 1,
+      pageSize: DEFAULT_PAGE_SIZE,
+    });
+    expect(body).not.toHaveProperty("maxInr");
+  });
+
+  it("sends the stated maxInr, and never both bounds at once", () => {
+    // The contract's two upper ends are mutually exclusive; sending both is a
+    // 422, and sending neither is a 422 rather than a silently wide search.
+    const bounded = matchRequestBody(
+      answersWith({ statedRange: { fromLakh: 50, toLakh: 150 } }),
+    );
+
+    expect(bounded).toHaveProperty("maxInr", 15_000_000);
+    expect(bounded).not.toHaveProperty("maxUnbounded");
   });
 
   it("returns null when no range was stated", () => {
@@ -149,6 +177,15 @@ describe("describeSearchedSpan", () => {
     expect(describeSearchedSpan({ fromLakh: 100, toLakh: 100 })).toBe(
       "₹80 lakh to ₹1.2 crore",
     );
+  });
+
+  it("names no upper figure for an open top end", () => {
+    // The matcher resolves the open end against the catalog's true maximum, so
+    // there is no ceiling to state — and stating one would put back the cap
+    // the `maxUnbounded` contract exists to remove.
+    expect(
+      describeSearchedSpan({ fromLakh: 100, toLakh: RANGE_MAX_LAKH }),
+    ).toBe("₹80 lakh and upwards");
   });
 });
 

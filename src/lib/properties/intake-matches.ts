@@ -45,18 +45,22 @@ const LAKH_IN_INR = 100_000;
 const TOLERANCE = 0.2;
 
 /**
- * The request body, named exactly as the contract names it. This is the only
- * shape in the client that carries `Inr` keys, and it exists for the length of
- * one `fetch`.
+ * The request body, named exactly as the contract names it, and carrying its
+ * discriminated upper end: a stated `maxInr`, or `maxUnbounded: true` for a
+ * buyer who left the top of the scale open. The two are mutually exclusive and
+ * one is required — omitting `maxInr` without the flag is a `422`, not a
+ * silently wide search.
+ *
+ * This is the only shape in the client that carries `Inr` keys, and it exists
+ * for the length of one `fetch`.
  */
-export interface MatchRequestBody {
+export type MatchRequestBody = {
   minInr: number;
-  maxInr: number;
   city?: string;
   bhk?: string;
   page: number;
   pageSize: number;
-}
+} & ({ maxInr: number } | { maxUnbounded: true });
 
 const toInr = (lakh: number): number => lakh * LAKH_IN_INR;
 
@@ -64,15 +68,12 @@ const toInr = (lakh: number): number => lakh * LAKH_IN_INR;
  * True when the buyer left the upper handle at the top of the scale, where the
  * control reads "₹5 crore or more" (2026-09-07).
  *
- * This is the one case the current contract cannot express honestly: `maxInr`
- * is a required finite number, so "or more" has no encoding. The user's
- * decision (2026-09-18) is that the open end should be bounded by the highest
- * price in the published catalog — which only the service-role matcher can
- * know, since reading it client-side would put a real price in the browser.
- * Until `POST /api/v1/discovery/matches` accepts an unbounded upper end, the
- * stated figure is sent and `describeSearchedSpan` discloses the resulting cap
- * rather than letting it pass silently. When the contract lands, this predicate
- * and `matchRequestBody` are the only two things that change.
+ * It now has a real encoding. `maxUnbounded: true` tells the matcher to resolve
+ * the ceiling against the catalog's highest current price inside Postgres, so
+ * the figure never exists as a value the client could be told (DECISIONS.md
+ * 2026-09-18). Between this slice shipping and that contract landing, the
+ * stated ₹5 crore was sent and the resulting cap was disclosed; that interim is
+ * gone, and with it the ceiling it had to apologise for.
  */
 export const isOpenEndedTop = (range: StatedRange): boolean =>
   range.toLakh >= RANGE_MAX_LAKH;
@@ -81,23 +82,30 @@ export const isOpenEndedTop = (range: StatedRange): boolean =>
  * The body for a buyer's answers, or `null` when no range was stated.
  *
  * `null` is not a failure — it is the honest answer that this endpoint has
- * nothing to match on. The endpoint requires both bounds, and inventing a
+ * nothing to match on. A lower bound is always required, and inventing a
  * default range on the buyer's behalf would be putting a figure in their mouth,
  * so the flow keeps its existing `/properties` hand-off for that case.
  *
- * The three carried fields are named one at a time rather than spread, for the
- * same reason `handoffParams` is: a future answer field must not reach the wire
+ * A range left at the top of the scale sends `maxUnbounded: true` rather than
+ * the ₹5 crore the handle happens to sit on, so "or more" reaches the matcher
+ * as the open end the buyer actually stated.
+ *
+ * The carried fields are named one at a time rather than spread, for the same
+ * reason `handoffParams` is: a future answer field must not reach the wire
  * because someone edited this function without thinking about what it sends.
  */
 export const matchRequestBody = (
   answers: IntakeAnswers,
   page = 1,
 ): MatchRequestBody | null => {
-  if (answers.statedRange === null) return null;
+  const range = answers.statedRange;
+  if (range === null) return null;
 
   const body: MatchRequestBody = {
-    minInr: toInr(answers.statedRange.fromLakh),
-    maxInr: toInr(answers.statedRange.toLakh),
+    minInr: toInr(range.fromLakh),
+    ...(isOpenEndedTop(range)
+      ? { maxUnbounded: true as const }
+      : { maxInr: toInr(range.toLakh) }),
     page,
     pageSize: DEFAULT_PAGE_SIZE,
   };
@@ -116,11 +124,19 @@ export const matchRequestBody = (
  * result they read as dearer will otherwise conclude the filter is broken. The
  * ±20% expansion is a deliberate product rule, and a rule the buyer cannot see
  * is indistinguishable from a bug.
+ *
+ * An open top end has no upper figure to name, and naming one would be exactly
+ * the ceiling the contract now avoids. It gets no `to`, and no `+20%` either:
+ * the matcher resolves the open end against the catalog's true maximum, which
+ * nothing is priced above by definition, so there is nothing for an expansion
+ * to reach.
  */
-export const describeSearchedSpan = (range: StatedRange): string =>
-  `${formatStatedFigure(range.fromLakh * (1 - TOLERANCE))} to ${formatStatedFigure(
-    range.toLakh * (1 + TOLERANCE),
-  )}`;
+export const describeSearchedSpan = (range: StatedRange): string => {
+  const from = formatStatedFigure(range.fromLakh * (1 - TOLERANCE));
+  return isOpenEndedTop(range)
+    ? `${from} and upwards`
+    : `${from} to ${formatStatedFigure(range.toLakh * (1 + TOLERANCE))}`;
+};
 
 /* -------------------------------------------------------------------------- */
 /* The request                                                                 */

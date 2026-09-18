@@ -110,27 +110,29 @@ describe("IntakeMatchResults — what it tells the buyer about the search", () =
     expect(screen.getByText(/₹40 lakh to ₹1.8 crore/)).toBeVisible();
   });
 
-  it("discloses the ceiling when the buyer left the top end open", () => {
+  it("confirms there is no upper limit when the buyer left the top end open", () => {
     renderPanel(ready(propertyListFixture), {
       fromLakh: 100,
       toLakh: RANGE_MAX_LAKH,
     });
 
-    // The slider says "or more"; `maxInr` is a required finite number. The gap
-    // is disclosed rather than allowed to truncate silently, and the ceiling it
-    // names is the same one the searched span above it reports.
-    const disclosure = screen.getByText(/You left the top end open/);
-    expect(disclosure).toBeVisible();
-    expect(disclosure).toHaveTextContent("₹6 crore");
-    expect(screen.getByText(/₹80 lakh to ₹6 crore/)).toBeVisible();
+    // The endpoint resolves the open end against the catalog's own maximum, so
+    // there is no ceiling to name — and naming one would reintroduce exactly
+    // the cap that contract change removed.
+    expect(screen.getByText(/no upper limit/)).toBeVisible();
+    expect(screen.getByText(/₹80 lakh and upwards/)).toBeVisible();
+    expect(document.body.textContent).not.toMatch(
+      /₹6 crore|still has a ceiling/,
+    );
   });
 
-  it("makes no ceiling claim when the top end is not open", () => {
+  it("names both ends when the top end is not open", () => {
     renderPanel(ready(propertyListFixture));
 
     expect(
       screen.queryByText(/You left the top end open/),
     ).not.toBeInTheDocument();
+    expect(screen.getByText(/₹40 lakh to ₹1.8 crore/)).toBeVisible();
   });
 
   it("counts the results honestly", () => {

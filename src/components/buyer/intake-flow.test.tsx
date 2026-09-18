@@ -9,6 +9,7 @@ import {
   MAX_PRIORITIES,
   PRIORITY_OPTIONS,
   QUESTION_STEP_COUNT,
+  RANGE_MAX_LAKH,
 } from "@/lib/properties/intake";
 import { propertyListFixture } from "@/lib/properties/fixtures";
 import type { PropertyListResult } from "@/lib/properties/types";
@@ -368,6 +369,19 @@ describe("IntakeFlow — running a match", () => {
       page: 1,
       pageSize: 20,
     });
+  });
+
+  it("sends the open top end as unbounded, never as the figure the handle sits on", async () => {
+    const fetchSpy = stubMatches();
+    const user = renderFlow();
+    await advanceWithRange(user, String(RANGE_MAX_LAKH));
+    await seeMatches(user);
+
+    const body = sentBody(fetchSpy);
+    expect(body.maxUnbounded).toBe(true);
+    expect(body).not.toHaveProperty("maxInr");
+    // The buyer who declines to name a ceiling must not be given one.
+    expect(await screen.findByText(/no upper limit/)).toBeVisible();
   });
 
   it("renders the matched properties beneath the brief, not instead of it", async () => {

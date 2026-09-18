@@ -5,12 +5,7 @@ import {
   describeSearchedSpan,
   isOpenEndedTop,
 } from "@/lib/properties/intake-matches";
-import {
-  RANGE_MAX_LAKH,
-  type StatedRange,
-  formatStatedFigure,
-  formatStatedRange,
-} from "@/lib/properties/intake";
+import { type StatedRange, formatStatedRange } from "@/lib/properties/intake";
 import type { PropertyListResult } from "@/lib/properties/types";
 import { GridRow } from "./page-frame";
 import { PropertyCard } from "./property-card";
@@ -61,20 +56,20 @@ function SearchedSpan({ range }: { range: StatedRange }) {
       </BodyText>
 
       {/*
-       * The open top end is the one place the control and the contract disagree:
-       * the slider says "or more", and `maxInr` is a required finite number, so
-       * the search does have a ceiling. Saying so is the difference between a
-       * limit and a silent truncation. This paragraph goes away when the
-       * endpoint accepts an unbounded upper end — see the tasklist.
+       * The slider's "or more" now reaches the matcher as the open end it
+       * always meant: the endpoint takes `maxUnbounded` and resolves the
+       * ceiling against the catalog's own maximum inside the database. This
+       * paragraph used to disclose a cap the contract forced on the buyer;
+       * with the cap gone, it confirms its absence instead, because a buyer
+       * who asked for no upper limit should be told they got one.
        */}
       {isOpenEndedTop(range) ? (
         <BodyText
           data-slot="open-top-disclosure"
           className="text-muted-foreground text-sm"
         >
-          You left the top end open. This search still has a ceiling —{" "}
-          {formatStatedFigure(RANGE_MAX_LAKH * 1.2)} — so anything above that is
-          not in these results yet.
+          You left the top end open, so this search has no upper limit —
+          everything published above that figure is included.
         </BodyText>
       ) : null}
     </div>
