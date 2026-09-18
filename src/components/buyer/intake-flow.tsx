@@ -1,11 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { BROWSE_PATH, FILTER_LABEL } from "@/lib/properties/browse";
 import type { FilterOptions } from "@/lib/properties/filter-options";
+import {
+  matchRequestBody,
+  requestMatches,
+} from "@/lib/properties/intake-matches";
 import {
   DEFAULT_STATED_RANGE,
   EMPTY_ANSWERS,
@@ -21,6 +25,7 @@ import {
   hasAnyAnswer,
   togglePriority,
 } from "@/lib/properties/intake";
+import { IntakeMatchResults, type MatchViewState } from "./intake-matches";
 import { StatedRangeSlider } from "./stated-range-slider";
 import { BodyText, DisplayHeading, Eyebrow } from "./typography";
 
@@ -36,13 +41,26 @@ import { BodyText, DisplayHeading, Eyebrow } from "./typography";
  * answer on the device and out of all three. Recorded in DECISIONS.md
  * (2026-09-07).
  *
- * Nothing here is persisted or transmitted. `POST /api/v1/intake-sessions` is
- * an explicit non-goal of Phase 2B and stays `Planned (Phase 3)` in the API
- * spec; matching is Phase 3 as well. So the flow ends by handing the buyer to
- * `/properties` carrying only the two answers that map to filters the read
- * contract actually has — city and configuration. The priorities and the stated
- * range are used for nothing, and `handoffParams` is written so they cannot
- * become part of that link by accident.
+ * Nothing here is persisted. `POST /api/v1/intake-sessions` is not built and
+ * will not be — pre-login capture goes through a cookie instead, which is
+ * deferred (DECISIONS.md 2026-09-18) — so no intake session is ever created.
+ *
+ * The flow now has two endings, and which one the buyer gets depends on whether
+ * they stated a range:
+ *
+ * - **They did.** The summary's action POSTs the range, with the city and
+ *   configuration, to `POST /api/v1/discovery/matches` and renders the matched
+ *   properties in place. The request is transmitted but never stored: the
+ *   endpoint is stateless by decision (2026-09-18), the range travels in a body
+ *   rather than a URL, and no result is kept after the answers change.
+ * - **They did not.** The endpoint requires both bounds, so there is no match to
+ *   run, and the original hand-off stands: `/properties` carrying only the two
+ *   answers that map to filters the read contract has. `handoffParams` is
+ *   written so the range cannot join that link by accident.
+ *
+ * Results render here rather than at their own address because the range has
+ * nowhere else it may travel — not a URL, not `sessionStorage`, and not yet a
+ * cookie. See DECISIONS.md (2026-09-18).
  *
  * Every question is optional, per the buyer flow's "intake is optional": there
  * is no validation, no required answer, and a standing exit to the unfiltered
@@ -160,15 +178,69 @@ export interface IntakeFlowProps {
 export function IntakeFlow({ options }: IntakeFlowProps) {
   const [stepIndex, setStepIndex] = useState(0);
   const [answers, setAnswers] = useState<IntakeAnswers>(EMPTY_ANSWERS);
+  const [match, setMatch] = useState<MatchViewState>({ status: "idle" });
+
+  /**
+   * The in-flight request, so a superseded one can be abandoned. Without this,
+   * a slow first response can land after a faster second and overwrite the
+   * newer results with older ones — which on this screen means showing the
+   * buyer matches for a brief they have already changed.
+   */
+  const inFlight = useRef<AbortController | null>(null);
+
+  const abandonRequest = useCallback(() => {
+    inFlight.current?.abort();
+    inFlight.current = null;
+  }, []);
+
+  // A component unmounted mid-request should not leave one running.
+  useEffect(() => abandonRequest, [abandonRequest]);
 
   const step = INTAKE_STEPS[stepIndex];
   const isSummary = step.id === "summary";
-  const update = (patch: Partial<IntakeAnswers>) =>
+
+  /**
+   * Any answer change discards the results. They describe the brief that
+   * produced them, and a grid left standing beside an edited brief is a claim
+   * about a search that was never run.
+   */
+  const update = (patch: Partial<IntakeAnswers>) => {
+    abandonRequest();
+    setMatch({ status: "idle" });
     setAnswers((current) => ({ ...current, ...patch }));
+  };
 
   const restart = () => {
+    abandonRequest();
+    setMatch({ status: "idle" });
     setAnswers(EMPTY_ANSWERS);
     setStepIndex(0);
+  };
+
+  const runMatch = async (page: number) => {
+    const body = matchRequestBody(answers, page);
+    // Unreachable from the UI — the action only renders with a stated range —
+    // but the type says this can be null, and a thrown assertion here would
+    // take the buyer's answers down with it.
+    if (body === null) return;
+
+    abandonRequest();
+    const controller = new AbortController();
+    inFlight.current = controller;
+    setMatch({ status: "loading" });
+
+    const outcome = await requestMatches(body, controller.signal);
+
+    // A request the buyer superseded must not paint anything, including its
+    // failure state — aborting rejects the fetch, which reads as a failure.
+    if (controller.signal.aborted) return;
+    inFlight.current = null;
+
+    setMatch(
+      outcome.ok
+        ? { status: "ready", result: outcome.result }
+        : { status: "failed", message: outcome.message },
+    );
   };
 
   const carried = handoffParams(answers);
@@ -358,26 +430,28 @@ export function IntakeFlow({ options }: IntakeFlowProps) {
               </dl>
 
               {/*
-               * Matching is Phase 3, so this link is not a match — it is the
-               * browse screen with the two answers that correspond to real
-               * filters. Saying so is the difference between an honest hand-off
-               * and a result set the buyer will read as "properties chosen for
-               * me".
+               * Two different endings need two different sentences. With a
+               * range, this really is a match and may say so. Without one, it
+               * is still the browse screen with the answers that map to real
+               * filters — and saying which is the difference between an honest
+               * hand-off and a result set the buyer reads as "chosen for me".
                */}
               <BodyText
                 data-slot="handoff-note"
                 className="text-muted-foreground text-sm"
               >
-                {carried.city === undefined && carried.bhk === undefined
-                  ? "You have stated no city or configuration, so this opens the full catalog."
-                  : `This opens the catalog filtered by ${[
-                      carried.city === undefined ? null : "city",
-                      carried.bhk === undefined ? null : "configuration",
-                    ]
-                      .filter((entry) => entry !== null)
-                      .join(
-                        " and ",
-                      )}. Your priorities and your stated range are not part of that link.`}
+                {answers.statedRange === null
+                  ? carried.city === undefined && carried.bhk === undefined
+                    ? "You have stated no city or configuration, so this opens the full catalog."
+                    : `This opens the catalog filtered by ${[
+                        carried.city === undefined ? null : "city",
+                        carried.bhk === undefined ? null : "configuration",
+                      ]
+                        .filter((entry) => entry !== null)
+                        .join(
+                          " and ",
+                        )}. Your priorities and your stated range are not part of that link.`
+                  : "Your range is sent with this search so the catalog can be matched against it, and it is not saved, not written to your address bar, and not kept after you leave. Your priorities are not sent — no published fact ranks against them."}
               </BodyText>
             </>
           ) : null}
@@ -398,12 +472,32 @@ export function IntakeFlow({ options }: IntakeFlowProps) {
 
         {isSummary ? (
           <>
-            <Button asChild className="h-10 px-4">
-              <Link href={handoffHref(answers)} data-slot="intake-handoff">
-                See matching properties
+            {/*
+             * With a range, a button that runs a real match. Without one, the
+             * original link — the endpoint requires both bounds, and a default
+             * range invented here would be a figure the buyer never stated.
+             */}
+            {answers.statedRange === null ? (
+              <Button asChild className="h-10 px-4">
+                <Link href={handoffHref(answers)} data-slot="intake-handoff">
+                  See matching properties
+                  <ArrowRight aria-hidden="true" />
+                </Link>
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                className="h-10 px-4"
+                data-slot="intake-match"
+                disabled={match.status === "loading"}
+                onClick={() => void runMatch(1)}
+              >
+                {match.status === "loading"
+                  ? "Finding your matches…"
+                  : "See your matches"}
                 <ArrowRight aria-hidden="true" />
-              </Link>
-            </Button>
+              </Button>
+            )}
             <button
               type="button"
               onClick={restart}
@@ -427,6 +521,19 @@ export function IntakeFlow({ options }: IntakeFlowProps) {
           </Button>
         )}
       </div>
+
+      {/*
+       * Below the controls, not replacing them: the brief stays on screen
+       * beside its results, which is what makes "go back and widen the range"
+       * a real instruction when nothing matched.
+       */}
+      {isSummary && answers.statedRange !== null ? (
+        <IntakeMatchResults
+          state={match}
+          range={answers.statedRange}
+          onPage={(page) => void runMatch(page)}
+        />
+      ) : null}
     </div>
   );
 }
