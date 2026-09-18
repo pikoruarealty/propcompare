@@ -12,7 +12,11 @@ import {
 } from "@/db/schema/catalog";
 import { users } from "@/db/schema/auth";
 import { publishSubmission } from "@/lib/submissions/publisher";
-import { getPublishedPropertyBySlug, listPublishedProperties } from "./queries";
+import {
+  getPublishedMediaObjectPath,
+  getPublishedPropertyBySlug,
+  listPublishedProperties,
+} from "./queries";
 import { findForbiddenKeys } from "./no-price";
 import { DEFAULT_SORT, type ListPropertiesParams } from "./types";
 
@@ -322,6 +326,17 @@ describe("listPublishedProperties", () => {
   it("leaks no excluded data on the wire", async () => {
     const result = await listInTestCity();
     expect(findForbiddenKeys(result)).toEqual([]);
+  });
+});
+
+describe("getPublishedMediaObjectPath", () => {
+  it("returns null for an id that is not in property_media", async () => {
+    // No fixture exists here on purpose: the OCR/submission field contract
+    // has no media field yet, so property_media has no row any sanctioned
+    // write path (publishSubmission) can create — see the 2026-09-18
+    // DECISIONS.md entry. Only the not-found path is provable against real
+    // data until that changes.
+    expect(await getPublishedMediaObjectPath(db, randomUUID())).toBeNull();
   });
 });
 

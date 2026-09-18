@@ -13,6 +13,7 @@ interface StubFile {
   save: ReturnType<typeof vi.fn>;
   download: ReturnType<typeof vi.fn>;
   delete: ReturnType<typeof vi.fn>;
+  getSignedUrl: ReturnType<typeof vi.fn>;
 }
 
 const createStubStorage = (): {
@@ -25,6 +26,9 @@ const createStubStorage = (): {
     save: vi.fn().mockResolvedValue(undefined),
     download: vi.fn().mockResolvedValue([new Uint8Array([1, 2, 3])]),
     delete: vi.fn().mockResolvedValue(undefined),
+    getSignedUrl: vi
+      .fn()
+      .mockResolvedValue(["https://storage.googleapis.com/signed?sig=abc"]),
   };
   const fileSpy = vi.fn().mockReturnValue(file);
   const bucketSpy = vi.fn().mockReturnValue({ file: fileSpy });
@@ -152,6 +156,66 @@ describe("createGcsStorageAdapter — error mapping", () => {
     await expect(
       adapter.download("gs://my-bucket/a.pdf"),
     ).rejects.toBeInstanceOf(StorageAdapterError);
+  });
+});
+
+describe("createGcsStorageAdapter — getSignedReadUrl", () => {
+  it("returns the signed URL from the GCS SDK", async () => {
+    const { storage } = createStubStorage();
+    const adapter = createGcsStorageAdapter({ storage });
+
+    const url = await adapter.getSignedReadUrl("gs://my-bucket/a.pdf");
+
+    expect(url).toBe("https://storage.googleapis.com/signed?sig=abc");
+  });
+
+  it("requests a v4 read signature with the default 5-minute TTL", async () => {
+    const { storage, file } = createStubStorage();
+    const adapter = createGcsStorageAdapter({ storage });
+    const before = Date.now();
+
+    await adapter.getSignedReadUrl("gs://my-bucket/a.pdf");
+
+    expect(file.getSignedUrl).toHaveBeenCalledTimes(1);
+    const config = file.getSignedUrl.mock.calls[0][0];
+    expect(config.action).toBe("read");
+    expect(config.version).toBe("v4");
+    expect(config.expires).toBeGreaterThanOrEqual(before + 5 * 60 * 1000);
+    expect(config.expires).toBeLessThan(before + 6 * 60 * 1000);
+  });
+
+  it("honors an explicit expiresInSeconds", async () => {
+    const { storage, file } = createStubStorage();
+    const adapter = createGcsStorageAdapter({ storage });
+    const before = Date.now();
+
+    await adapter.getSignedReadUrl("gs://my-bucket/a.pdf", {
+      expiresInSeconds: 30,
+    });
+
+    const config = file.getSignedUrl.mock.calls[0][0];
+    expect(config.expires).toBeGreaterThanOrEqual(before + 30 * 1000);
+    expect(config.expires).toBeLessThan(before + 60 * 1000);
+  });
+
+  it("maps a 404 signing failure to object_not_found", async () => {
+    const { storage, file } = createStubStorage();
+    file.getSignedUrl.mockRejectedValue({ code: 404, message: "Not Found" });
+    const adapter = createGcsStorageAdapter({ storage });
+
+    await expect(
+      adapter.getSignedReadUrl("gs://my-bucket/missing.pdf"),
+    ).rejects.toMatchObject({ code: "object_not_found" });
+  });
+
+  it("maps a non-404 signing failure to provider_error", async () => {
+    const { storage, file } = createStubStorage();
+    file.getSignedUrl.mockRejectedValue(new Error("credentials invalid"));
+    const adapter = createGcsStorageAdapter({ storage });
+
+    await expect(
+      adapter.getSignedReadUrl("gs://my-bucket/a.pdf"),
+    ).rejects.toMatchObject({ code: "provider_error" });
   });
 });
 
