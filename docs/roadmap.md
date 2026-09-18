@@ -35,15 +35,22 @@ Phases 2A and 2B run in parallel once Phase 1 lands, so both developers are work
 
 **Area of focus: Bhavarth.**
 
-- `property_submissions` / `property_submission_fields` / `property_revisions` implementation.
-- The publish transaction — the one write path into live catalog tables.
+- `property_submissions` / `property_submission_fields` / `property_revisions` implementation. **Done.**
+- The publish transaction — the one write path into live catalog tables. **Done.**
 - Versioned, human-confirmed brochure page routing before paid OCR; multi-page
-  unit scopes and many-page field evidence follow schema v3.
-- OCR provider integration against `property_schema_fields` (provider choice tracked as a dated `DECISIONS.md` entry once made).
+  unit scopes and many-page field evidence follow schema v3. **Done.**
+- OCR provider integration against `property_schema_fields` (provider choice tracked as a dated `DECISIONS.md` entry once made). **Done.**
 - Legacy-vs-new OCR evaluation reports remain comparison-only; every selected
-  brochure is rerun through the new pipeline before submission review.
-- `rera_fetch_jobs` scrape job and cross-check logic.
-- Admin UI: page-routing workspace, submission queue, and Data Reconciliation screen (field + OCR confidence + all evidence pages + confirm/edit).
+  brochure is rerun through the new pipeline before submission review. **Done.**
+
+**Status: library/pipeline layer complete; no UI exists yet, and the phase's definition of done has grown.** A 2026-09-18 status audit found the local catalog completely empty and found that no UI anywhere in this codebase can create a property — the only path that has ever worked is a maintainer running a one-off script. See the 2026-09-18 `DECISIONS.md` entry: the developer self-serve upload/review flow (originally Phase 4) is pulled forward and merged into finishing this phase, since Phase 2A's own admin review step was always designed to be agnostic to whether an admin or a developer created the submission (`docs/app-flows/admin.md` step 9). **What's left to finish this phase**, in flow order, tracked in [the Phase 2A completion tasklist](tasklists/2026-09-18-phase-2a-completion.md):
+
+1. Login/signup UI (buyer phone-OTP, staff email/password) — Better Auth already implements both; no screen exists for either.
+2. The developer portal's upload → page-routing confirmation → OCR-draft review → submit flow (`docs/app-flows/developer.md`), pulled forward from Phase 4.
+3. The admin submission-queue, field-by-field reconciliation, approve, and publish UI (`docs/app-flows/admin.md`), wiring the already-implemented `publishSubmission`/`applySubmissionTransition` library functions to real routes and screens.
+4. `rera_fetch_jobs` scrape job and cross-check logic — schema exists, no implementation, no tasklist yet.
+
+**Explicitly deferred, the one item staying out of scope:** the human field-level OCR accuracy spot-check on the Adani Amaris and Kimana Towers brochures (`docs/tasklists/2026-09-02-ocr-provider-integration.md`'s sole unchecked line). It becomes easier once the reconciliation UI above exists, so it's left for after rather than blocking this work.
 
 ## Phase 2B — Buyer UI against a fixed contract (parallel with 2A)
 
@@ -74,11 +81,13 @@ Phases 2A and 2B run in parallel once Phase 1 lands, so both developers are work
 
 ---
 
-## Phase 4 — Developer self-serve portal
+## Phase 4 — Developer portfolio/analytics (narrowed 2026-09-18)
 
 **Area of focus: Deep** for the portal build; **Bhavarth** defines the auth/permission boundaries and reviews.
 
-- `developer_users` auth flow, portfolio/analytics dashboard, submission form UI that produces `property_submissions` rows — same trust boundary as admin ingestion, no shortcut path.
+The submission-creating half of the developer portal (upload, page routing, OCR-draft review, submit) moved to finishing Phase 2A — see the 2026-09-18 `DECISIONS.md` entry. What's left here, once a developer account can already sign in and submit:
+
+- Portfolio/analytics dashboard (`GET /api/v1/developer/portfolio`) — completeness and interest analytics over the developer's own properties, no editorial or publishing authority.
 
 ---
 
