@@ -165,14 +165,17 @@ The slug route takes no query parameters; any it receives are ignored rather tha
 
 ### `POST /api/v1/discovery/matches`
 
-Published property summaries whose current unit price falls in the buyer's inclusive `[minInr × 0.80, maxInr × 1.20]` range — the ±20% expansion decided 2026-09-01 — optionally narrowed by `city` and `bhk`, the two filters guided intake collects today. Stateless: nothing about the request is persisted anywhere (2026-09-18 `DECISIONS.md` entry). See `docs/tasklists/2026-09-18-discovery-matches-endpoint.md`.
+Published property summaries whose current unit price falls in the buyer's inclusive `[minInr × 0.80, upperBound]` range — the ±20% expansion decided 2026-09-01 — optionally narrowed by `city` and `bhk`, the two filters guided intake collects today. Stateless: nothing about the request is persisted anywhere (2026-09-18 `DECISIONS.md` entry). See `docs/tasklists/2026-09-18-discovery-matches-endpoint.md` and `docs/tasklists/2026-09-01-phase-3-budget-range-matching.md`.
+
+`upperBound` is `maxInr × 1.20` for a stated max, or, when the buyer has no upper limit, the catalog's current maximum current price — resolved entirely inside Postgres and never returned, logged, or otherwise exposed (2026-09-18 `DECISIONS.md` entry). This is a derived commercial value like any bound or bucket, so `matchPropertiesByBudgetRange` never holds it as a JavaScript value that could leak; the SQL `WHERE` clause resolves and consumes it in one query.
 
 **Request body:**
 
 ```jsonc
 {
   "minInr": 3000000, // required, finite positive number
-  "maxInr": 4000000, // required, finite positive number, >= minInr
+  "maxInr": 4000000, // required unless maxUnbounded is true; finite positive number, >= minInr
+  "maxUnbounded": true, // optional, default false; mutually exclusive with maxInr
   "city": "string", // optional, non-empty
   "bhk": "2bhk", // optional, non-empty, a bhk_types.key
   "page": 1, // optional, default 1
@@ -180,7 +183,7 @@ Published property summaries whose current unit price falls in the buyer's inclu
 }
 ```
 
-An unknown body field, a non-numeric `minInr`/`maxInr`, a non-positive or non-finite value, `minInr > maxInr`, an empty `city`/`bhk`, or an out-of-range `page`/`pageSize` all return `422` with `invalid_request_body` and a message naming the offending field. Malformed JSON also returns `422` with the same code.
+`maxInr` and `maxUnbounded: true` are mutually exclusive, and exactly one is required — giving both, or omitting `maxInr` without `maxUnbounded: true`, is rejected rather than silently treated as unbounded, so a caller who simply forgot the field gets a clear error instead of an unintentionally wide search. An unknown body field, a non-numeric `minInr`/`maxInr`, a non-positive or non-finite value, a non-boolean `maxUnbounded`, `minInr > maxInr`, an empty `city`/`bhk`, or an out-of-range `page`/`pageSize` all return `422` with `invalid_request_body` and a message naming the offending field. Malformed JSON also returns `422` with the same code.
 
 **Response `200`:** the same `{ "data": [...], "pagination": {...} }` shape as `GET /api/v1/properties` (see above) — a `PropertySummary` array. No price, bound, or bucket value appears at any nesting level. When no published unit falls in range, `data` is an honest empty array with `total: 0` rather than a fabricated result (`docs/app-flows/buyer.md`'s "No matching inventory" exception path).
 
