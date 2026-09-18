@@ -41,6 +41,11 @@ export const accounts = pgTable(
     id: text("id").primaryKey(),
     accountId: text("account_id").notNull(),
     providerId: text("provider_id").notNull(),
+    // Required by Better Auth 1.7+ ("account identity is scoped by issuer");
+    // see the 2026-09-18 DECISIONS.md entry. Not part of docs/schema/ —
+    // users/sessions/accounts/verifications are Better Auth-owned, not
+    // redesigned here (schema.v1.md).
+    issuer: text("issuer").notNull(),
     userId: text("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
