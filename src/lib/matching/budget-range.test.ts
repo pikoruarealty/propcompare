@@ -48,4 +48,26 @@ describe("matchPropertiesByBudgetRange validation", () => {
       }),
     ).rejects.toThrow(/queried the database/);
   });
+
+  it.each([
+    ["zero minInr", { minInr: 0, maxUnbounded: true as const }],
+    ["negative minInr", { minInr: -1, maxUnbounded: true as const }],
+    ["non-finite minInr", { minInr: Number.NaN, maxUnbounded: true as const }],
+  ])(
+    "rejects %s with maxUnbounded without querying",
+    async (_label, params) => {
+      await expect(
+        matchPropertiesByBudgetRange(unreachableDb, params),
+      ).rejects.toBeInstanceOf(InvalidBudgetRangeError);
+    },
+  );
+
+  it("accepts a positive minInr with maxUnbounded: true as valid", async () => {
+    await expect(
+      matchPropertiesByBudgetRange(unreachableDb, {
+        minInr: 3_000_000,
+        maxUnbounded: true,
+      }),
+    ).rejects.toThrow(/queried the database/);
+  });
 });

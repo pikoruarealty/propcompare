@@ -171,4 +171,31 @@ describe("POST /api/v1/discovery/matches", () => {
     const response = await postMatches(request);
     expect(response.status).toBe(422);
   });
+
+  it("200s with maxUnbounded: true and never leaks the resolved ceiling", async () => {
+    const response = await postMatches(
+      matchesRequest({
+        minInr: 30_000_000,
+        maxUnbounded: true,
+        city: testCity,
+      }),
+    );
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as PropertyListResult;
+    expect(body.data.map((row) => row.id)).toContain(propertyId);
+    expect(findForbiddenKeys(body)).toEqual([]);
+  });
+
+  it("422s when both maxInr and maxUnbounded: true are given", async () => {
+    const response = await postMatches(
+      matchesRequest({
+        minInr: 30_000_000,
+        maxInr: 40_000_000,
+        maxUnbounded: true,
+      }),
+    );
+    expect(response.status).toBe(422);
+    const body = (await response.json()) as ApiErrorBody;
+    expect(body.error.code).toBe("invalid_request_body");
+  });
 });

@@ -34,6 +34,7 @@ const isFailure = (value: unknown): value is ParseFailure =>
 const KNOWN_BODY_KEYS = new Set([
   "minInr",
   "maxInr",
+  "maxUnbounded",
   "city",
   "bhk",
   "page",
@@ -64,6 +65,18 @@ const readNonEmptyString = (
   return value;
 };
 
+const readOptionalBoolean = (
+  body: Record<string, unknown>,
+  name: string,
+): boolean | ParseFailure | undefined => {
+  if (!(name in body)) return undefined;
+  const value = body[name];
+  if (typeof value !== "boolean") {
+    return failure(`${name} must be a boolean.`);
+  }
+  return value;
+};
+
 const readBoundedInteger = (
   body: Record<string, unknown>,
   name: string,
@@ -90,6 +103,12 @@ const readBoundedInteger = (
  * `matchPropertiesByBudgetRange` itself; this layer rejects the wrong JSON
  * *type* early with a field-specific message, the same distinction the
  * listing route's query-parameter validation draws.
+ *
+ * `maxInr` and `maxUnbounded: true` are mutually exclusive and one of them
+ * is required — omitting `maxInr` without `maxUnbounded: true` is rejected
+ * rather than silently treated as unbounded, so a caller who simply forgot
+ * the field gets a clear error instead of an unintentionally wide search
+ * (2026-09-18 DECISIONS.md entry).
  */
 export const parseDiscoveryMatchBody = (
   body: unknown,
@@ -107,9 +126,22 @@ export const parseDiscoveryMatchBody = (
 
   const minInr = readPositiveNumber(record, "minInr");
   if (isFailure(minInr)) return minInr;
-  const maxInr = readPositiveNumber(record, "maxInr");
+
+  const maxUnbounded = readOptionalBoolean(record, "maxUnbounded");
+  if (isFailure(maxUnbounded)) return maxUnbounded;
+
+  if (maxUnbounded === true) {
+    if ("maxInr" in record) {
+      return failure("maxInr must not be given when maxUnbounded is true.");
+    }
+  } else if (!("maxInr" in record)) {
+    return failure("maxInr is required unless maxUnbounded is true.");
+  }
+
+  const maxInr =
+    maxUnbounded === true ? undefined : readPositiveNumber(record, "maxInr");
   if (isFailure(maxInr)) return maxInr;
-  if (minInr > maxInr) {
+  if (maxInr !== undefined && minInr > maxInr) {
     return failure("minInr must be <= maxInr.");
   }
 
@@ -139,7 +171,7 @@ export const parseDiscoveryMatchBody = (
     ok: true,
     params: {
       minInr,
-      maxInr,
+      ...(maxInr === undefined ? { maxUnbounded: true as const } : { maxInr }),
       ...(city === undefined ? {} : { city }),
       ...(bhk === undefined ? {} : { bhk }),
       page,

@@ -57,6 +57,35 @@ describe("parseDiscoveryMatchBody — accepted values", () => {
       expectParams({ minInr: 30_000_000, maxInr: 30_000_000 }).minInr,
     ).toBe(30_000_000);
   });
+
+  it("accepts maxUnbounded: true in place of maxInr", () => {
+    expect(expectParams({ minInr: 30_000_000, maxUnbounded: true })).toEqual({
+      minInr: 30_000_000,
+      maxUnbounded: true,
+      page: 1,
+      pageSize: DEFAULT_PAGE_SIZE,
+    });
+  });
+
+  it("carries city, bhk, page, and pageSize alongside maxUnbounded", () => {
+    expect(
+      expectParams({
+        minInr: 30_000_000,
+        maxUnbounded: true,
+        city: "Ahmedabad",
+        bhk: "3bhk",
+        page: 2,
+        pageSize: 10,
+      }),
+    ).toEqual({
+      minInr: 30_000_000,
+      maxUnbounded: true,
+      city: "Ahmedabad",
+      bhk: "3bhk",
+      page: 2,
+      pageSize: 10,
+    });
+  });
 });
 
 describe("parseDiscoveryMatchBody — rejected values", () => {
@@ -105,5 +134,17 @@ describe("parseDiscoveryMatchBody — rejected values", () => {
     ["pageSize 0", { minInr: 1, maxInr: 2, pageSize: 0 }],
   ])("rejects %s", (_label, body) => {
     expectFailure(body);
+  });
+
+  it("rejects both maxInr and maxUnbounded: true given together", () => {
+    expectFailure({ minInr: 1, maxInr: 2, maxUnbounded: true });
+  });
+
+  it("rejects a non-boolean maxUnbounded", () => {
+    expectFailure({ minInr: 1, maxInr: 2, maxUnbounded: "true" });
+  });
+
+  it("rejects maxUnbounded: false with maxInr omitted", () => {
+    expectFailure({ minInr: 1, maxUnbounded: false });
   });
 });

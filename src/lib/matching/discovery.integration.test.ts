@@ -230,4 +230,20 @@ describe("matchPublishedProperties", () => {
     expect(result.data.length).toBeGreaterThan(0);
     expect(findForbiddenKeys(result)).toEqual([]);
   });
+
+  it("with maxUnbounded, matches a property priced far above any stated max", async () => {
+    const { propertyId } = await publishPricedProperty({
+      city: "Ahmedabad",
+      bhkTypeKey: "3bhk",
+      priceInr: "900000000",
+    });
+    const result = await matchPublishedProperties(db, serviceDb, {
+      minInr: 30_000_000,
+      maxUnbounded: true,
+      page: 1,
+      pageSize: 20,
+    });
+    expect(result.data.map((row) => row.id)).toContain(propertyId);
+    expect(findForbiddenKeys(result)).toEqual([]);
+  });
 });
