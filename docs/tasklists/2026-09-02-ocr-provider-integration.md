@@ -1,7 +1,7 @@
 # Tasklist — OCR provider integration (Claude Sonnet 5 via OpenRouter)
 
 **Status:** implementation and live persistence verification complete; human
-field-accuracy spot-check pending (carried into remaining Phase 2A work)
+field-accuracy spot-check deferred as non-blocking Phase 2A follow-up
 **Owner:** Bhavarth
 **Branch:** `task/ocr-provider-integration`
 **Roadmap:** [Phase 2A](../roadmap.md#phase-2a--admin-ingestion--the-trust-boundary)
@@ -160,6 +160,8 @@ brochure or raw result was committed.
   `OcrPersistenceError` / `retryOcrExtractionPersistence`, avoiding another
   paid provider call.
 
-The only unchecked verification is the explicitly carried-over human comparison
-against the two real brochures. One explicitly authorized paid Adani Amaris
-verification run is recorded above; no raw provider result is tracked in Git.
+The unchecked human comparison against the two real brochures is explicitly
+deferred as a non-blocking Phase 2A follow-up (2026-09-18), not marked complete
+or discarded. It remains required before operating an OCR-driven admin
+ingestion workflow. One explicitly authorized paid Adani Amaris verification
+run is recorded above; no raw provider result is tracked in Git.
