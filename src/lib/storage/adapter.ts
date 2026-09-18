@@ -11,12 +11,13 @@
  * switching provider — the user is evaluating a move off GCP to a Hostinger
  * VPS — means writing one new adapter, not auditing every call site.
  *
- * Deliberately does not resolve a buyer-facing URL. `download` returns
- * bytes; whether a buyer's browser ever gets a public bucket URL, a signed
- * URL, or bytes proxied through a route is a separate, still-open decision
- * (2026-09-07 `DECISIONS.md` dossier-media-gate entry). A
- * `getSignedReadUrl`-style method belongs on this interface once that's
- * decided, not guessed at here.
+ * Buyer-facing media is served through `GET /api/v1/media/{id}`
+ * (`src/app/api/v1/media/[id]/route.ts`), which resolves a fresh
+ * `getSignedReadUrl` per request and redirects to it — never baked into the
+ * dossier page's ISR-cached HTML, since a signed URL expires and that page
+ * does not re-render every request (2026-09-18 `DECISIONS.md` entry,
+ * superseding the signed-URL rejection in the 2026-09-07 dossier-media-gate
+ * entry).
  */
 
 export type StorageAdapterFailureCode =
@@ -42,8 +43,19 @@ export interface StorageUploadInput {
   contentType?: string;
 }
 
+export interface GetSignedReadUrlOptions {
+  /** How long the URL stays valid. Default is short (minutes): it only
+   * needs to outlive the moment between issuing a redirect and the browser
+   * following it, since it is generated live at request time. */
+  expiresInSeconds?: number;
+}
+
 export interface StorageAdapter {
   upload(input: StorageUploadInput): Promise<{ path: string }>;
   download(path: string): Promise<Uint8Array>;
   delete(path: string): Promise<void>;
+  getSignedReadUrl(
+    path: string,
+    options?: GetSignedReadUrlOptions,
+  ): Promise<string>;
 }

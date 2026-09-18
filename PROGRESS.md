@@ -1,5 +1,49 @@
 # Progress
 
+## 2026-09-18 — `GET /api/v1/media/{id}` resolves the buyer-facing media URL strategy
+
+**Done:** the open decision the storage adapter work left on the table — how
+a buyer's browser ever gets an image — is resolved. `StorageAdapter` gained
+`getSignedReadUrl(path, { expiresInSeconds? })`
+(`src/lib/storage/adapter.ts`), implemented in `gcs-adapter.ts` via GCS's V4
+read-signing (default TTL 5 minutes). `src/lib/storage/index.ts` exports
+`storageAdapter`, the one configured instance the app imports.
+`GET /api/v1/media/{id}` (`src/app/api/v1/media/[id]/route.ts`) looks up
+`property_media.gcs_path` via a new `getPublishedMediaObjectPath` query,
+asks the adapter for a fresh signed URL, and `302`s to it — never
+`Cache-Control`-cached, since signing costs no network round trip (computed
+locally from the service account key) and each request gets its own
+short-lived URL.
+
+**Why a redirect route rather than baking the URL into the page:** the
+dossier page uses ISR (`revalidate = 3600`), and the 2026-09-07 decision on
+the media gate had explicitly rejected signed URLs for exactly this reason —
+a URL baked into cached HTML can expire before the page re-renders. This
+sidesteps that by never putting the signed URL in cached markup at all: the
+cached HTML references the stable `/api/v1/media/{id}` path, and the actual
+signed URL is generated fresh on every request that path receives. Full
+reasoning, including why not a full byte-streaming proxy (deferred, not
+rejected — the interface doesn't foreclose it) or a public bucket
+(brochure/media separation is still unresolved), is in the 2026-09-18
+`DECISIONS.md` entry, which supersedes the 2026-09-07 entry's signed-URL
+rejection.
+
+**Tests:** 21 new — `gcs-adapter.test.ts` (signed-URL request shape,
+default/explicit TTL, error mapping), `queries.integration.test.ts`
+(`getPublishedMediaObjectPath` returns `null` for a nonexistent id against
+a real database — the "found" path isn't provable against real data yet,
+since no sanctioned write path can create a `property_media` row until
+developer upload lands; recorded, not worked around), and `route.test.ts`
+(the route's redirect/error logic against mocked dependencies, no database
+or GCS credentials required). Full suite: **586 passed across 43 files**.
+`format:check`, `lint`, `typecheck` all pass.
+
+**Not done:** actually wiring `PropertyCard`/the dossier to render
+`<img src="/api/v1/media/{id}">` — those components deliberately show a
+placeholder today, with tests protecting that on purpose, and there's
+still no real media data to point them at. Left for once the developer
+upload flow (Phase 2A completion tasklist) can create `property_media` rows.
+
 ## 2026-09-18 — Storage adapter layer built, GCS-backed; `source-loader.ts` retired
 
 **Done:** `src/lib/storage/adapter.ts` defines `StorageAdapter`

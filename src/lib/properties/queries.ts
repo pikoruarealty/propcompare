@@ -314,6 +314,23 @@ export const listPublishedProperties = async (
 };
 
 /**
+ * `GET /api/v1/media/{id}` — the storage path for one `property_media` row,
+ * or `null` when no row carries that id (the route turns `null` into a
+ * 404). Returns the raw `gcs_path` only; resolving it into a fetchable URL
+ * is the route's job, via `src/lib/storage/adapter.ts`.
+ */
+export const getPublishedMediaObjectPath = async (
+  db: ReadDb,
+  id: string,
+): Promise<string | null> => {
+  const [row] = await db
+    .select({ gcsPath: propertyMedia.gcsPath })
+    .from(propertyMedia)
+    .where(eq(propertyMedia.id, id));
+  return row?.gcsPath ?? null;
+};
+
+/**
  * `GET /api/v1/properties/{slug}` — the full published dossier, or `null` when
  * no property carries that slug (the route turns `null` into a 404).
  */

@@ -25,6 +25,7 @@ Authentication/session details are owned by Better Auth; product routes use its 
 | -------------------------------------------- | --------------------------------- | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `GET /api/v1/properties`                     | Implemented (Phase 2B step 3)     | Public                 | Paginated published-property summaries and supported filters; never exact prices. Full contract below.                                                                                                                                                     |
 | `GET /api/v1/properties/{slug}`              | Implemented (Phase 2B step 3)     | Public                 | Published dossier with units, areas, catalog amenities/specifications, media, and public RERA facts. Full contract below.                                                                                                                                  |
+| `GET /api/v1/media/{id}`                     | Implemented (2026-09-18)          | Public                 | Redirects to a freshly-generated signed read URL for a `property_media` object. Full contract below.                                                                                                                                                       |
 | `POST /api/v1/intake-sessions`               | Planned                           | Anonymous or buyer     | Not built by Phase 3. Pre-login intake capture instead goes through a short-lived cookie, claimed into `buyer_intake_sessions` at login; see `DECISIONS.md` (2026-09-18) and `docs/tasklists/2026-09-18-pre-login-intake-cookie.md`.                       |
 | `POST /api/v1/discovery/matches`             | Implemented (Phase 3, 2026-09-18) | Buyer/anonymous intake | Stateless: the buyer's stated budget range travels in the request body only, nothing is persisted. Returns published property summaries whose current price falls in the inclusive ±20% range; never price, bounds, or bucket values. Full contract below. |
 | `GET, POST, DELETE /api/v1/saved-properties` | Implemented (Phase 3, 2026-09-18) | Buyer                  | Lists, saves, or removes the buyer's saved properties. Full contract below.                                                                                                                                                                                |
@@ -163,6 +164,10 @@ A property with no media, no RERA registration, or unit variants missing one or 
 
 The slug route takes no query parameters; any it receives are ignored rather than rejected. The `422` contract belongs to the listing route alone.
 
+### `GET /api/v1/media/{id}`
+
+Redirects (`302`) to a freshly-generated signed read URL for one `property_media` row's stored object. `404` with `media_not_found` when no row matches the id, or when the storage adapter reports the underlying object no longer exists. Never cached (`Cache-Control: no-store`) — a fresh signed URL is generated on every request rather than reused, which costs no extra network round trip (signing is computed locally from the service account key). See the 2026-09-18 `DECISIONS.md` entry for why this exists as a redirect route rather than a URL baked into the dossier page's ISR-cached HTML: a signed URL expires, and that page does not re-render on every request.
+
 ### `POST /api/v1/discovery/matches`
 
 Published property summaries whose current unit price falls in the buyer's inclusive `[minInr × 0.80, upperBound]` range — the ±20% expansion decided 2026-09-01 — optionally narrowed by `city` and `bhk`, the two filters guided intake collects today. Stateless: nothing about the request is persisted anywhere (2026-09-18 `DECISIONS.md` entry). See `docs/tasklists/2026-09-18-discovery-matches-endpoint.md` and `docs/tasklists/2026-09-01-phase-3-budget-range-matching.md`.
@@ -291,6 +296,7 @@ All implemented buyer routes return the standard envelope, `{ "error": { "code":
 | `404`  | `unit_variant_not_found`   | A given `unitVariantId` doesn't exist, or doesn't belong to the given property (`comparisons`, `enquiries`).                                   |
 | `404`  | `saved_property_not_found` | `DELETE /api/v1/saved-properties` when the property isn't currently saved by the caller.                                                       |
 | `404`  | `comparison_not_found`     | Reserved for a future per-id comparison lookup; unused so far, since `GET /api/v1/comparisons` only ever lists the caller's own.               |
+| `404`  | `media_not_found`          | `GET /api/v1/media/{id}`: no `property_media` row matches the id, or its stored object no longer exists.                                       |
 | `422`  | `unknown_query_parameter`  | A query parameter the route does not define. `message` names it.                                                                               |
 | `422`  | `invalid_query_parameter`  | A defined parameter whose value fails validation, or a non-repeatable parameter given twice. `message` names it.                               |
 | `422`  | `invalid_request_body`     | Malformed JSON, an unknown body field, or a field that fails validation, on any route taking a JSON body. `message` names the offending field. |
@@ -306,6 +312,7 @@ All implemented routes are request-time handlers; none exports a Next.js route s
 | `200` from the dossier route                    | `public, s-maxage=300, stale-while-revalidate=3600` |
 | `200` from `POST /api/v1/discovery/matches`     | `no-store`                                          |
 | Any response from the four buyer-account routes | `no-store`                                          |
+| `302` from `GET /api/v1/media/{id}`             | `no-store`                                          |
 | Any error response                              | `no-store`                                          |
 
 Errors are never cached so that a `404` cannot outlive the publish that resolves it. Page-level ISR for the buyer-facing property page is a separate decision, taken with that page rather than with this API. See the 2026-09-02 entry in `DECISIONS.md`.

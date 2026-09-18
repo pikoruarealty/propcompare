@@ -1,9 +1,12 @@
 import { Storage } from "@google-cloud/storage";
 import {
   StorageAdapterError,
+  type GetSignedReadUrlOptions,
   type StorageAdapter,
   type StorageUploadInput,
 } from "./adapter";
+
+const DEFAULT_SIGNED_URL_TTL_SECONDS = 5 * 60;
 
 /**
  * The GCS-backed `StorageAdapter` implementation — the only file in this
@@ -139,6 +142,37 @@ export const createGcsStorageAdapter = (
         throw new StorageAdapterError(
           "provider_error",
           `Failed to delete gs://${bucket}/${objectName}: ${(cause as Error).message}`,
+        );
+      }
+    },
+
+    async getSignedReadUrl(
+      path: string,
+      options: GetSignedReadUrlOptions = {},
+    ): Promise<string> {
+      const { bucket, objectName } = resolveGcsObject(path, defaultBucket);
+      const ttlSeconds =
+        options.expiresInSeconds ?? DEFAULT_SIGNED_URL_TTL_SECONDS;
+      try {
+        const [url] = await storage
+          .bucket(bucket)
+          .file(objectName)
+          .getSignedUrl({
+            action: "read",
+            version: "v4",
+            expires: Date.now() + ttlSeconds * 1000,
+          });
+        return url;
+      } catch (cause) {
+        if (isGcsApiError(cause) && cause.code === 404) {
+          throw new StorageAdapterError(
+            "object_not_found",
+            `No object at gs://${bucket}/${objectName}`,
+          );
+        }
+        throw new StorageAdapterError(
+          "provider_error",
+          `Failed to sign a read URL for gs://${bucket}/${objectName}: ${(cause as Error).message}`,
         );
       }
     },
