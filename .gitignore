@@ -55,3 +55,6 @@ _stitch_export/
 # (2026-09-02).
 
 stitch_propcompare_residence_concierge
+
+# Real developer brochures used for OCR/routing evaluation: large, and not ours to redistribute.
+brochures/
