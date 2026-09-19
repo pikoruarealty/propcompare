@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { PDFDocument } from "pdf-lib";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { db } from "@/db";
@@ -14,6 +14,7 @@ import {
   propertySubmissions,
   sourceDocuments,
 } from "@/db/schema/catalog";
+import { aiUsageEvents } from "@/db/schema/usage";
 import type { PageRouter } from "@/lib/ocr/page-router";
 import { createLocalStorageAdapter } from "@/lib/storage/local-adapter";
 import { createBrochureSubmission } from "./brochure-upload";
@@ -54,7 +55,14 @@ const fakeRouter = (calls: { count: number }): PageRouter => ({
         requests: 1,
         promptTokens: 10,
         completionTokens: 5,
-        perRequest: [{ promptTokens: 10, completionTokens: 5 }],
+        perRequest: [
+          {
+            providerRequestId: "gen-fake-1",
+            promptTokens: 10,
+            completionTokens: 5,
+            costUsd: 0.0031,
+          },
+        ],
       },
     };
   },
@@ -120,6 +128,24 @@ describe("runPageRouting", () => {
       category: "floor_plan",
       caption: "2 BHK",
     });
+    // The run is on the admin usage ledger, linked to the brochure and developer.
+    const [event] = await db
+      .select()
+      .from(aiUsageEvents)
+      .where(eq(aiUsageEvents.submissionId, submissionId))
+      .orderBy(desc(aiUsageEvents.createdAt))
+      .limit(1);
+    expect(event).toMatchObject({
+      kind: "page_router",
+      status: "succeeded",
+      model: "fake/router",
+      providerRequestId: "gen-fake-1",
+      developerId,
+      ocrJobId,
+      promptTokens: 10,
+    });
+    expect(Number(event.costUsd)).toBeCloseTo(0.0031, 6);
+
     // Usage is kept for operations but never returned to a screen.
     expect(
       JSON.stringify(readStoredSuggestions(job.routingManifest)),

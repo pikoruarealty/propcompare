@@ -1,11 +1,11 @@
 # PropCompare canonical data schema — v6 (PROPOSED)
 
-**Status:** proposed 2026-09-20 — **not implemented, not applied**. Awaiting owner review per `AGENTS.md` (a schema change is surfaced, not made autonomously). Until it is approved, [schema v5](schema.v5.md) remains the active baseline and nothing in this file may be implemented against.
+**Status:** partly approved. Section 1 (`ai_usage_events`) was approved by the owner and implemented 2026-09-20 (migration `0008`). Everything else in this file remains **proposed and unimplemented**, awaiting owner review per `AGENTS.md`; do not implement against those sections.
 **Supersedes:** nothing yet. On approval it supersedes [schema v5](schema.v5.md) for new implementation work; v5's content is not edited.
 
 v6 is a bundle of additive changes agreed in principle on 2026-09-19/20 (see the `DECISIONS.md` entries of those dates). Each is reviewed and approved separately; this file grows as they are drafted. Currently drafted:
 
-1. `ai_usage_events` — the admin-only usage and cost ledger (this section).
+1. `ai_usage_events` — the admin-only usage and cost ledger. **Approved and implemented 2026-09-20.**
 2. _Still to draft:_ `submission_media` (photos, floor plans, optional public brochure; attribution and source kind), and the developer legal-entity link (brand profile with attached RERA legal entities).
 
 ## 1. `ai_usage_events` — AI usage and cost ledger
@@ -48,6 +48,6 @@ Design notes:
 - **`cost_usd` null means "not reported".** It is never estimated from tokens, so a total that includes nulls is understood to be a lower bound and the screen says so.
 - **Not a catalog table.** It is not one of the live catalog tables reserved to `publishSubmission`; it is written by the ingestion code that made the call.
 - **Admin-only by construction.** No developer or buyer route reads this table, and no response outside the admin console includes a cost. The Usage screen and its queries sit behind `requirePortalRole("admin")`; a test asserts no developer-portal or buyer route imports the usage module.
-- **Privileges:** the migration grants `propcompare_app` `SELECT, INSERT` only (no `UPDATE` or `DELETE`) on the table, matching its append-only nature. The service role gets nothing, and nothing in `private` is involved.
+- **Privileges:** the migration grants `propcompare_app` `SELECT, INSERT` only and explicitly `REVOKE`s `UPDATE, DELETE` — necessary because the local and CI roles carry default privileges that grant full CRUD on every new public table. A test asserts the refusal. The service role gets nothing, and nothing in `private` is involved.
 
 **Not in this change:** any per-developer billing or charging. This is an internal cost record; developer-facing pricing is a separate future product decision.

@@ -68,10 +68,10 @@ Under the pre-launch model the invite goes to the existing canonical profile the
 
 ### Slice 4b — AI usage ledger and admin Usage tab (needs schema sign-off)
 
-- [ ] Owner review of `docs/schema/schema.v6.md` section 1 (`ai_usage_events`). Nothing is migrated until approved.
-- [ ] Migration, append-only privileges, and a recorder used by the router run and every extraction scope (failed calls included).
-- [ ] `/admin/usage` tab (admin only): totals, by brochure/property, by developer, by model, recent runs; null costs shown as "not reported" and totals labelled as a lower bound when any are missing.
-- [ ] Test that no developer-portal or buyer route reads the usage table or returns a cost.
+- [x] Owner approved `docs/schema/schema.v6.md` section 1 (`ai_usage_events`) 2026-09-20; migration `0008` applied.
+- [x] Migration, append-only privileges (explicit `REVOKE` — local/CI roles default to full CRUD), and a recorder used by the router run and every extraction scope (failed requests included). Gap: the cost of scopes that succeeded before a mid-run extraction failure is not recorded.
+- [x] `/admin/usage` tab (admin only): totals, by brochure/property, by developer, by model, recent runs; null costs shown as "not reported" and totals labelled as a lower bound when any are missing.
+- [x] Test that no developer-portal or buyer code reads the usage table or carries a cost (`usage-isolation.test.ts`).
 
 ### Slice 5 — reconciliation, review, publish
 

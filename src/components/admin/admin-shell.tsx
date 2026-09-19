@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ClipboardList, LogOut, Users } from "lucide-react";
+import { ClipboardList, LogOut, Receipt, Users } from "lucide-react";
 import { signOutOfPortal } from "@/app/actions/portal-auth";
 import { cn } from "@/lib/utils";
 
@@ -25,6 +25,12 @@ export const ADMIN_NAV = [
     href: "/admin/developers",
     label: "Developers",
     icon: Users,
+  },
+  {
+    key: "usage",
+    href: "/admin/usage",
+    label: "Usage",
+    icon: Receipt,
   },
 ] as const;
 

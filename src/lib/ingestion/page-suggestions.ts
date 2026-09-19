@@ -4,11 +4,14 @@ import { ocrExtractionJobs } from "@/db/schema/catalog";
 import {
   IMAGERY_TAGS,
   PAGE_CATEGORIES,
+  PageRouterError,
+  type PageRouterUsage,
   type PageCategory,
   type PageRouter,
   type PageSuggestion,
 } from "@/lib/ocr/page-router";
 import type { StorageAdapter } from "@/lib/storage/adapter";
+import { recordAiUsage, type AiUsageInput } from "@/lib/usage/ledger";
 import { getSubmissionBrochure } from "./queries";
 
 /**
@@ -86,7 +89,12 @@ export const runPageRouting = async (
     storage: StorageAdapter;
     router: PageRouter;
   },
-  input: { ocrJobId: string; replaceExisting?: boolean },
+  input: {
+    ocrJobId: string;
+    replaceExisting?: boolean;
+    /** The admin who started the run, for the usage ledger. */
+    requestedBy?: string;
+  },
 ): Promise<StoredSuggestions> => {
   const { database, storage, router } = deps;
 
@@ -111,7 +119,58 @@ export const runPageRouting = async (
   }
 
   const bytes = await storage.download(brochure.storagePath);
-  const result = await router.route(bytes);
+
+  // Every provider request is recorded — including ones billed before a later
+  // window failed — so the admin usage ledger matches the bill.
+  const base = (): Omit<AiUsageInput, "status"> => ({
+    kind: "page_router",
+    provider: "openrouter",
+    model: router.model,
+    ocrJobId: input.ocrJobId,
+    submissionId: brochure.submissionId,
+    sourceDocumentId: brochure.sourceDocumentId,
+    developerId: brochure.developerId,
+    createdBy: input.requestedBy,
+  });
+  const recordRequests = (
+    usage: PageRouterUsage,
+    lastFailed: boolean,
+  ): AiUsageInput[] =>
+    usage.perRequest.map((request, index) => ({
+      ...base(),
+      status:
+        lastFailed && index === usage.perRequest.length - 1
+          ? "failed"
+          : "succeeded",
+      providerRequestId: request.providerRequestId,
+      promptTokens: request.promptTokens,
+      completionTokens: request.completionTokens,
+      costUsd: request.costUsd,
+    }));
+
+  let result;
+  try {
+    result = await router.route(bytes);
+  } catch (error) {
+    if (error instanceof PageRouterError) {
+      // A reply we could not use was still billed (the last recorded request);
+      // a request that never got a reply has no usage, so it is recorded as a
+      // failed request with nothing reported rather than dropped.
+      const usage = error.usage;
+      const billedButUnusable =
+        error.code === "invalid_response" &&
+        (usage?.perRequest.length ?? 0) > 0;
+      const events = [
+        ...(usage ? recordRequests(usage, billedButUnusable) : []),
+        ...(billedButUnusable
+          ? []
+          : [{ ...base(), status: "failed" as const }]),
+      ];
+      await recordAiUsage(database, events).catch(() => undefined);
+    }
+    throw error;
+  }
+  await recordAiUsage(database, recordRequests(result.usage, false));
 
   const stored: StoredSuggestions = {
     model: result.model,

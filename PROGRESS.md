@@ -1,5 +1,13 @@
 # Progress
 
+## 2026-09-20 (later) — Categorize brochure pages, and the admin-only usage ledger
+
+**Done:** the page-review screen has a "Categorize brochure pages" action (a vision-model pass, stored on the draft attempt): each page gets a suggested category, confidence and imagery tags, pages worth reading are pre-selected, any page can be re-typed or deselected, and a brochure with no floor plans says its floor-plan step will be skipped. No cost is shown anywhere near it. Every paid request is recorded in a new append-only `ai_usage_events` table (migration `0008`, owner-approved) and shown in a separate admin-only **Usage** tab (totals with a "≥" lower bound when a cost was not reported, by brochure, developer, model, and recent requests). A test fails if anything outside admin and ingestion code touches the ledger.
+
+**Verified:** 698/698 tests, lint and typecheck clean; the ledger is confirmed append-only for the app role. **Not yet run live:** the router has never called the real provider. That first run on Amaris, Kimana and 360 is next, now that spend will be recorded.
+
+**Found:** local and CI database roles grant the app full CRUD on new tables by default, so append-only needs an explicit `REVOKE` (in the migration). Known gap: partial extraction spend is not recorded when a run fails part-way.
+
 ## 2026-09-20 — Brochure upload and the zoomable page viewer
 
 **Done:** an admin can upload a brochure PDF for a developer (`/admin/submissions/new` → `POST /api/v1/admin/source-documents`); it is validated as a real PDF, stored through `StorageAdapter`, and creates the immutable source document, a draft submission and a draft OCR attempt with an empty routing manifest — no paid OCR runs. The page-review screen (`/admin/submissions/[id]/pages`) shows every page as a lazily rendered thumbnail, any page selectable or deselectable, and any page opens in a large viewer with zoom in/out/fit, previous/next and keyboard shortcuts. pdf.js runs in the browser only (legacy build, bundler-loaded worker), and only ever draws to visible canvases — it never reads pixels back, which is what would break under Brave Shields.

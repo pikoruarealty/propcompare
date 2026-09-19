@@ -9,6 +9,7 @@ import {
 
 export interface SubmissionBrochure {
   submissionId: string;
+  developerId: string | null;
   developerName: string | null;
   sourceDocumentId: string;
   storagePath: string;
@@ -33,6 +34,7 @@ export const getSubmissionBrochure = async (
   const [row] = await database
     .select({
       submissionId: propertySubmissions.id,
+      developerId: propertySubmissions.developerId,
       developerName: developers.name,
       sourceDocumentId: sourceDocuments.id,
       storagePath: sourceDocuments.gcsPath,

@@ -48,7 +48,11 @@ export const POST = async (
         storage: storageAdapter,
         router: createOpenRouterPageRouter(),
       },
-      { ocrJobId: id, replaceExisting: body?.replace === true },
+      {
+        ocrJobId: id,
+        replaceExisting: body?.replace === true,
+        requestedBy: session.userId,
+      },
     );
     return Response.json(suggestions, {
       headers: { "Cache-Control": "no-store" },

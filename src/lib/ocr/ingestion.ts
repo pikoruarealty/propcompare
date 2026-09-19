@@ -5,6 +5,7 @@ import {
   ocrExtractionJobs,
   propertyTypes,
   propertySchemaFields,
+  propertySubmissions,
   propertySubmissionFieldEvidence,
   propertySubmissionFields,
   sourceDocuments,
@@ -18,6 +19,11 @@ import {
   type OcrProviderExtractionResult,
 } from "./adapter";
 import { parseOcrRoutingManifest } from "./routing";
+import {
+  recordAiUsage,
+  splitProviderKey,
+  type AiUsageInput,
+} from "@/lib/usage/ledger";
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
@@ -214,6 +220,8 @@ export const retryOcrExtractionPersistence = async (params: {
 export const executeOcrExtractionJob = async (params: {
   jobId: string;
   adapter: OcrProviderAdapter;
+  /** The admin who started the run, for the usage ledger. */
+  requestedBy?: string;
 }): Promise<OcrProviderExtractionResult> => {
   const [job] = await db
     .select({
@@ -304,15 +312,59 @@ export const executeOcrExtractionJob = async (params: {
     throw new OcrIngestionError("OCR job status changed before extraction");
   }
 
+  // Usage is recorded whether or not the run succeeds: a provider request can be
+  // billed even when its result is unusable, and the admin ledger must match.
+  const [owner] = await db
+    .select({ developerId: propertySubmissions.developerId })
+    .from(propertySubmissions)
+    .where(eq(propertySubmissions.id, job.submissionId));
+  const { provider, model } = splitProviderKey(params.adapter.providerKey);
+  const usageBase = (): Omit<AiUsageInput, "status"> => ({
+    kind: "ocr_extraction",
+    provider,
+    model,
+    ocrJobId: job.id,
+    submissionId: job.submissionId,
+    sourceDocumentId: job.sourceDocumentId,
+    developerId: owner?.developerId ?? null,
+    createdBy: params.requestedBy,
+  });
+
   let result: OcrProviderExtractionResult;
   try {
     result = await params.adapter.extract(request);
   } catch (error) {
+    if (error instanceof OcrAdapterError && error.providerRequestId) {
+      await recordAiUsage(db, [
+        {
+          ...usageBase(),
+          status: "failed",
+          providerRequestId: error.providerRequestId,
+        },
+      ]).catch(() => undefined);
+    }
     const code =
       error instanceof OcrAdapterError ? error.code : "unexpected_error";
     await markJobFailed(job.id, code, String(error));
     throw error;
   }
+
+  await recordAiUsage(
+    db,
+    (result.usage ?? []).map((entry) => ({
+      ...usageBase(),
+      status: "succeeded" as const,
+      scopeKey: entry.scopeKey,
+      providerRequestId: entry.providerRequestId,
+      promptTokens: entry.promptTokens,
+      completionTokens: entry.completionTokens,
+      reasoningTokens: entry.reasoningTokens,
+      costUsd: entry.costUsd,
+    })),
+  ).catch((error) => {
+    // Never lose an extraction result because the ledger write failed.
+    console.error("Failed to record OCR usage:", error);
+  });
 
   return retryOcrExtractionPersistence({ jobId: job.id, result });
 };

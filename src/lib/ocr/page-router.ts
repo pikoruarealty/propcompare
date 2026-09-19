@@ -84,6 +84,11 @@ export class PageRouterError extends Error {
       | "request_timeout"
       | "invalid_response",
     message: string,
+    /**
+     * What was already billed before the failure (earlier windows that
+     * succeeded), so a failed run still reaches the usage ledger.
+     */
+    public usage?: PageRouterUsage,
   ) {
     super(message);
     this.name = "PageRouterError";
@@ -417,30 +422,35 @@ export const createOpenRouterPageRouter = (options: PageRouterOptions = {}) => {
         perRequest: [],
       };
 
-      for (const [index, window] of windows.entries()) {
-        const result = await callWindow(
-          window.bytes,
-          window.pages.length,
-          index + 1,
-        );
-        usage.requests += 1;
-        usage.promptTokens += result.usage.promptTokens;
-        usage.completionTokens += result.usage.completionTokens;
-        usage.perRequest.push(result.usage);
-        if (result.usage.costUsd !== undefined) {
-          usage.costUsd = (usage.costUsd ?? 0) + result.usage.costUsd;
-        }
-
-        let parsed: unknown;
-        try {
-          parsed = JSON.parse(stripCodeFence(result.text));
-        } catch {
-          throw new PageRouterError(
-            "invalid_response",
-            "Page router returned invalid JSON",
+      try {
+        for (const [index, window] of windows.entries()) {
+          const result = await callWindow(
+            window.bytes,
+            window.pages.length,
+            index + 1,
           );
+          usage.requests += 1;
+          usage.promptTokens += result.usage.promptTokens;
+          usage.completionTokens += result.usage.completionTokens;
+          usage.perRequest.push(result.usage);
+          if (result.usage.costUsd !== undefined) {
+            usage.costUsd = (usage.costUsd ?? 0) + result.usage.costUsd;
+          }
+
+          let parsed: unknown;
+          try {
+            parsed = JSON.parse(stripCodeFence(result.text));
+          } catch {
+            throw new PageRouterError(
+              "invalid_response",
+              "Page router returned invalid JSON",
+            );
+          }
+          suggestions.push(...parseRouterWindow(parsed, window.pages));
         }
-        suggestions.push(...parseRouterWindow(parsed, window.pages));
+      } catch (error) {
+        if (error instanceof PageRouterError) error.usage ??= usage;
+        throw error;
       }
 
       suggestions.sort((a, b) => a.page - b.page);
