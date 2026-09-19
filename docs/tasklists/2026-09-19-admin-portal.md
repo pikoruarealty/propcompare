@@ -59,12 +59,19 @@ Under the pre-launch model the invite goes to the existing canonical profile the
 - [x] Local-disk `StorageAdapter` so upload works without GCS in development (also the base for a VPS move).
 - [ ] Page-routing confirmation — grid, selection and zoomable viewer done and verified in Chrome, Brave and Edge. Categories now come from a vision-model router, not text scanning (`DECISIONS.md` 2026-09-20). Remaining, in order:
   - [x] Router adapter (`src/lib/ocr/page-router.ts`, Gemini 2.5 Flash via OpenRouter, native PDF, windows under a byte budget): per-page category, confidence, imagery tags, optional floor-plan caption hint; 15 mocked-fetch tests. **Not yet run live** — waiting for the owner's go-ahead for a first paid validation on a few brochures from `brochures/`.
-  - [ ] Persist suggestions on the draft job, `POST` route to run the router, and skip floor-plan extraction when `hasFloorPlans` is false.
-  - [ ] Page grid shows category badges and confidence, flags low confidence, lets the admin change any page; explicit "Suggest page types" action (no cost shown anywhere in the UI — owner rule 2026-09-20).
+  - [x] Persist suggestions on the draft job (`src/lib/ingestion/page-suggestions.ts`), `POST /api/v1/admin/ocr-jobs/{id}/page-suggestions` (refuses a second paid run unless asked to replace). Skipping floor-plan extraction when `hasFloorPlans` is false is applied when the confirmed manifest is built (below).
+  - [x] Page grid shows category badges and confidence, flags low confidence, lets the admin change any page; explicit "Categorize brochure pages" action (no cost shown anywhere in the UI — owner rule 2026-09-20).
   - [ ] Floor-plans scope kind in the OCR contract (manifest parser, extraction prompt, ingestion persistence) so Claude discovers unit types from one scope.
   - [ ] Confirm-pages step, then a separate confirm before Claude extraction is queued.
   - [ ] Later: server-side extraction of tagged photos/floor plans into `submission_media` (dependency decision), human approval per image, attribution recorded; and admin upload of their own images into the same list (source kind `own`).
 - [ ] (superseded, kept for the record) Page-routing confirmation: auto-suggested- [ ] `POST …/ocr-jobs/{id}/queue` and status polling.
+
+### Slice 4b — AI usage ledger and admin Usage tab (needs schema sign-off)
+
+- [ ] Owner review of `docs/schema/schema.v6.md` section 1 (`ai_usage_events`). Nothing is migrated until approved.
+- [ ] Migration, append-only privileges, and a recorder used by the router run and every extraction scope (failed calls included).
+- [ ] `/admin/usage` tab (admin only): totals, by brochure/property, by developer, by model, recent runs; null costs shown as "not reported" and totals labelled as a lower bound when any are missing.
+- [ ] Test that no developer-portal or buyer route reads the usage table or returns a cost.
 
 ### Slice 5 — reconciliation, review, publish
 

@@ -19,13 +19,15 @@ export interface SubmissionBrochure {
 }
 
 /**
- * The brochure behind a submission: its stored file, page count, and the latest
+ * The brochure behind a submission (or, with `by: "job"`, behind an OCR attempt
+ * id, in which case the first argument is that job id): its stored file, page count, and the latest
  * OCR attempt (which carries the page-routing manifest). `null` when the id is
  * malformed, unknown, or the submission was not created from a brochure.
  */
 export const getSubmissionBrochure = async (
   database: PostgresJsDatabase,
   submissionId: string,
+  by: "submission" | "job" = "submission",
 ): Promise<SubmissionBrochure | null> => {
   if (!/^[0-9a-f-]{36}$/i.test(submissionId)) return null;
   const [row] = await database
@@ -49,7 +51,11 @@ export const getSubmissionBrochure = async (
       eq(sourceDocuments.id, ocrExtractionJobs.sourceDocumentId),
     )
     .leftJoin(developers, eq(developers.id, propertySubmissions.developerId))
-    .where(eq(ocrExtractionJobs.submissionId, submissionId))
+    .where(
+      by === "job"
+        ? eq(ocrExtractionJobs.id, submissionId)
+        : eq(ocrExtractionJobs.submissionId, submissionId),
+    )
     .orderBy(desc(ocrExtractionJobs.createdAt))
     .limit(1);
   if (!row || row.pageCount === null) return null;

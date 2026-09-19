@@ -24,7 +24,8 @@ const reply = (pages: object[]) =>
           finish_reason: "stop",
         },
       ],
-      usage: { prompt_tokens: 1000, completion_tokens: 50 },
+      id: "gen-test-1",
+      usage: { prompt_tokens: 1000, completion_tokens: 50, cost: 0.0042 },
     }),
     { status: 200 },
   );
@@ -173,10 +174,20 @@ describe("createOpenRouterPageRouter", () => {
       requests: 1,
       promptTokens: 1000,
       completionTokens: 50,
+      costUsd: 0.0042,
+      perRequest: [
+        {
+          providerRequestId: "gen-test-1",
+          promptTokens: 1000,
+          completionTokens: 50,
+          costUsd: 0.0042,
+        },
+      ],
     });
 
     const request = JSON.parse(String(fetchMock.mock.calls[0][1].body));
     expect(request.model).toBe("google/gemini-2.5-flash");
+    expect(request.usage).toEqual({ include: true });
     expect(request.plugins).toEqual([
       { id: "file-parser", pdf: { engine: "native" } },
     ]);

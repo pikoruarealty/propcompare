@@ -5,6 +5,7 @@ import { db } from "@/db";
 import { AdminPageHeader, AdminShell } from "@/components/admin/admin-shell";
 import { PageReview } from "@/components/admin/page-review";
 import { requirePortalRole } from "@/lib/accounts/session";
+import { readStoredSuggestions } from "@/lib/ingestion/page-suggestions";
 import { getSubmissionBrochure } from "@/lib/ingestion/queries";
 import { storageAdapter } from "@/lib/storage";
 
@@ -31,6 +32,7 @@ export default async function ReviewPagesPage({
   const brochure = await getSubmissionBrochure(db, id);
   if (!brochure) notFound();
 
+  const suggestions = readStoredSuggestions(brochure.routingManifest);
   const pdfUrl = await storageAdapter.getSignedReadUrl(brochure.storagePath, {
     expiresInSeconds: PDF_URL_TTL_SECONDS,
   });
@@ -49,7 +51,13 @@ export default async function ReviewPagesPage({
         title="Review brochure pages"
         description={`${brochure.developerName ?? "Unknown developer"} · ${brochure.pageCount} pages`}
       />
-      <PageReview pdfUrl={pdfUrl} pageCount={brochure.pageCount} />
+      <PageReview
+        key={suggestions?.generatedAt ?? "none"}
+        pdfUrl={pdfUrl}
+        pageCount={brochure.pageCount}
+        ocrJobId={brochure.ocrJobId}
+        suggestions={suggestions?.pages ?? null}
+      />
     </AdminShell>
   );
 }

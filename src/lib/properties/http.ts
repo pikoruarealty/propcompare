@@ -48,6 +48,9 @@ export type ApiErrorCode =
   | "forbidden"
   | "developer_not_found"
   | "invalid_document"
+  | "ocr_job_not_found"
+  | "invalid_state"
+  | "provider_error"
   | "internal_error";
 
 export interface ApiErrorBody {

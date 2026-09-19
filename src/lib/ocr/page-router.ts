@@ -51,10 +51,23 @@ export interface PageSuggestion {
   caption?: string;
 }
 
+export interface PageRouterRequestUsage {
+  /** Provider request id, for reconciling against the provider dashboard. */
+  providerRequestId?: string;
+  promptTokens: number;
+  completionTokens: number;
+  /** Provider-reported cost in USD; absent when the provider did not report it. */
+  costUsd?: number;
+}
+
 export interface PageRouterUsage {
   requests: number;
   promptTokens: number;
   completionTokens: number;
+  /** Sum of reported costs; absent when no request reported one. */
+  costUsd?: number;
+  /** One entry per provider request, for the admin-only usage ledger. */
+  perRequest: PageRouterRequestUsage[];
 }
 
 export interface PageRoutingResult {
@@ -273,7 +286,7 @@ export const createOpenRouterPageRouter = (options: PageRouterOptions = {}) => {
     index: number,
   ): Promise<{
     text: string;
-    usage: { prompt: number; completion: number };
+    usage: PageRouterRequestUsage;
   }> => {
     const body = JSON.stringify({
       model,
@@ -296,6 +309,8 @@ export const createOpenRouterPageRouter = (options: PageRouterOptions = {}) => {
       ],
       plugins: [{ id: "file-parser", pdf: { engine: "native" } }],
       response_format: { type: "json_object" },
+      // Ask the provider to report what the request cost, for the admin usage ledger.
+      usage: { include: true },
     });
 
     for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -344,7 +359,12 @@ export const createOpenRouterPageRouter = (options: PageRouterOptions = {}) => {
 
       const json = (await response.json()) as {
         choices?: { message?: { content?: unknown }; finish_reason?: string }[];
-        usage?: { prompt_tokens?: number; completion_tokens?: number };
+        id?: string;
+        usage?: {
+          prompt_tokens?: number;
+          completion_tokens?: number;
+          cost?: number;
+        };
       };
       const choice = json.choices?.[0];
       if (typeof choice?.message?.content !== "string") {
@@ -362,8 +382,14 @@ export const createOpenRouterPageRouter = (options: PageRouterOptions = {}) => {
       return {
         text: choice.message.content,
         usage: {
-          prompt: json.usage?.prompt_tokens ?? 0,
-          completion: json.usage?.completion_tokens ?? 0,
+          ...(typeof json.id === "string"
+            ? { providerRequestId: json.id }
+            : {}),
+          promptTokens: json.usage?.prompt_tokens ?? 0,
+          completionTokens: json.usage?.completion_tokens ?? 0,
+          ...(typeof json.usage?.cost === "number"
+            ? { costUsd: json.usage.cost }
+            : {}),
         },
       };
     }
@@ -388,6 +414,7 @@ export const createOpenRouterPageRouter = (options: PageRouterOptions = {}) => {
         requests: 0,
         promptTokens: 0,
         completionTokens: 0,
+        perRequest: [],
       };
 
       for (const [index, window] of windows.entries()) {
@@ -397,8 +424,12 @@ export const createOpenRouterPageRouter = (options: PageRouterOptions = {}) => {
           index + 1,
         );
         usage.requests += 1;
-        usage.promptTokens += result.usage.prompt;
-        usage.completionTokens += result.usage.completion;
+        usage.promptTokens += result.usage.promptTokens;
+        usage.completionTokens += result.usage.completionTokens;
+        usage.perRequest.push(result.usage);
+        if (result.usage.costUsd !== undefined) {
+          usage.costUsd = (usage.costUsd ?? 0) + result.usage.costUsd;
+        }
 
         let parsed: unknown;
         try {
