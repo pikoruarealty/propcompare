@@ -1,5 +1,13 @@
 # Progress
 
+## 2026-09-19 (later) — Buyer sign-out, signed-in header, name and optional email at first sign-up
+
+**Done:** the buyer header now shows "Sign in" or "Hi, <first name>" with a Sign out control (`HeaderAccount`, a client-side session read so ISR pages stay static). A first-time buyer is asked for their name — required — and an email — optional — right after verifying their code (they arrive with a placeholder name, so anyone who closes the tab mid-way is asked again next login). The phone number is never shown in the UI. Better Auth's `changeEmail` is enabled for unverified accounts only, so a buyer's placeholder email can be replaced without a confirmation mail; verified (developer/admin) emails cannot change this way.
+
+**Verified:** 641/641 tests; lint and typecheck clean; against the dev server, OTP verify → `update-user` (name) → `change-email` → `get-session` returned the new name and email.
+
+**Not done / for Deep:** returning buyers seeing their activity needs screens for saved properties and comparisons. Both are in scope (backend routes `/api/v1/saved-properties` and `/api/v1/comparisons` are built and tested) but the buyer-facing pages are Deep's Phase 3 UI and do not exist yet. They are the retention feature, so they should not slip. Buyer email is stored unverified; nothing sends mail yet.
+
 ## 2026-09-19 — Login UI: buyer phone OTP, developer and admin email/password
 
 **Done:** three sign-in screens on one shared frame (`AuthShell`, following the Stitch unlock-gate screen): `/login` (buyer — phone number, then a 6-digit code; the first verified code creates the account), `/developers/login` and `/admin/login` (email + password). A user's role is the presence of an `admin_users` or an _active_ `developer_users` row (`src/lib/accounts/roles.ts`); the portal sign-in checks it _before_ a session exists, so the wrong door never produces a session and every failure returns the same message. `requirePortalRole` is the authorization boundary and guards `/developers` and `/admin` (holding pages until their real screens land). Public email sign-up is disabled in `src/lib/auth.ts`; password accounts come only from `provisionPasswordAccount`. `bun run db:first-admin` (env `FIRST_ADMIN_EMAIL`/`FIRST_ADMIN_PASSWORD`) creates the first owner and refuses once any admin exists. `?next=` is validated by `safeReturnPath`.

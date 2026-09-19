@@ -2,15 +2,18 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { sendOtp, verify, replace, refresh } = vi.hoisted(() => ({
-  sendOtp: vi.fn(),
-  verify: vi.fn(),
-  replace: vi.fn(),
-  refresh: vi.fn(),
-}));
+const { sendOtp, verify, updateUser, changeEmail, replace, refresh } =
+  vi.hoisted(() => ({
+    sendOtp: vi.fn(),
+    updateUser: vi.fn(),
+    changeEmail: vi.fn(),
+    verify: vi.fn(),
+    replace: vi.fn(),
+    refresh: vi.fn(),
+  }));
 
 vi.mock("@/lib/auth-client", () => ({
-  authClient: { phoneNumber: { sendOtp, verify } },
+  authClient: { phoneNumber: { sendOtp, verify }, updateUser, changeEmail },
 }));
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace, refresh }),
@@ -31,7 +34,12 @@ const enterPhone = async (
 beforeEach(() => {
   vi.clearAllMocks();
   sendOtp.mockResolvedValue({ data: {}, error: null });
-  verify.mockResolvedValue({ data: {}, error: null });
+  verify.mockResolvedValue({
+    data: { user: { name: "Riya Shah" } },
+    error: null,
+  });
+  updateUser.mockResolvedValue({ data: {}, error: null });
+  changeEmail.mockResolvedValue({ data: {}, error: null });
 });
 
 describe("BuyerLoginForm", () => {
@@ -144,5 +152,85 @@ describe("BuyerLoginForm", () => {
       screen.getByRole("button", { name: /use a different number/i }),
     );
     expect(await screen.findByLabelText(/mobile number/i)).toBeVisible();
+  });
+
+  describe("a first-time buyer", () => {
+    const reachNameStep = async (user: ReturnType<typeof userEvent.setup>) => {
+      verify.mockResolvedValue({
+        data: { user: { name: "Buyer" } },
+        error: null,
+      });
+      await enterPhone(user);
+      await user.type(
+        await screen.findByLabelText(/verification code/i),
+        "123456",
+      );
+      await user.click(
+        screen.getByRole("button", { name: /verify and continue/i }),
+      );
+      return screen.findByLabelText(/your name/i);
+    };
+
+    it("is asked for a name before being sent on", async () => {
+      const user = userEvent.setup();
+      render(<BuyerLoginForm returnTo="/properties/west-park" />);
+      await reachNameStep(user);
+
+      expect(replace).not.toHaveBeenCalled();
+      expect(screen.getByLabelText(/email.*optional/i)).toBeVisible();
+    });
+
+    it("saves the name and continues without an email", async () => {
+      const user = userEvent.setup();
+      render(<BuyerLoginForm returnTo="/properties/west-park" />);
+      await user.type(await reachNameStep(user), "  Riya   Shah ");
+      await user.click(screen.getByRole("button", { name: /continue/i }));
+
+      await waitFor(() =>
+        expect(replace).toHaveBeenCalledWith("/properties/west-park"),
+      );
+      expect(updateUser).toHaveBeenCalledWith({ name: "Riya Shah" });
+      expect(changeEmail).not.toHaveBeenCalled();
+    });
+
+    it("saves an optional email when one is given", async () => {
+      const user = userEvent.setup();
+      render(<BuyerLoginForm returnTo="/" />);
+      await user.type(await reachNameStep(user), "Riya Shah");
+      await user.type(screen.getByLabelText(/email/i), "Riya@Example.com");
+      await user.click(screen.getByRole("button", { name: /continue/i }));
+
+      await waitFor(() => expect(replace).toHaveBeenCalled());
+      expect(changeEmail).toHaveBeenCalledWith({
+        newEmail: "riya@example.com",
+      });
+    });
+
+    it("insists on a name, and on a well-formed email if one is typed", async () => {
+      const user = userEvent.setup();
+      render(<BuyerLoginForm returnTo="/" />);
+      await reachNameStep(user);
+      await user.type(screen.getByLabelText(/email/i), "not-an-email");
+      await user.click(screen.getByRole("button", { name: /continue/i }));
+
+      expect(await screen.findByText(/enter your name/i)).toBeVisible();
+      expect(screen.getByText(/doesn.t look like an email/i)).toBeVisible();
+      expect(updateUser).not.toHaveBeenCalled();
+    });
+
+    it("stays put when the email is already taken so it can be fixed", async () => {
+      changeEmail.mockResolvedValue({
+        data: null,
+        error: { message: "taken" },
+      });
+      const user = userEvent.setup();
+      render(<BuyerLoginForm returnTo="/" />);
+      await user.type(await reachNameStep(user), "Riya Shah");
+      await user.type(screen.getByLabelText(/email/i), "riya@example.com");
+      await user.click(screen.getByRole("button", { name: /continue/i }));
+
+      expect(await screen.findByText(/may already be in use/i)).toBeVisible();
+      expect(replace).not.toHaveBeenCalled();
+    });
   });
 });

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { HeaderAccount } from "./header-account";
 import { PageContainer } from "./page-frame";
 
 /**
@@ -26,20 +27,23 @@ export function SiteHeader() {
             PropCompare
           </Link>
 
-          <nav aria-label="Primary">
-            <ul className="flex items-center gap-6 text-sm">
-              {BUYER_NAV.map((item) => (
-                <li key={item.href}>
-                  <Link
-                    href={item.href}
-                    className="text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    {item.label}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </nav>
+          <div className="flex items-center gap-6">
+            <nav aria-label="Primary">
+              <ul className="flex items-center gap-6 text-sm">
+                {BUYER_NAV.map((item) => (
+                  <li key={item.href}>
+                    <Link
+                      href={item.href}
+                      className="text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      {item.label}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </nav>
+            <HeaderAccount />
+          </div>
         </div>
       </PageContainer>
     </header>

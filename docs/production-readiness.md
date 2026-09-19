@@ -2,7 +2,7 @@
 
 A running list of everything that works locally (or is stubbed) but must be decided or built before PropCompare goes live. Add to it whenever a task leaves something behind; tick items off with a date and a pointer to where it was resolved. Not a plan — the phase tasklists are the plan.
 
-Last updated: 2026-09-19
+Last updated: 2026-09-19 (session-aware header done)
 
 ## Blocking — nothing ships without these
 
@@ -17,7 +17,7 @@ Last updated: 2026-09-19
 ## Should be done before or soon after launch
 
 - [ ] **Admin MFA** (`admin_users.mfa_enforced` is a placeholder; Phase 5). Admins can publish to the live catalog, so this should not wait long.
-- [ ] **Session-aware header** (signed-in state, sign-out) for buyers — client-side session read to keep ISR pages static. Coordinate with Deep.
+- [ ] **Buyer retention screens** — saved properties and saved comparisons pages so returning buyers see their activity (backend done; UI is Deep's Phase 3). Also buyer email verification once an email provider exists (emails are stored unverified today).
 - [ ] **Pre-login intake cookie claim** (`docs/tasklists/2026-09-18-pre-login-intake-cookie.md`) — direction agreed, not built.
 - [ ] **Password reset** for developer and admin accounts (invite links cover first-time setup only).
 - [ ] **Audit trail review:** confirm admin actions (approve, publish, request changes) are attributable to a user and cannot be edited after the fact.

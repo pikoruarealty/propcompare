@@ -3,6 +3,7 @@ import { drizzleAdapter } from "@better-auth/drizzle-adapter";
 import { phoneNumber } from "better-auth/plugins";
 import { nextCookies } from "better-auth/next-js";
 import { db } from "@/db";
+import { PLACEHOLDER_BUYER_NAME } from "@/lib/accounts/buyer-name";
 import * as authSchema from "@/db/schema/auth";
 
 /**
@@ -26,6 +27,14 @@ export const auth = betterAuth({
     // Enforced here, not merely by leaving a sign-up screen out.
     disableSignUp: true,
   },
+  user: {
+    // A buyer may add a contact email after their first sign-in. Their
+    // placeholder email is unverified, so this lets it be replaced without a
+    // confirmation mail (none can be sent yet — see docs/production-readiness.md).
+    // Verified addresses (developer/admin) still need a confirmation flow, which
+    // is deliberately not configured, so they cannot change email this way.
+    changeEmail: { enabled: true, updateEmailWithoutVerification: true },
+  },
   plugins: [
     phoneNumber({
       // A buyer's first successful OTP creates their account: there is no
@@ -34,7 +43,7 @@ export const auth = betterAuth({
       signUpOnVerification: {
         getTempEmail: (phone) =>
           `${phone.replace(/\D/g, "")}@buyers.propcompare.invalid`,
-        getTempName: () => "Buyer",
+        getTempName: () => PLACEHOLDER_BUYER_NAME,
       },
       sendOTP: async ({ phoneNumber, code }) => {
         if (process.env.NODE_ENV !== "production") {
