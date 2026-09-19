@@ -36,7 +36,7 @@ We upload every property ourselves until developers join. Consequences for this 
 - [x] Create a canonical developer profile (name required; RERA developer id and website optional; RERA id unique). Validation shared and unit-tested; integration-tested against Postgres.
 - [x] `/admin/developers/[id]`: profile detail and its linked users (empty until slice 2).
 
-### Slice 2 — inviting developer users (needs sign-off before coding — auth design)
+### Slice 2 — inviting developer users (design approved 2026-09-19)
 
 Proposed, using only existing tables so no schema change is needed:
 
@@ -45,7 +45,7 @@ Proposed, using only existing tables so no schema change is needed:
 3. The developer opens the link, sets a password (12+ characters). The server verifies the token hash and expiry, creates the credential account, sets `developer_users.status = active`, deletes the token. Replays fail.
 4. Admin can revoke (`status = revoked`, token deleted) and re-issue.
 
-Under the pre-launch model the invite goes to the existing canonical profile the admin already uploaded properties under. Decision still needed from the owner: is an on-screen link acceptable until email exists, and is a 7-day expiry right? Also: should a developer profile allow more than one linked user (the schema does).
+Under the pre-launch model the invite goes to the existing canonical profile the admin already uploaded properties under. Approved 2026-09-19 as written: on-screen link until email exists, 7-day expiry, several users per profile.
 
 ### Slice 3 — submission queue
 
@@ -55,6 +55,8 @@ Under the pre-launch model the invite goes to the existing canonical profile the
 ### Slice 4 — source documents, page routing, OCR trigger (shared with the developer portal)
 
 - [ ] Brochure upload via `StorageAdapter.upload()`; immutable `source_documents` row.
+- [ ] Browser support for the PDF viewer (owner requirement 2026-09-19): `pdfjs-dist` legacy build, bundler-loaded worker, visible canvases only and no pixel readback (Brave Shields farbling), visible fallback if a PDF cannot render; screenshot-verify in Chrome, Brave and Edge; Firefox/Safari manual check tracked in `docs/production-readiness.md`.
+- [ ] Local-disk `StorageAdapter` so upload works without GCS in development (also the base for a VPS move).
 - [ ] Page-routing confirmation: auto-suggested category per page in a thumbnail grid, free select/deselect, large zoomable viewer, explicit confirmation before any paid OCR run (`DECISIONS.md` 2026-09-19).
 - [ ] `POST …/ocr-jobs/{id}/queue` and status polling.
 

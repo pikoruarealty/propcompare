@@ -17,6 +17,8 @@ Last updated: 2026-09-19 (session-aware header done)
 - [ ] **Brochure-image copyright exposure (accepted 2026-09-19).** Publishing brochure floor plans and renders before a developer consents needs: visible attribution on every image, a working "request removal" route honoured promptly, media origin recorded per image, and ideally a short takedown policy page. Consider a lawyer's review of the takedown wording before launch.
 - [ ] **Enquiry handling with no developer accounts:** admin inbox and follow-up process so no buyer enquiry is left unanswered.
 
+- [ ] **Firefox and Safari check of the brochure PDF viewer** (Chrome, Brave, Edge are verified on the maintainer machine; the other two engines need a person with those browsers).
+
 ## Should be done before or soon after launch
 
 - [ ] **Admin MFA** (`admin_users.mfa_enforced` is a placeholder; Phase 5). Admins can publish to the live catalog, so this should not wait long.
