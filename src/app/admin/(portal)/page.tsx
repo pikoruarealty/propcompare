@@ -1,15 +1,10 @@
-import type { Metadata } from "next";
-import { PortalLanding } from "@/components/auth/portal-landing";
+import { redirect } from "next/navigation";
 import { requirePortalRole } from "@/lib/accounts/session";
-
-export const metadata: Metadata = {
-  title: "Admin console — PropCompare",
-  robots: { index: false },
-};
 
 export const dynamic = "force-dynamic";
 
+/** The admin home is the developer directory until the submission queue exists. */
 export default async function AdminHomePage() {
-  const session = await requirePortalRole("admin", "/admin");
-  return <PortalLanding portal="admin" email={session.email} />;
+  await requirePortalRole("admin", "/admin");
+  redirect("/admin/developers");
 }

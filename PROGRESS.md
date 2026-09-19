@@ -1,5 +1,13 @@
 # Progress
 
+## 2026-09-19 (later still) — Admin console shell and developer profiles
+
+**Done:** `/admin` is now a real console: a sidebar shell after the Stitch "Editorial Desk" layout, a developer directory (`/admin/developers`), create-profile (`/admin/developers/new`) and a profile page. Profiles enforce one per RERA developer id. Every page and the create action re-check the admin role themselves. Logic lives in `src/lib/developers/profiles.ts` (10 tests, including Postgres integration). Tasklist: `docs/tasklists/2026-09-19-admin-portal.md`.
+
+**Verified:** pages return 200 for a signed-in admin, 307 to login when signed out, 404 for an unknown id; typecheck and lint clean. Not yet seen in a browser with a session (screenshots of these screens are still owed).
+
+**Waiting on the owner:** the invite design for developer users (slice 2 of the tasklist) touches auth, so it needs sign-off before I code it: on-screen invite link until email exists, 7-day single-use token, only existing tables.
+
 ## 2026-09-19 (later) — Buyer sign-out, signed-in header, name and optional email at first sign-up
 
 **Done:** the buyer header now shows "Sign in" or "Hi, <first name>" with a Sign out control (`HeaderAccount`, a client-side session read so ISR pages stay static). A first-time buyer is asked for their name — required — and an email — optional — right after verifying their code (they arrive with a placeholder name, so anyone who closes the tab mid-way is asked again next login). The phone number is never shown in the UI. Better Auth's `changeEmail` is enabled for unverified accounts only, so a buyer's placeholder email can be replaced without a confirmation mail; verified (developer/admin) emails cannot change this way.
