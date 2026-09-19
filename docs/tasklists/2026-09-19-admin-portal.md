@@ -57,8 +57,13 @@ Under the pre-launch model the invite goes to the existing canonical profile the
 - [x] Brochure upload via `StorageAdapter.upload()`; immutable `source_documents` row, draft submission and draft OCR attempt with an empty routing manifest (`src/lib/ingestion/brochure-upload.ts`, `POST /api/v1/admin/source-documents`, `/admin/submissions/new`). PDF validated as a real, readable, unencrypted PDF (100 MB / 300 pages).
 - [x] Browser support for the PDF viewer (owner requirement 2026-09-19): `pdfjs-dist` legacy build, bundler-loaded worker, visible canvases only and no pixel readback (Brave Shields farbling), visible fallback if a PDF cannot render; screenshot-verify in Chrome, Brave and Edge; Firefox/Safari manual check tracked in `docs/production-readiness.md`.
 - [x] Local-disk `StorageAdapter` so upload works without GCS in development (also the base for a VPS move).
-- [ ] (in progress — grid, selection and zoomable viewer done and verified in Chrome, Brave and Edge; remaining: per-page category assignment, unit-variant grouping, auto-suggestions, the confirm-before-paid-OCR step) Page-routing confirmation: auto-suggested category per page in a thumbnail grid, free select/deselect, large zoomable viewer, explicit confirmation before any paid OCR run (`DECISIONS.md` 2026-09-19).
-- [ ] `POST …/ocr-jobs/{id}/queue` and status polling.
+- [ ] Page-routing confirmation — grid, selection and zoomable viewer done and verified in Chrome, Brave and Edge. Categories now come from a vision-model router, not text scanning (`DECISIONS.md` 2026-09-20). Remaining, in order:
+  - [ ] Router adapter (Gemini 2.5 Flash via OpenRouter, native PDF): per-page category, confidence, imagery tags, optional floor-plan caption hint; mocked-fetch tests; stored as suggestions on the draft manifest. Needs the real brochures and an OpenRouter key to validate; no paid call without the owner's go-ahead.
+  - [ ] Page grid shows category badges and confidence, flags low confidence, lets the admin change any page; explicit "Suggest page types" action with a cost estimate.
+  - [ ] Floor-plans scope kind in the OCR contract (manifest parser, extraction prompt, ingestion persistence) so Claude discovers unit types from one scope.
+  - [ ] Confirm-pages step, then a separate confirm before Claude extraction is queued.
+  - [ ] Later: server-side extraction of tagged photos/floor plans into `submission_media` (dependency decision), human approval per image, attribution recorded.
+- [ ] (superseded, kept for the record) Page-routing confirmation: auto-suggested- [ ] `POST …/ocr-jobs/{id}/queue` and status polling.
 
 ### Slice 5 — reconciliation, review, publish
 
