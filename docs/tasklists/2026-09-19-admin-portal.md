@@ -49,8 +49,8 @@ Under the pre-launch model the invite goes to the existing canonical profile the
 
 ### Slice 3 — submission queue
 
-- [ ] `GET/POST` admin routes per the API spec: submissions list filtered by status; detail with fields and evidence.
-- [ ] `/admin/submissions`: queue table per the Stitch screen (property & developer, location, submitted date, status pill, action).
+- [x] Read model (`src/lib/submissions/queue.ts`): list filtered by status, detail with proposed fields; integration-tested. (The JSON API routes in the spec are not needed by the server-rendered screens; add them only if another client needs them.)
+- [x] `/admin/submissions`: queue table per the Stitch screen, status filters, empty states; `/admin/submissions/[id]` read-only detail. Reconciliation actions come in slice 5.
 
 ### Slice 4 — source documents, page routing, OCR trigger (shared with the developer portal)
 

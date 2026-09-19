@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { LogOut, Users } from "lucide-react";
+import { ClipboardList, LogOut, Users } from "lucide-react";
 import { signOutOfPortal } from "@/app/actions/portal-auth";
 import { cn } from "@/lib/utils";
 
@@ -14,6 +14,12 @@ import { cn } from "@/lib/utils";
  * built yet would be a dead end. Add entries as each slice lands.
  */
 export const ADMIN_NAV = [
+  {
+    key: "submissions",
+    href: "/admin/submissions",
+    label: "Submissions",
+    icon: ClipboardList,
+  },
   {
     key: "developers",
     href: "/admin/developers",

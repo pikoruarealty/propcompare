@@ -1,5 +1,13 @@
 # Progress
 
+## 2026-09-19 (night) — Admin submission queue
+
+**Done:** `/admin` now opens the submission queue (Stitch queue layout): status filters, property and developer, location, source (brochure / manual / RERA), date, status pill, and a read-only submission page listing proposed fields with confidence and review state. Read model `src/lib/submissions/queue.ts` derives names from the live property or the draft's own field candidates and never guesses — missing values show "Not stated". Also logged the paid-analytics-platform vision as beta-deadline future scope (`DECISIONS.md`, `docs/roadmap.md`, `docs/production-readiness.md`).
+
+**Verified:** typecheck and lint clean; queue read model integration-tested; pages 200 signed in, 307 signed out, 404 for a bad id, unknown status filter ignored. Not seen in a browser with a session.
+
+**Next:** brochure upload (needs a local storage adapter so it works without GCS), page-routing confirmation UI, manual-entry draft, then reconciliation and publish. The developer-invite design is still waiting on the owner.
+
 ## 2026-09-19 (evening) — Pre-launch operating model decided
 
 **Decided (owner sign-off, `DECISIONS.md`):** we upload all properties ourselves under the real developer's canonical profile (no account needed); when the developer joins we invite their user to that profile, so nothing is ever transferred — and no hand edit of `properties` is needed, which the one-write-path rule would forbid. Manual entry sits beside brochure OCR (`manual_form` already exists; one shared reconciliation screen). Brochure floor plans and renders may be published with attribution and a takedown route (copyright exposure accepted, recorded). Enquiries go to an admin inbox; "Verified" means checked by PropCompare.
