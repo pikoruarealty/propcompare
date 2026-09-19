@@ -81,6 +81,7 @@ export class PageRouterError extends Error {
     public readonly code:
       | "configuration_error"
       | "provider_error"
+      | "insufficient_credits"
       | "request_timeout"
       | "invalid_response",
     message: string,
@@ -356,8 +357,10 @@ export const createOpenRouterPageRouter = (options: PageRouterOptions = {}) => {
           await new Promise((r) => setTimeout(r, retryDelayMs));
           continue;
         }
+        // 402 is the provider saying the account balance is empty: not a fault
+        // in the request, and something an admin can fix, so it gets its own code.
         throw new PageRouterError(
-          "provider_error",
+          response.status === 402 ? "insufficient_credits" : "provider_error",
           `Page router returned HTTP ${response.status}: ${detail}`,
         );
       }

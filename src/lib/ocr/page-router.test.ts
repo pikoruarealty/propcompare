@@ -224,6 +224,21 @@ describe("createOpenRouterPageRouter", () => {
     });
   });
 
+  it("reports an empty provider balance distinctly and does not retry it", async () => {
+    const broke = vi
+      .fn()
+      .mockImplementation(async () => new Response("{}", { status: 402 }));
+    const router = createOpenRouterPageRouter({
+      apiKey: "k",
+      fetch: broke as unknown as typeof fetch,
+      retryDelayMs: 0,
+    });
+    await expect(router.route(await makePdf(1))).rejects.toMatchObject({
+      code: "insufficient_credits",
+    });
+    expect(broke).toHaveBeenCalledTimes(1);
+  });
+
   it("rejects a reply that is not JSON", async () => {
     const bad = vi.fn().mockResolvedValue(
       new Response(

@@ -66,6 +66,17 @@ export const POST = async (
       );
     }
     if (
+      cause instanceof PageRouterError &&
+      cause.code === "insufficient_credits"
+    ) {
+      console.error("POST page-suggestions: provider account out of credits");
+      return errorResponse(
+        502,
+        "provider_error",
+        "The AI provider account is out of credits. Add credits at OpenRouter, then try again.",
+      );
+    }
+    if (
       cause instanceof PageRouterError ||
       cause instanceof StorageAdapterError
     ) {
