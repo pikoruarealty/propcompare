@@ -1,5 +1,11 @@
 # Progress
 
+## 2026-09-20 (night) — Page categorization validated live
+
+**Done:** with OpenRouter credits restored, "Categorize brochure pages" ran through the real admin UI on Kimana (18 pages, 15 s), Amaris (69 pages, 58 s) and 360 (29 pages, 74 s). The owner checked the categories by hand and confirms they are accurate. Total spend about $0.027, all visible in the admin Usage tab, none shown beside the action. One correction to my earlier reading: the Amaris page lists I compared against were an earlier router run, not a human answer, so that comparison shows repeatability only. `scripts/categorize-brochures.mjs` now passes the file by path (Playwright refuses 50 MB+ buffers; 360 is 62 MB).
+
+**Next:** the layout hint on imagery pages and a whole-page "use as image" action; then the Claude extraction live run on the confirmed pages, and the human field-level accuracy check.
+
 ## 2026-09-20 (night) — Developer invites
 
 **Done:** an owner can invite someone to an existing developer profile from the profile's new Team panel. The invitation is a one-time seven-day link shown once (no email service yet); the invitee sets a password at `/developers/accept-invite`, is signed in, and the link is dead. The owner can issue a new link, withdraw an invitation, or remove access, which also ends the person's open sessions. An existing account is never repurposed, only a hash of the token is stored, and every bad link gets the same plain answer. Decisions in `DECISIONS.md` 2026-09-20.

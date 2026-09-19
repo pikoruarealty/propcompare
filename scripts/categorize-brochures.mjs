@@ -10,9 +10,8 @@
  * Needs `bun run dev` running with STORAGE_DRIVER=local, OPENROUTER_API_KEY set,
  * and a local admin. Run with Node, not Bun (Playwright pipes hang under Bun on
  * Windows). Prints, per brochure, the pages assigned to each category so they can
- * be compared with hand-routed ground truth.
+ * be compared with earlier router output or a human-verified answer (an earlier router run is consistency, not accuracy).
  */
-import { readFileSync } from "node:fs";
 import path from "node:path";
 import { chromium } from "playwright-core";
 
@@ -54,11 +53,11 @@ for (const file of files) {
 
   await page.goto(`${BASE}/admin/submissions/new`);
   await page.getByLabel("Developer").selectOption({ label: developerName });
-  await page.getByLabel("Brochure (PDF)").setInputFiles({
-    name: path.basename(file),
-    mimeType: "application/pdf",
-    buffer: readFileSync(path.join("brochures", file)),
-  });
+  // A path, not a buffer: Playwright refuses buffers over 50 MB and real brochures
+  // are larger than that.
+  await page
+    .getByLabel("Brochure (PDF)")
+    .setInputFiles(path.join("brochures", file));
   await page.getByRole("button", { name: "Upload brochure" }).click();
   await page.waitForURL(/\/admin\/submissions\/[0-9a-f-]{36}\/pages$/);
   console.log(

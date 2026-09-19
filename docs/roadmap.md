@@ -83,6 +83,8 @@ Phases 2A and 2B run in parallel once Phase 1 lands, so both developers are work
 
 ## Phase 4 — Developer portfolio/analytics (narrowed 2026-09-18)
 
+> The developer-facing submission screens pulled forward on 2026-09-18 are **on hold** (owner decision 2026-09-20): maintainers upload everything until developers join. Revisit only if the project is ahead of schedule.
+
 **Area of focus: Deep** for the portal build; **Bhavarth** defines the auth/permission boundaries and reviews.
 
 The submission-creating half of the developer portal (upload, page routing, OCR-draft review, submit) moved to finishing Phase 2A — see the 2026-09-18 `DECISIONS.md` entry. What's left here, once a developer account can already sign in and submit:

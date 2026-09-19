@@ -45,6 +45,8 @@ In flow order — each step unblocks the next:
 
 ### 2. Developer portal — submission-creating half
 
+> **On hold (owner decision 2026-09-20, `DECISIONS.md`):** the developer-facing upload, routing, review and submit screens are deferred until developers actually join; revisit only if the project is ahead of schedule. Sign-in, invitations and the team panel are done. The unchecked items below are deliberately not being worked.
+
 - [ ] `developer_users` link resolution: a signed-in staff account resolves to its one linked `developers` profile (schema already supports this; no UI reads it yet).
 - [ ] Brochure upload UI, calling `src/lib/storage/adapter.ts`'s `StorageAdapter.upload()` (interface and GCS implementation done, `docs/tasklists/2026-09-18-storage-adapter.md`). Brochures are `source_documents`, never buyer-facing; buyer-facing photos/floor plans are a separate flow (step 5).
 - [ ] `POST /api/v1/admin/source-documents`-equivalent for developer-initiated uploads — check whether the existing Admin API route in `api-spec.v1.md` is reused as-is or needs a developer-scoped variant; the route table currently only lists it under Admin API.
