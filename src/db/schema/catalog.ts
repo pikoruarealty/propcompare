@@ -522,9 +522,7 @@ export const propertySubmissionMedia = pgTable(
       table.submissionId,
       table.displayOrder,
     ),
-    index("property_submission_media_submission_id_idx").on(
-      table.submissionId,
-    ),
+    index("property_submission_media_submission_id_idx").on(table.submissionId),
     check(
       "property_submission_media_display_order_non_negative",
       sql`${table.displayOrder} >= 0`,

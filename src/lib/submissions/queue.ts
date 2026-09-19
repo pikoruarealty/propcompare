@@ -3,7 +3,10 @@ import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import {
   developers,
   properties,
+  propertySchemaFields,
+  propertySubmissionFieldEvidence,
   propertySubmissionFields,
+  propertySubmissionMedia,
   propertySubmissions,
   type submissionStatus,
 } from "@/db/schema/catalog";
@@ -97,8 +100,23 @@ export const listSubmissionQueue = async (
 export interface SubmissionDetail extends SubmissionQueueItem {
   fields: {
     fieldKey: string;
+    label: string;
+    dataType: string;
     value: unknown;
     confidence: string | null;
+    reviewStatus: string;
+    evidence: { sourcePage: number; sourceSnippet: string | null }[];
+  }[];
+  availableFields: { fieldKey: string; label: string; dataType: string }[];
+  media: {
+    id: string;
+    unitVariantName: string | null;
+    mediaType: "photo" | "floor_plan" | "video" | "brochure_pdf";
+    sourceKind: "developer_brochure" | "own" | "developer_supplied";
+    caption: string | null;
+    attribution: string;
+    displayOrder: number;
+    isPublic: boolean;
     reviewStatus: string;
   }[];
 }
@@ -113,12 +131,72 @@ export const getSubmissionDetail = async (
   const fields = await database
     .select({
       fieldKey: propertySubmissionFields.fieldKey,
+      label: propertySchemaFields.label,
+      dataType: propertySchemaFields.dataType,
       value: propertySubmissionFields.value,
       confidence: propertySubmissionFields.confidence,
       reviewStatus: propertySubmissionFields.reviewStatus,
     })
     .from(propertySubmissionFields)
+    .innerJoin(
+      propertySchemaFields,
+      eq(propertySchemaFields.fieldKey, propertySubmissionFields.fieldKey),
+    )
     .where(eq(propertySubmissionFields.submissionId, id))
     .orderBy(propertySubmissionFields.fieldKey);
-  return { ...item, fields };
+  const evidenceRows = await database
+    .select({
+      fieldKey: propertySubmissionFields.fieldKey,
+      sourcePage: propertySubmissionFieldEvidence.sourcePage,
+      sourceSnippet: propertySubmissionFieldEvidence.sourceSnippet,
+    })
+    .from(propertySubmissionFieldEvidence)
+    .innerJoin(
+      propertySubmissionFields,
+      eq(
+        propertySubmissionFields.id,
+        propertySubmissionFieldEvidence.submissionFieldId,
+      ),
+    )
+    .where(eq(propertySubmissionFields.submissionId, id));
+  const evidenceByField = new Map<string, (typeof evidenceRows)[number][]>();
+  for (const evidence of evidenceRows) {
+    evidenceByField.set(evidence.fieldKey, [
+      ...(evidenceByField.get(evidence.fieldKey) ?? []),
+      evidence,
+    ]);
+  }
+  const availableFields = await database
+    .select({
+      fieldKey: propertySchemaFields.fieldKey,
+      label: propertySchemaFields.label,
+      dataType: propertySchemaFields.dataType,
+    })
+    .from(propertySchemaFields)
+    .where(eq(propertySchemaFields.isActive, true))
+    .orderBy(propertySchemaFields.fieldKey);
+  const media = await database
+    .select({
+      id: propertySubmissionMedia.id,
+      unitVariantName: propertySubmissionMedia.unitVariantName,
+      mediaType: propertySubmissionMedia.mediaType,
+      sourceKind: propertySubmissionMedia.sourceKind,
+      caption: propertySubmissionMedia.caption,
+      attribution: propertySubmissionMedia.attribution,
+      displayOrder: propertySubmissionMedia.displayOrder,
+      isPublic: propertySubmissionMedia.isPublic,
+      reviewStatus: propertySubmissionMedia.reviewStatus,
+    })
+    .from(propertySubmissionMedia)
+    .where(eq(propertySubmissionMedia.submissionId, id))
+    .orderBy(propertySubmissionMedia.displayOrder);
+  return {
+    ...item,
+    fields: fields.map((field) => ({
+      ...field,
+      evidence: evidenceByField.get(field.fieldKey) ?? [],
+    })),
+    availableFields,
+    media,
+  };
 };

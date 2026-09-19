@@ -4,10 +4,13 @@ import { db } from "@/db";
 import { auth } from "@/lib/auth";
 import { resolveAccountRole, type AccountRole } from "@/lib/accounts/roles";
 
-export interface PortalSession {
+export interface PortalSession<
+  K extends "developer" | "admin" = "developer" | "admin",
+> {
   userId: string;
   email: string;
-  role: Extract<AccountRole, { kind: "developer" | "admin" }>;
+  /** Narrowed to the role the caller asked for, so an admin page can read `permissionLevel`. */
+  role: Extract<AccountRole, { kind: K }>;
 }
 
 /**
@@ -23,10 +26,10 @@ export interface PortalSession {
  * Anyone without the right role is sent to that portal's own login, carrying
  * the page they wanted as `next`.
  */
-export const requirePortalRole = async (
-  expected: "developer" | "admin",
+export const requirePortalRole = async <K extends "developer" | "admin">(
+  expected: K,
   returnTo: string,
-): Promise<PortalSession> => {
+): Promise<PortalSession<K>> => {
   const loginPath = expected === "admin" ? "/admin/login" : "/developers/login";
   const session = await auth.api.getSession({
     headers: await headers(),
@@ -41,5 +44,9 @@ export const requirePortalRole = async (
     redirect(`${loginPath}?next=${encodeURIComponent(returnTo)}`);
   }
 
-  return { userId: session.user.id, email: session.user.email, role };
+  return {
+    userId: session.user.id,
+    email: session.user.email,
+    role: role as Extract<AccountRole, { kind: K }>,
+  };
 };

@@ -47,11 +47,18 @@ export type ApiErrorCode =
   | "phone_not_verified"
   | "forbidden"
   | "developer_not_found"
+  | "submission_not_found"
+  | "field_not_found"
   | "invalid_document"
+  | "invalid_media"
   | "ocr_job_not_found"
   | "invalid_state"
   | "invalid_routing"
   | "routing_unconfirmed"
+  | "invalid_value"
+  | "transition_not_allowed"
+  | "owner_required"
+  | "cannot_publish"
   | "provider_error"
   | "internal_error";
 

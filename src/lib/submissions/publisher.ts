@@ -427,7 +427,10 @@ export const publishSubmission = async (
       const variantIdByName = new Map<string, string>();
       if (targetedNames.size > 0) {
         const variants = await tx
-          .select({ id: unitVariants.id, variantName: unitVariants.variantName })
+          .select({
+            id: unitVariants.id,
+            variantName: unitVariants.variantName,
+          })
           .from(unitVariants)
           .where(eq(unitVariants.propertyId, propertyId));
         for (const variant of variants) {
