@@ -51,6 +51,7 @@ export type ApiErrorCode =
   | "field_not_found"
   | "invalid_document"
   | "invalid_media"
+  | "already_added"
   | "ocr_job_not_found"
   | "invalid_state"
   | "invalid_routing"

@@ -1,5 +1,15 @@
 # Progress
 
+## 2026-09-20 (late night) — Brochure pages as images
+
+**Done:** the router now reports how imagery sits on each page (`imageLayout`), and the page grid has "Use as image": the chosen brochure page is rendered on the server (WebP, 1600 px, ~150–250 KB) into a private, unreviewed image candidate credited to the developer, and appears in the submission's Images list for review like any other. The same page cannot be added twice, even under a race. Whole-page rendering was checked on a real dimensioned floor plan (Kimana p8) and a colour plan (Amaris p40): both legible.
+
+**Verified:** 6 integration tests (including simultaneous adds), 8 renderer tests, UI and route tests, and `scripts/verify-page-image.mjs` in Chrome and Brave, 16/16 — upload, add page 8, add again (already done), preview loads at full size, credit and unit type shown. Full suite, lint, typecheck and format clean. No paid call was made.
+
+**Added dependencies:** `sharp`, `@napi-rs/canvas` (native binaries; listed in `serverExternalPackages`). Decisions in `DECISIONS.md` 2026-09-20. Extracting single pictures from a busy page stays deferred.
+
+**Next:** the Claude extraction live run on confirmed pages (paid; owner go-ahead needed), then the human field-level accuracy check.
+
 ## 2026-09-20 (night) — Page categorization validated live
 
 **Done:** with OpenRouter credits restored, "Categorize brochure pages" ran through the real admin UI on Kimana (18 pages, 15 s), Amaris (69 pages, 58 s) and 360 (29 pages, 74 s). The owner checked the categories by hand and confirms they are accurate. Total spend about $0.027, all visible in the admin Usage tab, none shown beside the action. One correction to my earlier reading: the Amaris page lists I compared against were an earlier router run, not a human answer, so that comparison shows repeatability only. `scripts/categorize-brochures.mjs` now passes the file by path (Playwright refuses 50 MB+ buffers; 360 is 62 MB).

@@ -8,6 +8,7 @@ import { BrochureViewer } from "@/components/admin/pdf/brochure-viewer";
 import { Button } from "@/components/ui/button";
 import type { PageCategory, PageSuggestion } from "@/lib/ocr/page-router";
 import { cn } from "@/lib/utils";
+import { offersPageImage, PageImageAction } from "./page-image-action";
 
 type ReadAs = Exclude<PageCategory, "other">;
 type ConfirmedCategory = ReadAs | "ignore";
@@ -47,6 +48,7 @@ export function PageReview({
   ocrJobStatus,
   suggestions,
   confirmedChoices,
+  submissionId,
 }: {
   pdfUrl: string;
   pageCount: number;
@@ -54,6 +56,8 @@ export function PageReview({
   ocrJobStatus: string;
   suggestions: PageSuggestion[] | null;
   confirmedChoices: ConfirmedPageChoice[] | null;
+  /** When given, pages can be used as image candidates for this submission. */
+  submissionId?: string;
 }) {
   const router = useRouter();
   const editable = ocrJobStatus === "draft";
@@ -393,6 +397,7 @@ export function PageReview({
             included={selected.has(page)}
             value={readAs.get(page)}
             locked={!editable}
+            submissionId={submissionId}
             onChange={(value) => setType(page, value)}
           />
         )}
@@ -413,6 +418,7 @@ export function PageReview({
                 suggestion={byPage.get(page)}
                 included={selected.has(page)}
                 value={readAs.get(page)}
+                submissionId={submissionId}
                 onChange={(value) => setType(page, value)}
                 inline
               />
@@ -430,6 +436,7 @@ function PageMeta({
   included,
   value,
   locked = false,
+  submissionId,
   onChange,
   inline = false,
 }: {
@@ -438,6 +445,7 @@ function PageMeta({
   included: boolean;
   value: ReadAs | undefined;
   locked?: boolean;
+  submissionId?: string;
   onChange: (value: ReadAs) => void;
   inline?: boolean;
 }) {
@@ -492,6 +500,14 @@ function PageMeta({
             </li>
           ))}
         </ul>
+      ) : null}
+      {submissionId && offersPageImage(suggestion) ? (
+        <PageImageAction
+          submissionId={submissionId}
+          page={page}
+          suggestion={suggestion}
+          suggestedType={value}
+        />
       ) : null}
     </div>
   );

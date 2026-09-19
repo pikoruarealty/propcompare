@@ -46,7 +46,9 @@ export const POST = async (
   } catch (cause) {
     if (cause instanceof SubmissionMediaError) {
       return errorResponse(
-        cause.code === "invalid_state" ? 409 : 404,
+        cause.code === "invalid_state" || cause.code === "already_added"
+          ? 409
+          : 404,
         cause.code,
         cause.message,
       );

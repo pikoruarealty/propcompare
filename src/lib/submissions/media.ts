@@ -16,7 +16,8 @@ export class SubmissionMediaError extends Error {
       | "submission_not_found"
       | "invalid_state"
       | "invalid_media"
-      | "media_not_found",
+      | "media_not_found"
+      | "already_added",
     message: string,
   ) {
     super(message);
@@ -76,7 +77,7 @@ const trimOptional = (
   return trimmed || null;
 };
 
-const requireEditableSubmission = async (
+export const requireEditableSubmission = async (
   database: PostgresJsDatabase,
   submissionId: string,
 ) => {

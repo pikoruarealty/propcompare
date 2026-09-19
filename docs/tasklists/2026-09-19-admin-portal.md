@@ -65,7 +65,9 @@ Under the pre-launch model the invite goes to the existing canonical profile the
   - [x] Page grid shows category badges and confidence, flags low confidence, lets the admin change any page; explicit "Categorize brochure pages" action (no cost shown anywhere in the UI — owner rule 2026-09-20).
   - [x] Floor-plans scope kind in the OCR contract (manifest parser, extraction prompt, ingestion persistence) so Claude discovers unit types from one scope. See `docs/tasklists/2026-09-20-floor-plans-ocr-contract.md`.
   - [x] Confirm-pages step, then a separate confirm before Claude extraction is queued. See `docs/tasklists/2026-09-20-confirm-pages-and-queue.md`.
-  - [ ] Later: server-side extraction of tagged photos/floor plans into `submission_media` (dependency decision), human approval per image, attribution recorded; and admin upload of their own images into the same list (source kind `own`).
+  - [x] Whole-page images: "Use as image" renders a brochure page server-side into a private, unreviewed, developer-credited candidate (`sharp` + `@napi-rs/canvas`; `DECISIONS.md` 2026-09-20). Router also reports `imageLayout`. Verified in Chrome and Brave (`scripts/verify-page-image.mjs`, 16/16).
+  - [x] Admin upload of their own images into the same list (source kind `own`) — done with the reconciliation screen.
+  - [ ] Deferred: extracting individual pictures from a busy page (embedded-image extraction); only if whole-page renders prove unsuitable.
 - [ ] (superseded, kept for the record) Page-routing confirmation: auto-suggested- [ ] `POST …/ocr-jobs/{id}/queue` and status polling.
 
 ### Slice 4b — AI usage ledger and admin Usage tab (needs schema sign-off)

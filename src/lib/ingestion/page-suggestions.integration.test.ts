@@ -214,9 +214,25 @@ describe("readStoredSuggestions", () => {
           pages: [
             { page: 1, category: "nope", confidence: 1 },
             { page: 2, category: "other", confidence: 0.5, imagery: ["x"] },
+            {
+              page: 3,
+              category: "other",
+              confidence: 0.9,
+              imagery: ["interior"],
+              imageLayout: "multiple_images",
+            },
           ],
         },
       })?.pages,
-    ).toEqual([{ page: 2, category: "other", confidence: 0.5, imagery: [] }]);
+    ).toEqual([
+      { page: 2, category: "other", confidence: 0.5, imagery: [] },
+      {
+        page: 3,
+        category: "other",
+        confidence: 0.9,
+        imagery: ["interior"],
+        imageLayout: "multiple_images",
+      },
+    ]);
   });
 });

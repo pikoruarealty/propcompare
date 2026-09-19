@@ -72,6 +72,44 @@ describe("parseRouterWindow", () => {
     });
   });
 
+  it("keeps a known image layout only where the page shows imagery", () => {
+    const result = parseRouterWindow(
+      {
+        pages: [
+          {
+            page: 1,
+            category: "other",
+            confidence: 0.9,
+            imagery: ["exterior_render"],
+            imageLayout: "full_page",
+          },
+          // No imagery on the page: a layout is meaningless and is dropped.
+          {
+            page: 2,
+            category: "other",
+            confidence: 0.9,
+            imagery: [],
+            imageLayout: "full_page",
+          },
+          // An unknown value is dropped, not a reason to fail the window.
+          {
+            page: 3,
+            category: "other",
+            confidence: 0.9,
+            imagery: ["interior"],
+            imageLayout: "collage",
+          },
+        ],
+      },
+      [1, 2, 3],
+    );
+    expect(result.map((r) => r.imageLayout)).toEqual([
+      "full_page",
+      undefined,
+      undefined,
+    ]);
+  });
+
   it.each([
     ["not an object", "x"],
     ["no pages", {}],

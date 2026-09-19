@@ -83,6 +83,7 @@ export default async function ReviewPagesPage({
         description={`${brochure.developerName ?? "Unknown developer"} · ${brochure.pageCount} pages`}
       />
       <PageReview
+        submissionId={brochure.submissionId}
         key={
           brochure.ocrJobStatus +
           (confirmedChoices

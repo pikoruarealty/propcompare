@@ -87,7 +87,7 @@ export const POST = async (
         cause.code === "submission_not_found" ||
         cause.code === "media_not_found"
           ? 404
-          : cause.code === "invalid_state"
+          : cause.code === "invalid_state" || cause.code === "already_added"
             ? 409
             : 422;
       return errorResponse(status, cause.code, cause.message);

@@ -40,6 +40,21 @@ export const IMAGERY_TAGS = [
 ] as const;
 export type ImageryTag = (typeof IMAGERY_TAGS)[number];
 
+/**
+ * How imagery sits on a page, so a later step can choose between using the whole
+ * page as the image and pulling out individual pictures. Only meaningful on a page
+ * that shows imagery; a text-only page has none.
+ *  - `full_page`: one image (or the page design itself) fills the page.
+ *  - `multiple_images`: several separate images share the page, labelled or not.
+ *  - `single_with_decoration`: one main image plus other decorative elements.
+ */
+export const IMAGE_LAYOUTS = [
+  "full_page",
+  "multiple_images",
+  "single_with_decoration",
+] as const;
+export type ImageLayout = (typeof IMAGE_LAYOUTS)[number];
+
 export interface PageSuggestion {
   /** One-based brochure page number. */
   page: number;
@@ -49,6 +64,8 @@ export interface PageSuggestion {
   imagery: ImageryTag[];
   /** A non-authoritative label a human may use, e.g. "3 BHK - Type A". */
   caption?: string;
+  /** Present only when the page shows imagery. A hint, never a decision. */
+  imageLayout?: ImageLayout;
 }
 
 export interface PageRouterRequestUsage {
@@ -178,12 +195,21 @@ export const parseRouterWindow = (
         ? entry.caption.trim().slice(0, 120)
         : undefined;
 
+    // Only kept when the page has imagery and the value is one we know; an
+    // unrecognised value is dropped rather than failing the whole window.
+    const imageLayout =
+      imagery.length > 0 &&
+      IMAGE_LAYOUTS.includes(entry.imageLayout as ImageLayout)
+        ? (entry.imageLayout as ImageLayout)
+        : undefined;
+
     byPage.set(page, {
       page,
       category: category as PageCategory,
       confidence,
       imagery,
       ...(caption ? { caption } : {}),
+      ...(imageLayout ? { imageLayout } : {}),
     });
   }
 
@@ -210,10 +236,11 @@ For EVERY page return one entry. Categories:
 
 For each page also list "imagery" tags for what is visibly on the page, from: ${IMAGERY_TAGS.join(", ")}. Use an empty list for a text-only page.
 For a "floor_plan" page you may add a short "caption" if the page names the unit (for example "3 BHK - Type A"); otherwise omit it. A caption is only a hint.
+For a page that shows imagery, also give "imageLayout": "full_page" if one image or the page's own design fills the page, "multiple_images" if several separate images share it (labelled or not), or "single_with_decoration" if there is one main image plus other decorative elements. Omit "imageLayout" for a text-only page.
 "confidence" is between 0 and 1 for the category.
 
 Do not transcribe any text, price, area, rate or other figure. Return ONLY JSON of the form:
-{"pages":[{"page":1,"category":"other","confidence":0.9,"imagery":["exterior_render"]}]}`;
+{"pages":[{"page":1,"category":"other","confidence":0.9,"imagery":["exterior_render"],"imageLayout":"full_page"}]}`;
 
 export interface PageRouterOptions {
   apiKey?: string;

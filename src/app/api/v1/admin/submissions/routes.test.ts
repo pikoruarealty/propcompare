@@ -24,6 +24,9 @@ vi.mock("@/lib/submissions/reconciliation", async () => {
     transitionSubmission: vi.fn(),
   };
 });
+vi.mock("@/lib/submissions/brochure-page-media", () => ({
+  addBrochurePageImage: vi.fn(),
+}));
 vi.mock("@/lib/submissions/media", async () => {
   const actual = await vi.importActual<
     typeof import("@/lib/submissions/media")
@@ -48,6 +51,9 @@ const {
 const { addSubmissionImage, reviewSubmissionMedia, SubmissionMediaError } =
   await import("@/lib/submissions/media");
 
+const { addBrochurePageImage } =
+  await import("@/lib/submissions/brochure-page-media");
+const fromPage = await import("./[id]/media/from-page/route");
 const create = await import("./route");
 const editField = await import("./[id]/fields/[fieldKey]/route");
 const reviewField = await import("./[id]/fields/[fieldKey]/review/route");
@@ -107,6 +113,14 @@ const routes: [string, () => Promise<Response>][] = [
       ),
   ],
   [
+    "POST /submissions/{id}/media/from-page",
+    () =>
+      fromPage.POST(
+        json({ pageNumber: 2, mediaType: "floor_plan" }),
+        ctx({ id: ID }),
+      ),
+  ],
+  [
     "POST /submissions/{id}/review",
     () => review.POST(json({ action: "approve" }), ctx({ id: ID })),
   ],
@@ -139,6 +153,7 @@ describe("admin submission routes: authentication", () => {
     expect(reviewSubmissionField).not.toHaveBeenCalled();
     expect(transitionSubmission).not.toHaveBeenCalled();
     expect(addSubmissionImage).not.toHaveBeenCalled();
+    expect(addBrochurePageImage).not.toHaveBeenCalled();
     expect(reviewSubmissionMedia).not.toHaveBeenCalled();
     expect(publishSubmission).not.toHaveBeenCalled();
   });
@@ -319,5 +334,68 @@ describe("field and media routes", () => {
     expect((await media.POST(multipart(full), ctx({ id: ID }))).status).toBe(
       409,
     );
+  });
+});
+
+describe("use a brochure page as an image", () => {
+  beforeEach(() => vi.mocked(requireAdminRequest).mockResolvedValue(owner));
+
+  it("adds the page and passes the admin who did it", async () => {
+    vi.mocked(addBrochurePageImage).mockResolvedValue({ id: "m" });
+    const response = await fromPage.POST(
+      json({
+        pageNumber: 8,
+        mediaType: "floor_plan",
+        unitVariantName: "3 BHK",
+        caption: "Plan",
+      }),
+      ctx({ id: ID }),
+    );
+    expect(response.status).toBe(201);
+    expect(addBrochurePageImage).toHaveBeenCalledWith(expect.anything(), {
+      submissionId: ID,
+      uploadedBy: "u1",
+      pageNumber: 8,
+      mediaType: "floor_plan",
+      unitVariantName: "3 BHK",
+      caption: "Plan",
+    });
+  });
+
+  it("needs a numeric page and a known media type", async () => {
+    for (const body of [
+      {},
+      { pageNumber: "2", mediaType: "photo" },
+      { pageNumber: 2, mediaType: "video" },
+    ]) {
+      expect((await fromPage.POST(json(body), ctx({ id: ID }))).status).toBe(
+        422,
+      );
+    }
+    expect(addBrochurePageImage).not.toHaveBeenCalled();
+  });
+
+  it("reports a page added twice as a conflict, and a bad page as unprocessable", async () => {
+    const call = () =>
+      fromPage.POST(
+        json({ pageNumber: 2, mediaType: "photo" }),
+        ctx({ id: ID }),
+      );
+    vi.mocked(addBrochurePageImage).mockRejectedValueOnce(
+      new SubmissionMediaError("already_added", "twice"),
+    );
+    expect((await call()).status).toBe(409);
+    vi.mocked(addBrochurePageImage).mockRejectedValueOnce(
+      new SubmissionMediaError("invalid_media", "bad page"),
+    );
+    expect((await call()).status).toBe(422);
+    vi.mocked(addBrochurePageImage).mockRejectedValueOnce(
+      new SubmissionMediaError("invalid_state", "locked"),
+    );
+    expect((await call()).status).toBe(409);
+    vi.mocked(addBrochurePageImage).mockRejectedValueOnce(
+      new SubmissionMediaError("submission_not_found", "gone"),
+    );
+    expect((await call()).status).toBe(404);
   });
 });

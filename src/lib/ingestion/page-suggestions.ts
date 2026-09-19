@@ -2,8 +2,10 @@ import { eq } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { ocrExtractionJobs } from "@/db/schema/catalog";
 import {
+  IMAGE_LAYOUTS,
   IMAGERY_TAGS,
   PAGE_CATEGORIES,
+  type ImageLayout,
   PageRouterError,
   type PageRouterUsage,
   type PageCategory,
@@ -78,6 +80,9 @@ export const readStoredSuggestions = (
           )
         : [],
       ...(typeof entry.caption === "string" ? { caption: entry.caption } : {}),
+      ...(IMAGE_LAYOUTS.includes(entry.imageLayout as ImageLayout)
+        ? { imageLayout: entry.imageLayout as ImageLayout }
+        : {}),
     });
   }
   return { model, generatedAt, pages: clean };
