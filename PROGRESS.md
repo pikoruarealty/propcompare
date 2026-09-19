@@ -1,5 +1,11 @@
 # Progress
 
+## 2026-09-19 (late night) — Local storage driver
+
+**Done:** `STORAGE_DRIVER=local` keeps objects on disk (`src/lib/storage/local-adapter.ts`, path-traversal-safe keys, HMAC-signed short-lived read URLs served by `/api/v1/local-files/*`, which is a 404 unless the local driver is selected). `gcs` remains the default; an unknown driver fails loudly. 31 storage tests. Approvals recorded in `DECISIONS.md` (invite design, pdf.js with a Brave-safe rendering rule, brand-level profiles). Also the base for a VPS move.
+
+**Local env:** `.env` gained `STORAGE_DRIVER=local` and `LOCAL_STORAGE_DIR=.local/storage` (gitignored).
+
 ## 2026-09-19 (night) — Admin submission queue
 
 **Done:** `/admin` now opens the submission queue (Stitch queue layout): status filters, property and developer, location, source (brochure / manual / RERA), date, status pill, and a read-only submission page listing proposed fields with confidence and review state. Read model `src/lib/submissions/queue.ts` derives names from the live property or the draft's own field candidates and never guesses — missing values show "Not stated". Also logged the paid-analytics-platform vision as beta-deadline future scope (`DECISIONS.md`, `docs/roadmap.md`, `docs/production-readiness.md`).
