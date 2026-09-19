@@ -59,6 +59,26 @@ const validScopePayload = (scopeKey: string): unknown => {
       unmappedRawEvidence: [],
     };
   }
+  if (scopeKey === "floor-plans") {
+    return {
+      fields: [],
+      unitVariants: [
+        {
+          variantName: "2 BHK - Type A",
+          details: { areas: [{ basis: "carpet", areaSqft: 875 }] },
+          confidence: 0.9,
+          evidence: [{ pageNumber: 2, sourceSnippet: "2 BHK Type A" }],
+        },
+        {
+          variantName: "3 BHK - Type B",
+          details: { areas: [{ basis: "carpet", areaSqft: 1240 }] },
+          confidence: 0.88,
+          evidence: [{ pageNumber: 3, sourceSnippet: "3 BHK Type B" }],
+        },
+      ],
+      unmappedRawEvidence: [],
+    };
+  }
   return {
     fields: [
       {
@@ -145,6 +165,31 @@ const routingInput: MutableRoutingInput = {
       kind: "ignore",
       label: "Not relevant",
       pages: [{ pageNumber: 5 }],
+    },
+  ],
+};
+
+const floorPlansRoutingInput: MutableRoutingInput = {
+  version: "v2",
+  pageCount: 5,
+  scopes: [
+    {
+      scopeKey: "project",
+      kind: "property_details",
+      label: "Project details",
+      pages: [{ pageNumber: 1 }],
+    },
+    {
+      scopeKey: "floor-plans",
+      kind: "floor_plans",
+      label: "Confirmed floor plans",
+      pages: [{ pageNumber: 2 }, { pageNumber: 3 }],
+    },
+    {
+      scopeKey: "ignored",
+      kind: "ignore",
+      label: "Not relevant",
+      pages: [{ pageNumber: 4 }, { pageNumber: 5 }],
     },
   ],
 };
@@ -275,8 +320,114 @@ describe("the versioned OCR routing contract", () => {
       pages: [{ pageNumber: 3 }],
     });
     expect(() => parseOcrRoutingManifest(ambiguous)).toThrow(
-      "cannot belong to two unit-variant scopes",
+      "cannot belong to two unit-discovery scopes",
     );
+  });
+
+  it("keeps v1 unchanged while v2 can discover multiple floor-plan variants", () => {
+    const v2Manifest = parseOcrRoutingManifest(floorPlansRoutingInput, 5);
+    const extraction = validateNewPipelineExtraction(
+      {
+        origin: "new_pipeline",
+        pipelineVersion: "ocr-v1",
+        fieldSchemaVersion: "v1",
+        fields: [],
+        unitVariants: [
+          {
+            scopeKey: "floor-plans",
+            variantName: "2 BHK - Type A",
+            details: { areas: [{ basis: "carpet", areaSqft: 875 }] },
+            evidence: [{ scopeKey: "floor-plans", pageNumber: 2 }],
+          },
+          {
+            scopeKey: "floor-plans",
+            variantName: "3 BHK - Type B",
+            details: { areas: [{ basis: "carpet", areaSqft: 1240 }] },
+            evidence: [{ scopeKey: "floor-plans", pageNumber: 3 }],
+          },
+        ],
+      },
+      v2Manifest,
+      activeFields,
+      "ocr-v1",
+      "v1",
+    );
+
+    const variants = buildSubmissionFieldCandidates(
+      extraction,
+      v2Manifest,
+    ).find((field) => field.fieldKey === "unit_variants");
+    expect(variants?.value).toEqual([
+      {
+        variantName: "2 BHK - Type A",
+        areas: [{ basis: "carpet", areaSqft: 875 }],
+      },
+      {
+        variantName: "3 BHK - Type B",
+        areas: [{ basis: "carpet", areaSqft: 1240 }],
+      },
+    ]);
+    expect(variants?.evidence).toEqual([
+      { scopeKey: "floor-plans", pageNumber: 2, valuePath: "$[0]" },
+      { scopeKey: "floor-plans", pageNumber: 3, valuePath: "$[1]" },
+    ]);
+
+    const v1WithFloorPlans = structuredClone(floorPlansRoutingInput);
+    v1WithFloorPlans.version = "v1";
+    expect(() => parseOcrRoutingManifest(v1WithFloorPlans)).toThrow(
+      "kind is not supported",
+    );
+  });
+
+  it("rejects a duplicate discovered variant before it becomes submission input", () => {
+    const manifest = parseOcrRoutingManifest(floorPlansRoutingInput);
+    expect(() =>
+      validateNewPipelineExtraction(
+        {
+          origin: "new_pipeline",
+          pipelineVersion: "ocr-v1",
+          fieldSchemaVersion: "v1",
+          fields: [],
+          unitVariants: [
+            {
+              scopeKey: "floor-plans",
+              variantName: "3 BHK",
+              details: {},
+              evidence: [{ scopeKey: "floor-plans", pageNumber: 2 }],
+            },
+            {
+              scopeKey: "floor-plans",
+              variantName: "3 bhk",
+              details: {},
+              evidence: [{ scopeKey: "floor-plans", pageNumber: 3 }],
+            },
+          ],
+        },
+        manifest,
+        activeFields,
+        "ocr-v1",
+        "v1",
+      ),
+    ).toThrow("duplicate extracted variant name");
+  });
+
+  it("allows a confirmed floor-plans scope to yield no unit variants", () => {
+    const manifest = parseOcrRoutingManifest(floorPlansRoutingInput);
+    const extraction = validateNewPipelineExtraction(
+      {
+        origin: "new_pipeline",
+        pipelineVersion: "ocr-v1",
+        fieldSchemaVersion: "v1",
+        fields: [],
+        unitVariants: [],
+      },
+      manifest,
+      activeFields,
+      "ocr-v1",
+      "v1",
+    );
+
+    expect(buildSubmissionFieldCandidates(extraction, manifest)).toEqual([]);
   });
 
   it("rejects fields outside the active property contract", () => {
@@ -394,6 +545,50 @@ describe("the OpenRouter OCR provider adapter", () => {
         { id: "file-parser", pdf: { engine: "native" } },
       ]);
     }
+  });
+
+  it("accepts multiple discovered variants from one floor-plans scope", async () => {
+    const adapter = createOpenRouterOcrAdapter({
+      apiKey: "test-key",
+      checkpointDirectory: false,
+      loadSourcePdf: createSyntheticPdf,
+      fetch: async (_input, init) => {
+        const scopeKey = scopeKeyFromRequest(init);
+        return streamResponse(
+          JSON.stringify(validScopePayload(scopeKey)),
+          "stop",
+          `generation-${scopeKey}`,
+        );
+      },
+    });
+    const request = {
+      sourceDocumentId: "source-document-test",
+      gcsPath: "synthetic/redacted-brochure.pdf",
+      manifest: parseOcrRoutingManifest(floorPlansRoutingInput),
+      pipelineVersion: "ocr-v1",
+      fieldSchemaVersion: "v1",
+      activeFields,
+    };
+
+    const result = await adapter.extract(request);
+    expect(result.extraction.unitVariants).toMatchObject([
+      { scopeKey: "floor-plans", variantName: "2 BHK - Type A" },
+      { scopeKey: "floor-plans", variantName: "3 BHK - Type B" },
+    ]);
+    expect(
+      buildSubmissionFieldCandidates(result.extraction, request.manifest).find(
+        (field) => field.fieldKey === "unit_variants",
+      )?.value,
+    ).toEqual([
+      {
+        variantName: "2 BHK - Type A",
+        areas: [{ basis: "carpet", areaSqft: 875 }],
+      },
+      {
+        variantName: "3 BHK - Type B",
+        areas: [{ basis: "carpet", areaSqft: 1240 }],
+      },
+    ]);
   });
 
   it("checkpoints each parsed scope before later provider work completes", async () => {

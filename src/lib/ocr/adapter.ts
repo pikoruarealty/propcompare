@@ -50,6 +50,8 @@ export interface OcrRoomDimension {
 
 export interface OcrUnitVariantCandidate {
   scopeKey: string;
+  /** Present only when a v2 floor-plans scope discovered the identity itself. */
+  variantName?: string;
   details: OcrUnitVariantDetailsCandidate;
   confidence?: number;
   evidence: OcrEvidenceCandidate[];
@@ -484,7 +486,8 @@ export const validateNewPipelineExtraction = (
       "unit_variants is not active in the field contract",
     );
   }
-  const seenVariantScopes = new Set<string>();
+  const seenUnitVariantScopes = new Set<string>();
+  const seenVariantNames = new Set<string>();
   const unitVariants: OcrUnitVariantCandidate[] = input.unitVariants.map(
     (candidate, index) => {
       const path = `unitVariants[${index}]`;
@@ -496,23 +499,57 @@ export const validateNewPipelineExtraction = (
         `${path}.scopeKey`,
       );
       const scope = findRoutingScope(manifest, scopeKey);
-      if (scope?.kind !== "unit_variant") {
+      if (scope?.kind !== "unit_variant" && scope?.kind !== "floor_plans") {
         throw new OcrContractError(
-          `${path}.scopeKey is not a unit-variant scope`,
+          `${path}.scopeKey is not a unit-discovery scope`,
         );
       }
-      if (seenVariantScopes.has(scopeKey)) {
+      if (
+        scope.kind === "unit_variant" &&
+        seenUnitVariantScopes.has(scopeKey)
+      ) {
         throw new OcrContractError(
           `unit-variant scope ${scopeKey} returned more than one variant`,
         );
       }
-      seenVariantScopes.add(scopeKey);
+      if (scope.kind === "unit_variant") {
+        seenUnitVariantScopes.add(scopeKey);
+      }
+      const variantName =
+        scope.kind === "floor_plans"
+          ? readNonEmptyString(candidate.variantName, `${path}.variantName`)
+          : undefined;
+      if (
+        scope.kind === "unit_variant" &&
+        candidate.variantName !== undefined
+      ) {
+        throw new OcrContractError(
+          `${path}.variantName is only allowed for a floor-plans scope`,
+        );
+      }
+      if (scope.kind === "floor_plans" && variantName === undefined) {
+        throw new OcrContractError(
+          `${path}.variantName is required for a floor-plans scope`,
+        );
+      }
+      const canonicalVariantName =
+        scope.kind === "unit_variant"
+          ? scope.variant.variantName
+          : readNonEmptyString(candidate.variantName, `${path}.variantName`);
+      const normalizedVariantName = canonicalVariantName.toLocaleLowerCase();
+      if (seenVariantNames.has(normalizedVariantName)) {
+        throw new OcrContractError(
+          `duplicate extracted variant name: ${canonicalVariantName}`,
+        );
+      }
+      seenVariantNames.add(normalizedVariantName);
       const confidence = readConfidence(
         candidate.confidence,
         `${path}.confidence`,
       );
       return {
         scopeKey,
+        ...(variantName === undefined ? {} : { variantName }),
         details: parseVariantDetails(candidate.details, `${path}.details`),
         ...(confidence === undefined ? {} : { confidence }),
         evidence: parseEvidenceList(
@@ -535,18 +572,28 @@ export const validateNewPipelineExtraction = (
 };
 
 const canonicalVariantValue = (
-  scope: OcrUnitVariantScope,
+  scope: OcrUnitVariantScope | OcrRoutingManifest["scopes"][number],
   candidate: OcrUnitVariantCandidate,
-) => ({
-  variantName: scope.variant.variantName,
-  ...(scope.variant.bhkTypeKey === undefined
-    ? {}
-    : { bhkTypeKey: scope.variant.bhkTypeKey }),
-  ...(scope.variant.layoutTypeKey === undefined
-    ? {}
-    : { layoutTypeKey: scope.variant.layoutTypeKey }),
-  ...candidate.details,
-});
+) => {
+  if (scope.kind === "unit_variant") {
+    return {
+      variantName: scope.variant.variantName,
+      ...(scope.variant.bhkTypeKey === undefined
+        ? {}
+        : { bhkTypeKey: scope.variant.bhkTypeKey }),
+      ...(scope.variant.layoutTypeKey === undefined
+        ? {}
+        : { layoutTypeKey: scope.variant.layoutTypeKey }),
+      ...candidate.details,
+    };
+  }
+  if (scope.kind === "floor_plans" && candidate.variantName !== undefined) {
+    return { variantName: candidate.variantName, ...candidate.details };
+  }
+  throw new OcrContractError(
+    `unit variant candidate cannot be assembled for scope ${scope.scopeKey}`,
+  );
+};
 
 export const buildSubmissionFieldCandidates = (
   input: NewPipelineExtraction,
@@ -571,18 +618,22 @@ export const buildSubmissionFieldCandidates = (
   if (extraction.unitVariants.length === 0) {
     return result;
   }
-  const orderedScopes = manifest.scopes.filter(
-    (scope): scope is OcrUnitVariantScope => scope.kind === "unit_variant",
-  );
-  const candidatesByScope = new Map(
-    extraction.unitVariants.map((candidate) => [candidate.scopeKey, candidate]),
-  );
-  const assembled = orderedScopes.flatMap((scope) => {
-    const candidate = candidatesByScope.get(scope.scopeKey);
-    return candidate === undefined
-      ? []
-      : [canonicalVariantValue(scope, candidate)];
+  const candidatesByScope = new Map<string, OcrUnitVariantCandidate[]>();
+  for (const candidate of extraction.unitVariants) {
+    const current = candidatesByScope.get(candidate.scopeKey) ?? [];
+    current.push(candidate);
+    candidatesByScope.set(candidate.scopeKey, current);
+  }
+  const assembledEntries = manifest.scopes.flatMap((scope) => {
+    if (scope.kind !== "unit_variant" && scope.kind !== "floor_plans") {
+      return [];
+    }
+    return (candidatesByScope.get(scope.scopeKey) ?? []).map((candidate) => ({
+      candidate,
+      value: canonicalVariantValue(scope, candidate),
+    }));
   });
+  const assembled = assembledEntries.map((entry) => entry.value);
   const variantConfidences = extraction.unitVariants.map(
     (candidate) => candidate.confidence,
   );
@@ -592,14 +643,9 @@ export const buildSubmissionFieldCandidates = (
     ? Math.min(...variantConfidences)
     : undefined;
   const evidence = deduplicateSubmissionEvidence(
-    orderedScopes.flatMap((scope) => {
-      const candidate = candidatesByScope.get(scope.scopeKey);
-      if (candidate === undefined) {
-        return [];
-      }
-      const valuePath = `$[${assembled.findIndex((value) => value.variantName === scope.variant.variantName)}]`;
-      return candidate.evidence.map((item) => ({ ...item, valuePath }));
-    }),
+    assembledEntries.flatMap(({ candidate }, index) =>
+      candidate.evidence.map((item) => ({ ...item, valuePath: `$[${index}]` })),
+    ),
   );
   result.push({
     fieldKey: "unit_variants",
@@ -652,6 +698,7 @@ export interface OpenRouterOcrAdapterOptions {
 interface OpenRouterScopeResponse {
   fields?: unknown;
   unitVariant?: unknown;
+  unitVariants?: unknown;
   unmappedRawEvidence?: unknown;
 }
 
@@ -737,17 +784,25 @@ const createScopePrompt = (
 ): string => {
   const sourcePages = scope.pages.map((page) => page.pageNumber);
   const scalarFields = fieldsForScope(scope, activeFields);
+  const variantDetails =
+    "totalUnitsOfVariant (positive integer), unitsPerFloor (positive integer), areas [{basis: carpet|super_built_up|built_up, areaSqft: positive number}], and dimensions {rooms, foyer, balconies}; each room has name and any explicitly printed lengthFt, widthFt, or areaSqft";
+  const variantOutput =
+    scope.kind === "floor_plans"
+      ? `"unitVariants": [{"variantName": string, "details": object, "confidence": number, "evidence": [{"pageNumber": number, "sourceSnippet": string}]}]`
+      : `"unitVariant": null | {"details": object, "confidence": number, "evidence": [{"pageNumber": number, "sourceSnippet": string}]}`;
   const variantInstruction =
     scope.kind === "unit_variant"
-      ? `Extract exactly one unit variant for \"${scope.variant.variantName}\". Put its values in unitVariant.details using only: totalUnitsOfVariant (positive integer), unitsPerFloor (positive integer), areas [{basis: carpet|super_built_up|built_up, areaSqft: positive number}], and dimensions {rooms, foyer, balconies}; each room has name and any explicitly printed lengthFt, widthFt, or areaSqft. Combine all excerpt pages into this one variant; never emit a second variant.`
-      : "This is not a unit-variant scope. Return unitVariant as null.";
+      ? `Extract exactly one unit variant for \"${scope.variant.variantName}\". Put its values in unitVariant.details using only: ${variantDetails}. Combine all excerpt pages into this one variant; never emit a second variant.`
+      : scope.kind === "floor_plans"
+        ? `Discover every distinct unit variant explicitly shown across these floor-plan pages. Return one unitVariants entry per distinct variant, merging pages that show levels of the same duplex or penthouse. Each variantName must be a concise, evidence-backed name printed in the brochure; do not invent BHK or layout catalog keys. Put each variant's values in details using only: ${variantDetails}. Return an empty unitVariants array when these pages do not explicitly show a unit variant.`
+        : "This is not a unit-discovery scope. Return unitVariant as null.";
 
   return `You extract evidence-backed real-estate brochure facts into a reviewed submission. Return one complete JSON object only, with no markdown or commentary.
 
 Output shape:
 {
   "fields": [{"fieldKey": string, "value": unknown, "confidence": number, "evidence": [{"pageNumber": number, "sourceSnippet": string}]}],
-  "unitVariant": null | {"details": object, "confidence": number, "evidence": [{"pageNumber": number, "sourceSnippet": string}]},
+  ${variantOutput},
   "unmappedRawEvidence": [{"fieldKey": string, "value": unknown, "evidence": [{"pageNumber": number, "sourceSnippet": string}]}]
 }
 
@@ -926,7 +981,7 @@ const parseScopeResponse = (
   activeFields: ActiveOcrField[],
 ): {
   fields: OcrFieldCandidate[];
-  unitVariant?: OcrUnitVariantCandidate;
+  unitVariants: OcrUnitVariantCandidate[];
   unmapped: OcrUnmappedEvidenceCandidate[];
 } => {
   if (!isRecord(input)) {
@@ -1016,14 +1071,90 @@ const parseScopeResponse = (
     );
   }
 
-  if (scope.kind !== "unit_variant") {
+  if (scope.kind !== "unit_variant" && scope.kind !== "floor_plans") {
     if (response.unitVariant !== null && response.unitVariant !== undefined) {
       throw new OcrAdapterError(
         "invalid_response",
         `scope ${scope.scopeKey} must not return a unit variant`,
       );
     }
-    return { fields: known, unmapped };
+    if (response.unitVariants !== null && response.unitVariants !== undefined) {
+      throw new OcrAdapterError(
+        "invalid_response",
+        `scope ${scope.scopeKey} must not return unit variants`,
+      );
+    }
+    return { fields: known, unitVariants: [], unmapped };
+  }
+
+  if (scope.kind === "floor_plans") {
+    if (response.unitVariant !== null && response.unitVariant !== undefined) {
+      throw new OcrAdapterError(
+        "invalid_response",
+        `floor-plans scope ${scope.scopeKey} must use unitVariants`,
+      );
+    }
+    if (!Array.isArray(response.unitVariants)) {
+      throw new OcrAdapterError(
+        "invalid_response",
+        `floor-plans scope ${scope.scopeKey} must return a unitVariants array`,
+      );
+    }
+    const variantNames = new Set<string>();
+    const unitVariants = response.unitVariants.map((candidate, index) => {
+      const path = `unitVariants[${index}]`;
+      if (!isRecord(candidate)) {
+        throw new OcrAdapterError(
+          "invalid_response",
+          `${path} must be an object`,
+        );
+      }
+      if (
+        candidate.bhkTypeKey !== undefined ||
+        candidate.layoutTypeKey !== undefined
+      ) {
+        throw new OcrAdapterError(
+          "invalid_response",
+          `${path} must not assign BHK or layout catalog keys`,
+        );
+      }
+      const variantName = readNonEmptyString(
+        candidate.variantName,
+        `${path}.variantName`,
+      );
+      const normalizedVariantName = variantName.toLocaleLowerCase();
+      if (variantNames.has(normalizedVariantName)) {
+        throw new OcrAdapterError(
+          "invalid_response",
+          `floor-plans scope ${scope.scopeKey} returned duplicate variant name: ${variantName}`,
+        );
+      }
+      variantNames.add(normalizedVariantName);
+      const confidence = readConfidence(
+        candidate.confidence,
+        `${path}.confidence`,
+      );
+      return {
+        scopeKey: scope.scopeKey,
+        variantName,
+        details: parseVariantDetails(candidate.details, `${path}.details`),
+        ...(confidence === undefined ? {} : { confidence }),
+        evidence: parseEvidenceList(
+          normalizeProviderEvidence(candidate.evidence, scope.scopeKey),
+          `${path}.evidence`,
+          manifest,
+          scope.scopeKey,
+        ),
+      };
+    });
+    return { fields: known, unitVariants, unmapped };
+  }
+
+  if (response.unitVariants !== null && response.unitVariants !== undefined) {
+    throw new OcrAdapterError(
+      "invalid_response",
+      `unit-variant scope ${scope.scopeKey} must use unitVariant`,
+    );
   }
   if (!isRecord(response.unitVariant)) {
     throw new OcrAdapterError(
@@ -1038,23 +1169,25 @@ const parseScopeResponse = (
   return {
     fields: known,
     unmapped,
-    unitVariant: {
-      scopeKey: scope.scopeKey,
-      details: parseVariantDetails(
-        response.unitVariant.details,
-        "unitVariant.details",
-      ),
-      ...(confidence === undefined ? {} : { confidence }),
-      evidence: parseEvidenceList(
-        normalizeProviderEvidence(
-          response.unitVariant.evidence,
+    unitVariants: [
+      {
+        scopeKey: scope.scopeKey,
+        details: parseVariantDetails(
+          response.unitVariant.details,
+          "unitVariant.details",
+        ),
+        ...(confidence === undefined ? {} : { confidence }),
+        evidence: parseEvidenceList(
+          normalizeProviderEvidence(
+            response.unitVariant.evidence,
+            scope.scopeKey,
+          ),
+          "unitVariant.evidence",
+          manifest,
           scope.scopeKey,
         ),
-        "unitVariant.evidence",
-        manifest,
-        scope.scopeKey,
-      ),
-    },
+      },
+    ],
   };
 };
 
@@ -1294,7 +1427,7 @@ export const createOpenRouterOcrAdapter = (
         });
         await saveCheckpoint("extracting");
         fields.push(...scopeResult.fields);
-        if (scopeResult.unitVariant) unitVariants.push(scopeResult.unitVariant);
+        unitVariants.push(...scopeResult.unitVariants);
         unmappedRawEvidence.push(...scopeResult.unmapped);
       }
 

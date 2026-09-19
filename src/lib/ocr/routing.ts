@@ -1,4 +1,4 @@
-const ROUTING_SCOPE_KINDS = [
+const V1_ROUTING_SCOPE_KINDS = [
   "property_details",
   "amenities",
   "specifications",
@@ -6,7 +6,13 @@ const ROUTING_SCOPE_KINDS = [
   "ignore",
 ] as const;
 
-export type OcrRoutingScopeKind = (typeof ROUTING_SCOPE_KINDS)[number];
+const V2_ROUTING_SCOPE_KINDS = [
+  ...V1_ROUTING_SCOPE_KINDS,
+  "floor_plans",
+] as const;
+
+export type OcrRoutingManifestVersion = "v1" | "v2";
+export type OcrRoutingScopeKind = (typeof V2_ROUTING_SCOPE_KINDS)[number];
 
 export interface OcrRoutedPage {
   pageNumber: number;
@@ -29,14 +35,24 @@ export interface OcrUnitVariantScope extends OcrRoutingScopeBase {
   };
 }
 
-export interface OcrNonVariantScope extends OcrRoutingScopeBase {
-  kind: Exclude<OcrRoutingScopeKind, "unit_variant">;
+/**
+ * A single ordered collection of confirmed floor-plan pages. Unlike the v1
+ * `unit_variant` scope, it deliberately carries no proposed unit identity:
+ * Claude discovers and cites the variants after seeing the whole set.
+ */
+export interface OcrFloorPlansScope extends OcrRoutingScopeBase {
+  kind: "floor_plans";
 }
 
-export type OcrRoutingScope = OcrUnitVariantScope | OcrNonVariantScope;
+export interface OcrNonVariantScope extends OcrRoutingScopeBase {
+  kind: Exclude<OcrRoutingScopeKind, "unit_variant" | "floor_plans">;
+}
+
+export type OcrRoutingScope =
+  OcrUnitVariantScope | OcrFloorPlansScope | OcrNonVariantScope;
 
 export interface OcrRoutingManifest {
-  version: "v1";
+  version: OcrRoutingManifestVersion;
   pageCount: number;
   scopes: OcrRoutingScope[];
 }
@@ -105,6 +121,7 @@ const parseScope = (
   value: unknown,
   path: string,
   pageCount: number,
+  version: OcrRoutingManifestVersion,
 ): OcrRoutingScope => {
   if (!isRecord(value)) {
     throw new OcrContractError(`${path} must be an object`);
@@ -114,7 +131,9 @@ const parseScope = (
   const label = readNonEmptyString(value.label, `${path}.label`);
   if (
     typeof value.kind !== "string" ||
-    !ROUTING_SCOPE_KINDS.includes(value.kind as OcrRoutingScopeKind)
+    !(
+      version === "v1" ? V1_ROUTING_SCOPE_KINDS : V2_ROUTING_SCOPE_KINDS
+    ).includes(value.kind as never)
   ) {
     throw new OcrContractError(`${path}.kind is not supported`);
   }
@@ -130,6 +149,22 @@ const parseScope = (
   const uniquePages = new Set(pages.map((page) => page.pageNumber));
   if (uniquePages.size !== pages.length) {
     throw new OcrContractError(`${path}.pages contains a duplicate page`);
+  }
+
+  if (kind === "floor_plans") {
+    if (value.variant !== undefined) {
+      throw new OcrContractError(
+        `${path}.variant is not allowed on a floor-plans scope`,
+      );
+    }
+    for (let index = 1; index < pages.length; index += 1) {
+      if (pages[index - 1].pageNumber >= pages[index].pageNumber) {
+        throw new OcrContractError(
+          `${path}.pages must be in ascending document order`,
+        );
+      }
+    }
+    return { scopeKey, kind, label, pages };
   }
 
   if (kind !== "unit_variant") {
@@ -170,9 +205,10 @@ export const parseOcrRoutingManifest = (
   input: unknown,
   expectedPageCount?: number,
 ): OcrRoutingManifest => {
-  if (!isRecord(input) || input.version !== "v1") {
-    throw new OcrContractError("routing manifest version must be v1");
+  if (!isRecord(input) || (input.version !== "v1" && input.version !== "v2")) {
+    throw new OcrContractError("routing manifest version must be v1 or v2");
   }
+  const version = input.version;
 
   const pageCount = readPositiveInteger(input.pageCount, "pageCount");
   if (expectedPageCount !== undefined && pageCount !== expectedPageCount) {
@@ -185,13 +221,14 @@ export const parseOcrRoutingManifest = (
   }
 
   const scopes = input.scopes.map((scope, index) =>
-    parseScope(scope, `scopes[${index}]`, pageCount),
+    parseScope(scope, `scopes[${index}]`, pageCount, version),
   );
   const scopeKeys = new Set<string>();
   const routedPages = new Set<number>();
   const ignoredPages = new Set<number>();
-  const unitVariantPages = new Set<number>();
+  const unitDiscoveryPages = new Set<number>();
   const unitVariantNames = new Set<string>();
+  let floorPlansScopeCount = 0;
   let extractionScopeCount = 0;
 
   for (const scope of scopes) {
@@ -213,6 +250,14 @@ export const parseOcrRoutingManifest = (
       }
       unitVariantNames.add(normalizedVariantName);
     }
+    if (scope.kind === "floor_plans") {
+      floorPlansScopeCount += 1;
+      if (floorPlansScopeCount > 1) {
+        throw new OcrContractError(
+          "routing manifest may contain only one floor-plans scope",
+        );
+      }
+    }
 
     for (const page of scope.pages) {
       if (scope.kind === "ignore") {
@@ -232,13 +277,13 @@ export const parseOcrRoutingManifest = (
       }
       routedPages.add(page.pageNumber);
 
-      if (scope.kind === "unit_variant") {
-        if (unitVariantPages.has(page.pageNumber)) {
+      if (scope.kind === "unit_variant" || scope.kind === "floor_plans") {
+        if (unitDiscoveryPages.has(page.pageNumber)) {
           throw new OcrContractError(
-            `page ${page.pageNumber} cannot belong to two unit-variant scopes`,
+            `page ${page.pageNumber} cannot belong to two unit-discovery scopes`,
           );
         }
-        unitVariantPages.add(page.pageNumber);
+        unitDiscoveryPages.add(page.pageNumber);
       }
     }
   }
@@ -257,7 +302,7 @@ export const parseOcrRoutingManifest = (
     }
   }
 
-  return { version: "v1", pageCount, scopes };
+  return { version, pageCount, scopes };
 };
 
 export const findRoutingScope = (

@@ -1,5 +1,13 @@
 # Progress
 
+## 2026-09-20 (later) — Floor-plan OCR contract v2
+
+**Done:** the versioned routing-manifest contract now supports `v2` and one ordered `floor_plans` scope. The existing v1 manifest and pre-named, one-variant `unit_variant` scope stay fully supported. Claude receives all confirmed floor-plan pages together and may return zero or more distinct, evidence-backed variants; the adapter rejects duplicate variant names and AI-supplied BHK/layout lookup keys, then assembles the results into the existing `unit_variants` submission field with correct per-item evidence paths. No database migration, new table, direct catalog write, or change to `publishSubmission` was made. Contract reference: `docs/ocr-routing-contract.v2.md`.
+
+**Verified:** focused OCR tests, lint, typecheck, and the full suite — **702 tests across 59 files** — pass. Targeted Prettier check passes. Repository-wide `format:check` remains blocked by five unrelated pre-existing files; they were not touched.
+
+**Next:** a separately scoped confirm-pages and OCR-queue step will turn the admin's selected categories into a v2 manifest, require the separate paid-run confirmation (without showing a price), and queue extraction. This remains independent of adding OpenRouter credits; credits are only needed for the later live router/extraction validation.
+
 ## 2026-09-20 (later) — Categorize brochure pages, and the admin-only usage ledger
 
 **Done:** the page-review screen has a "Categorize brochure pages" action (a vision-model pass, stored on the draft attempt): each page gets a suggested category, confidence and imagery tags, pages worth reading are pre-selected, any page can be re-typed or deselected, and a brochure with no floor plans says its floor-plan step will be skipped. No cost is shown anywhere near it. Every paid request is recorded in a new append-only `ai_usage_events` table (migration `0008`, owner-approved) and shown in a separate admin-only **Usage** tab (totals with a "≥" lower bound when a cost was not reported, by brochure, developer, model, and recent requests). A test fails if anything outside admin and ingestion code touches the ledger.
