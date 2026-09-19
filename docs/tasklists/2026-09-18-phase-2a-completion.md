@@ -1,8 +1,8 @@
 # Tasklist — finish Phase 2A: login, developer submission flow, admin review/publish, GujRERA
 
-**Status:** planned — not started
+**Status:** in progress — decisions resolved 2026-09-19; step 1 tasklist: `2026-09-19-login-ui.md`
 **Owner:** Bhavarth (implementation); reviewed decisions require explicit sign-off per `AGENTS.md` (auth, schema, publish transaction)
-**Branch:** not yet created
+**Branch:** task/phase-2a-completion
 **Depends on:** `publishSubmission`/`applySubmissionTransition` (done, `src/lib/submissions/`), the OCR adapter and ingestion pipeline (done, `src/lib/ocr/`), Better Auth (`src/lib/auth.ts`, plumbing done, no UI)
 **References:** `docs/app-flows/admin.md`, `docs/app-flows/developer.md`, `docs/api/api-spec.v1.md` (Admin API and Developer API sections — the full route contract is already specified, all rows "Planned"), `docs/schema/schema.v1.md` (`developer_users`, `admin_users`, `source_documents`, `ocr_extraction_jobs`), `ARCHITECTURE.md`, `DECISIONS.md` 2026-09-18 (why this scope moved here from Phase 4)
 
@@ -31,9 +31,9 @@ In flow order — each step unblocks the next:
 - **Storage abstraction: resolved 2026-09-18.** `src/lib/storage/adapter.ts` (the `StorageAdapter` interface) and `src/lib/storage/gcs-adapter.ts` (its GCS implementation) now exist — see `docs/tasklists/2026-09-18-storage-adapter.md`. `src/lib/ocr/source-loader.ts`'s old direct, uninterfaced SDK call is retired; nothing outside `src/lib/storage/` may import `@google-cloud/storage` directly going forward. Step 2's brochure upload has an interface to call (`upload()`) instead of a second direct-SDK path to invent.
 - **Buyer-facing URL-resolution strategy: resolved 2026-09-18.** `GET /api/v1/media/{id}` (`src/app/api/v1/media/[id]/route.ts`) redirects to a freshly-generated GCS V4 signed read URL per request — see `docs/tasklists/2026-09-18-media-redirect-route.md` and the dated `DECISIONS.md` entry (supersedes the 2026-09-07 signed-URL rejection). What's still open: actually wiring `PropertyCard`/the dossier to emit `<img src="/api/v1/media/{id}">` instead of the deliberate placeholder — blocked on step 2 below actually being able to create `property_media` rows in the first place.
 - **Still open: provider migration.** The user is separately evaluating moving hosting off GCP to a Hostinger VPS. The adapter interface is what makes that a "write one new adapter" change rather than a codebase-wide hunt, but no second provider adapter exists yet and none is needed until that move is actually decided.
-- **Page-routing UI interaction model.** `admin.md`/`developer.md` describe the _result_ (every brochure page confirmed as project/amenities/specifications/one unit-variant group/ignored, unit-variant groups spanning several ordered pages with optional labels) but not the UI itself. Needs a concrete interaction design (a page-thumbnail grid with scope assignment is the obvious shape, but this should be confirmed, not assumed, especially given `docs/design/design-tokens.md`'s existing design system may or may not have a precedent for it).
-- **Who can create a canonical `developers` profile and invite staff.** `admin.md` step 1 says an admin does this "through the controlled admin builder-profile flow" — that flow itself isn't scoped anywhere yet and needs its own small piece of this tasklist.
-- **Login UI shape**: one screen with a buyer/staff mode switch, or two separate routes/pages. Buyer auth is phone-OTP; staff auth is email/password — different flows, and conflating them risks a confusing screen. Lean toward separate routes, but confirm before building.
+- **Resolved 2026-09-19 (see DECISIONS.md) — page-routing UI:** auto-suggest + thumbnail grid, free select/deselect, zoomable popup, confirm before paid OCR. Original question: `admin.md`/`developer.md` describe the _result_ (every brochure page confirmed as project/amenities/specifications/one unit-variant group/ignored, unit-variant groups spanning several ordered pages with optional labels) but not the UI itself. Needs a concrete interaction design (a page-thumbnail grid with scope assignment is the obvious shape, but this should be confirmed, not assumed, especially given `docs/design/design-tokens.md`'s existing design system may or may not have a precedent for it).
+- **Resolved 2026-09-19 — developer onboarding:** admin creates the profile and emails an invite. Original question: `admin.md` step 1 says an admin does this "through the controlled admin builder-profile flow" — that flow itself isn't scoped anywhere yet and needs its own small piece of this tasklist.
+- **Resolved 2026-09-19 — login UI:** three separate routes (`/login`, `/developers/login`, `/admin/login`). Original question: one screen with a buyer/staff mode switch, or two separate routes/pages. Buyer auth is phone-OTP; staff auth is email/password — different flows, and conflating them risks a confusing screen. Lean toward separate routes, but confirm before building.
 
 ## Implementation checklist (ordered; fill in as scoped)
 
@@ -46,7 +46,7 @@ In flow order — each step unblocks the next:
 ### 2. Developer portal — submission-creating half
 
 - [ ] `developer_users` link resolution: a signed-in staff account resolves to its one linked `developers` profile (schema already supports this; no UI reads it yet).
-- [ ] Brochure upload UI, calling `src/lib/storage/adapter.ts`'s `StorageAdapter.upload()` (interface and GCS implementation done, `docs/tasklists/2026-09-18-storage-adapter.md`) — still needs the buyer-facing URL-resolution strategy decided if the upload flow needs to show a preview, though the upload itself doesn't require it.
+- [ ] Brochure upload UI, calling `src/lib/storage/adapter.ts`'s `StorageAdapter.upload()` (interface and GCS implementation done, `docs/tasklists/2026-09-18-storage-adapter.md`). Brochures are `source_documents`, never buyer-facing; buyer-facing photos/floor plans are a separate flow (step 5).
 - [ ] `POST /api/v1/admin/source-documents`-equivalent for developer-initiated uploads — check whether the existing Admin API route in `api-spec.v1.md` is reused as-is or needs a developer-scoped variant; the route table currently only lists it under Admin API.
 - [ ] Page-routing confirmation UI (blocked on the interaction-model decision above).
 - [ ] Trigger OCR extraction against the confirmed manifest (`POST /api/v1/admin/ocr-jobs/{id}/queue` — same reuse-vs-variant question as above).
@@ -68,6 +68,16 @@ In flow order — each step unblocks the next:
 - [ ] Needs its own scoping pass and likely its own sub-tasklist per `docs/tasklists/README.md`, given it's a distinct integration (an external fetch job) rather than UI — flag when reached rather than scoping fully here.
 - [ ] Fetch job retrieves a RERA record for a known registration number, records fetched payload/matches (`rera_fetch_jobs`).
 - [ ] A mismatch or new fact becomes a new `property_submissions` row with `source: "rera_scrape"`, reviewed through the same admin flow as any other submission — never a direct live-data write.
+
+### 5. Property media, end to end (buyer photos/floor plans)
+
+Background: `GET /api/v1/media/{id}` (signed-URL redirect) and `StorageAdapter.getSignedReadUrl` exist and are tested, but nothing can produce a `property_media` row and nothing renders an image. Recorded here so the last piece isn't lost (`docs/tasklists/2026-09-18-media-redirect-route.md`, 2026-09-18 `DECISIONS.md`).
+
+- [ ] **Decided 2026-09-19: dedicated `submission_media` table + `schema.v6.md`; surface for review before migrating.** Field-contract gap (schema/contract change, needs sign-off per `AGENTS.md`):** the submission/OCR field contract (`property_schema_fields`) has no media field, so `publishSubmission` cannot create `property_media` rows — and `property_media` is a live catalog table bound by the one-write-path rule (no direct inserts, including tests and seed scripts). Decide and record the media field shape (dated `DECISIONS.md` entry; new `schema.v6.md` if structural), then extend `publishSubmission` to write `property_media` in the same publish transaction.
+- [ ] Media upload step in the developer/admin submission flow (photos, floor plans), via `StorageAdapter.upload()`, attached to a submission and published only through the approval path.
+- [x] Resolved 2026-09-19: `brochure_pdf` is buyer-facing only if the developer marks it public (private by default); source documents and buyer media stay in separate storage paths.
+- [ ] Wire `PropertyCard` and the dossier to render `<img src="/api/v1/media/{id}">` from `primaryMedia`/`media`, replacing the deliberate placeholder frame from the 2026-09-07 entry; update the tests that assert the placeholder on purpose. Buyer-UI work — likely Deep's, coordinate.
+- [ ] Once a real fixture can be published through the sanctioned path: add the "found" test for `getPublishedMediaObjectPath` and an integration test for `GET /api/v1/media/{id}` (today only the not-found path and a mocked-dependency route test exist).
 
 ## Tests
 
