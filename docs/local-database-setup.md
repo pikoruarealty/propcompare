@@ -86,6 +86,16 @@ seed.
 > `drizzle-kit generate` diffs against the newest snapshot only. See `DECISIONS.md`
 > (2026-09-02).
 
+## First admin
+
+Public sign-up is disabled, so the first admin is created by script (it refuses once any admin exists):
+
+```bash
+FIRST_ADMIN_EMAIL=you@example.com FIRST_ADMIN_PASSWORD=<12+ chars> bun run db:first-admin
+```
+
+Then sign in at `/admin/login`.
+
 ## Verifying the privilege split
 
 Worth running once after setup: the application role must be refused, and the

@@ -1,5 +1,15 @@
 # Progress
 
+## 2026-09-19 — Login UI: buyer phone OTP, developer and admin email/password
+
+**Done:** three sign-in screens on one shared frame (`AuthShell`, following the Stitch unlock-gate screen): `/login` (buyer — phone number, then a 6-digit code; the first verified code creates the account), `/developers/login` and `/admin/login` (email + password). A user's role is the presence of an `admin_users` or an _active_ `developer_users` row (`src/lib/accounts/roles.ts`); the portal sign-in checks it _before_ a session exists, so the wrong door never produces a session and every failure returns the same message. `requirePortalRole` is the authorization boundary and guards `/developers` and `/admin` (holding pages until their real screens land). Public email sign-up is disabled in `src/lib/auth.ts`; password accounts come only from `provisionPasswordAccount`. `bun run db:first-admin` (env `FIRST_ADMIN_EMAIL`/`FIRST_ADMIN_PASSWORD`) creates the first owner and refuses once any admin exists. `?next=` is validated by `safeReturnPath`.
+
+**Verified:** full suite 627/627, lint and typecheck clean; end-to-end against the dev server — OTP send/verify created a buyer, `/api/auth/sign-up/email` refused, `/admin` and `/developers` redirect to their login when signed out, screenshots checked against the design tokens. CI now provisions Postgres (own commit).
+
+**Not done:** the header's signed-in state (a client-side session read is needed to keep ISR pages static — coordinate with Deep); the pre-login intake cookie claim; SMS delivery in production (`sendOTP` still logs in dev and throws in production, no provider chosen).
+
+**Note:** `test-support.ts` now provisions and signs in rather than signing up, since sign-up is off.
+
 ## 2026-09-18 — `GET /api/v1/media/{id}` resolves the buyer-facing media URL strategy
 
 **Done:** the open decision the storage adapter work left on the table — how
