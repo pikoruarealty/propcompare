@@ -7,6 +7,7 @@ import { StatusPill } from "@/components/admin/status-pill";
 import { SubmissionWorkbench } from "@/components/admin/submission-workbench";
 import { requirePortalRole } from "@/lib/accounts/session";
 import { getSubmissionDetail } from "@/lib/submissions/queue";
+import { storageAdapter } from "@/lib/storage";
 
 export const metadata: Metadata = {
   title: "Submission — Admin console",
@@ -25,6 +26,16 @@ export default async function SubmissionDetailPage({
   const submission = await getSubmissionDetail(db, id);
   if (!submission) notFound();
 
+  // Previews of private candidate images: short-lived links made per view, never stored.
+  const media = await Promise.all(
+    submission.media.map(async (item) => ({
+      ...item,
+      previewUrl: await storageAdapter
+        .getSignedReadUrl(item.storagePath, { expiresInSeconds: 60 * 60 })
+        .catch(() => null),
+    })),
+  );
+
   return (
     <AdminShell active="submissions" email={session.email}>
       <p className="mb-4 text-sm">
@@ -42,6 +53,7 @@ export default async function SubmissionDetailPage({
       />
       <SubmissionWorkbench
         submission={submission}
+        media={media}
         permissionLevel={session.role.permissionLevel}
       />
     </AdminShell>

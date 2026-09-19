@@ -75,9 +75,9 @@ Under the pre-launch model the invite goes to the existing canonical profile the
 
 ### Slice 5 — reconciliation, review, publish
 
-- [ ] Field-by-field reconciliation: value, confidence, evidence pages in a viewer; confirm / edit / reject with field-contract validation.
-- [ ] Review actions (request changes, reject, approve) through `applySubmissionTransition`; verifier vs owner rules per the existing transition table.
-- [ ] Publish (owner only) through `publishSubmission`; revision snapshot; failure leaves no partial writes.
+- [x] Field-by-field reconciliation with typed inputs, confidence and evidence pages, confirm / edit / reject with field-contract validation (`docs/tasklists/2026-09-20-submission-reconciliation.md`). Evidence pages are shown as text; opening the cited brochure page from a field is a follow-up.
+- [x] Review actions through the state machine with confirmations; verifier vs owner rules enforced by the route.
+- [x] Publish (owner only) through `publishSubmission`; confirmation dialog in the UI. Not yet exercised end to end in a browser.
 
 ## Tests
 

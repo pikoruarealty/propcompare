@@ -26,8 +26,13 @@ if (files.length === 0) {
   process.exit(2);
 }
 
-const browser = await chromium.launch({ executablePath: CHROME, headless: true });
-const page = await (await browser.newContext({ viewport: { width: 1360, height: 900 } })).newPage();
+const browser = await chromium.launch({
+  executablePath: CHROME,
+  headless: true,
+});
+const page = await (
+  await browser.newContext({ viewport: { width: 1360, height: 900 } })
+).newPage();
 page.setDefaultTimeout(600_000);
 
 await page.goto(`${BASE}/admin/login`);
@@ -56,23 +61,38 @@ for (const file of files) {
   });
   await page.getByRole("button", { name: "Upload brochure" }).click();
   await page.waitForURL(/\/admin\/submissions\/[0-9a-f-]{36}\/pages$/);
-  console.log(`uploaded in ${Math.round((Date.now() - started) / 1000)}s: ${page.url()}`);
+  console.log(
+    `uploaded in ${Math.round((Date.now() - started) / 1000)}s: ${page.url()}`,
+  );
 
   const total = Number(
-    (await page.getByText(/\d+ pages$/).first().innerText()).match(/(\d+) pages/)[1],
+    (
+      await page
+        .getByText(/\d+ pages$/)
+        .first()
+        .innerText()
+    ).match(/(\d+) pages/)[1],
   );
 
   const ran = Date.now();
   await page.getByRole("button", { name: "Categorize brochure pages" }).click();
   try {
-    await page.getByText("Brochure page categories").waitFor({ timeout: 900_000 });
+    await page
+      .getByText("Brochure page categories")
+      .waitFor({ timeout: 900_000 });
   } catch {
     const alert = await page.getByRole("alert").allInnerTexts();
-    console.log(`FAILED after ${Math.round((Date.now() - ran) / 1000)}s. Screen says: ${alert.join(" | ") || "(nothing)"}`);
-    await page.screenshot({ path: `.local/verify/categorize-${label}-failed.png` }).catch(() => {});
+    console.log(
+      `FAILED after ${Math.round((Date.now() - ran) / 1000)}s. Screen says: ${alert.join(" | ") || "(nothing)"}`,
+    );
+    await page
+      .screenshot({ path: `.local/verify/categorize-${label}-failed.png` })
+      .catch(() => {});
     continue;
   }
-  console.log(`categorized ${total} pages in ${Math.round((Date.now() - ran) / 1000)}s`);
+  console.log(
+    `categorized ${total} pages in ${Math.round((Date.now() - ran) / 1000)}s`,
+  );
 
   await page.getByRole("list", { name: "Brochure pages" }).waitFor();
   const result = await page.evaluate((n) => {
@@ -83,12 +103,15 @@ for (const file of files) {
     for (let i = 1; i <= n; i += 1) {
       const select = document.getElementById(`type-${i}`);
       const card = select?.closest("li");
-      const type = select && !select.disabled ? select.value || "untyped" : "not read";
+      const type =
+        select && !select.disabled ? select.value || "untyped" : "not read";
       (byType[type] ??= []).push(i);
       const text = card?.innerText ?? "";
       if (/Low confidence/.test(text)) lowConfidence.push(i);
       if (/Not classified/.test(text)) notClassified.push(i);
-      for (const chip of card?.querySelectorAll('ul[aria-label="What the page shows"] li') ?? []) {
+      for (const chip of card?.querySelectorAll(
+        'ul[aria-label="What the page shows"] li',
+      ) ?? []) {
         imagery[chip.textContent] = (imagery[chip.textContent] ?? 0) + 1;
       }
     }
@@ -103,8 +126,13 @@ for (const file of files) {
   console.log(`  not classified: ${compact(result.notClassified) || "none"}`);
   console.log(`  imagery tags: ${JSON.stringify(result.imagery)}`);
   const summary = await page.getByText(/No floor plans were found/).count();
-  console.log(`  floor-plan step skipped notice: ${summary > 0 ? "shown" : "not shown"}`);
-  await page.screenshot({ path: `.local/verify/categorize-${label}.png`, fullPage: false });
+  console.log(
+    `  floor-plan step skipped notice: ${summary > 0 ? "shown" : "not shown"}`,
+  );
+  await page.screenshot({
+    path: `.local/verify/categorize-${label}.png`,
+    fullPage: false,
+  });
 }
 
 await browser.close();

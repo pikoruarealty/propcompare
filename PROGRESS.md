@@ -1,5 +1,13 @@
 # Progress
 
+## 2026-09-20 (evening) — Reconciliation, media review and manual entry, finished
+
+**Picked up from Codex:** its session (floor-plan OCR contract, confirmed routing before extraction, the `submission_media` schema and publish path — all committed) stopped while wiring the reconciliation screens. Its uncommitted backend compiled but had no tests and its screen took raw JSON for every field. Finished: the backend now has integration and route tests (including a race test for simultaneous submits and proof an upload cannot claim a brochure source); `requirePortalRole` is generic so admin pages read their permission level without a cast; and the screen is rebuilt — fields grouped as a listing reads, typed inputs from the approved vocabularies (numbers, choices, amenities by category, a real unit-types editor), image upload with credit and previews, and confirmations before approve, reject and publish.
+
+**Verified:** full suite, lint, typecheck and format clean; `scripts/verify-manual-entry.mjs` runs the whole manual path in Chrome and Brave, 28/28. Publish is not exercised through the browser (it would put a test property in the catalog); it is covered by the publisher's integration tests.
+
+**Still open in Phase 2A:** the live categorization test (waiting on OpenRouter credits), then the OCR live run and human accuracy spot-check; extracting brochure photos into the image list (needs a server-side PDF image extractor); the developer invite flow; GujRERA (deliberately separate, to be planned).
+
 ## 2026-09-20 (later) — Human-confirmed brochure routing and OCR queue
 
 **Done:** the admin page-review workbench now saves a complete human routing

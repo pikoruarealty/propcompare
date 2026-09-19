@@ -1,13 +1,17 @@
 import { and, desc, eq, sql } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import {
+  amenityCatalog,
+  bhkTypes,
   developers,
+  layoutTypes,
   properties,
   propertySchemaFields,
   propertySubmissionFieldEvidence,
   propertySubmissionFields,
   propertySubmissionMedia,
   propertySubmissions,
+  propertyTypes,
   type submissionStatus,
 } from "@/db/schema/catalog";
 
@@ -97,6 +101,50 @@ export const listSubmissionQueue = async (
   return rows;
 };
 
+/** Controlled vocabularies the typed field inputs offer. Keys are what is stored. */
+export interface SubmissionLookups {
+  propertyTypes: { key: string; label: string }[];
+  amenities: { key: string; label: string; category: string }[];
+  bhkTypes: { key: string; label: string }[];
+  layoutTypes: { key: string; label: string }[];
+}
+
+export const getSubmissionLookups = async (
+  database: PostgresJsDatabase,
+): Promise<SubmissionLookups> => {
+  const [types, amenities, bhk, layouts] = await Promise.all([
+    database
+      .select({ key: propertyTypes.key, label: propertyTypes.label })
+      .from(propertyTypes)
+      .orderBy(propertyTypes.label),
+    database
+      .select({
+        key: amenityCatalog.key,
+        label: amenityCatalog.label,
+        category: amenityCatalog.category,
+      })
+      .from(amenityCatalog)
+      .orderBy(amenityCatalog.category, amenityCatalog.label),
+    database
+      .select({ key: bhkTypes.key, label: bhkTypes.label })
+      .from(bhkTypes)
+      .orderBy(bhkTypes.bedroomCount),
+    database
+      .select({ key: layoutTypes.key, label: layoutTypes.label })
+      .from(layoutTypes)
+      .orderBy(layoutTypes.label),
+  ]);
+  return {
+    propertyTypes: types,
+    amenities: amenities.map((a) => ({
+      ...a,
+      category: a.category ?? "Other",
+    })),
+    bhkTypes: bhk,
+    layoutTypes: layouts,
+  };
+};
+
 export interface SubmissionDetail extends SubmissionQueueItem {
   fields: {
     fieldKey: string;
@@ -108,8 +156,11 @@ export interface SubmissionDetail extends SubmissionQueueItem {
     evidence: { sourcePage: number; sourceSnippet: string | null }[];
   }[];
   availableFields: { fieldKey: string; label: string; dataType: string }[];
+  lookups: SubmissionLookups;
   media: {
     id: string;
+    /** Where the file is stored; the page turns it into a short-lived preview URL. */
+    storagePath: string;
     unitVariantName: string | null;
     mediaType: "photo" | "floor_plan" | "video" | "brochure_pdf";
     sourceKind: "developer_brochure" | "own" | "developer_supplied";
@@ -178,6 +229,7 @@ export const getSubmissionDetail = async (
   const media = await database
     .select({
       id: propertySubmissionMedia.id,
+      storagePath: propertySubmissionMedia.gcsPath,
       unitVariantName: propertySubmissionMedia.unitVariantName,
       mediaType: propertySubmissionMedia.mediaType,
       sourceKind: propertySubmissionMedia.sourceKind,
@@ -197,6 +249,7 @@ export const getSubmissionDetail = async (
       evidence: evidenceByField.get(field.fieldKey) ?? [],
     })),
     availableFields,
+    lookups: await getSubmissionLookups(database),
     media,
   };
 };

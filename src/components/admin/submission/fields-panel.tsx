@@ -1,0 +1,188 @@
+"use client";
+
+import * as React from "react";
+import { Button } from "@/components/ui/button";
+import {
+  groupFields,
+  REVIEW_STATUS_LABEL,
+} from "@/lib/submissions/field-display";
+import type { SubmissionDetail } from "@/lib/submissions/queue";
+import { cn } from "@/lib/utils";
+import { FieldEditor } from "./field-editor";
+import { FieldValue } from "./field-value";
+
+const STATUS_TONE: Record<string, string> = {
+  needs_review: "bg-accent text-accent-foreground",
+  auto_accepted: "bg-accent text-accent-foreground",
+  edited:
+    "bg-[color-mix(in_oklab,var(--color-terracotta)_14%,var(--color-chalk))] text-primary",
+  confirmed: "border-border border bg-card text-foreground",
+  rejected:
+    "bg-[color-mix(in_oklab,var(--destructive)_12%,var(--color-chalk))] text-destructive",
+};
+
+/**
+ * Every active contract field, grouped the way a listing reads. A field with a
+ * candidate shows its value, confidence, the brochure pages it came from and its
+ * review state; a field with none says "Not stated". While the draft is editable
+ * each row can be edited or filled in with a typed input; while it is in review
+ * each candidate can be confirmed or rejected.
+ */
+export function FieldsPanel({
+  submission,
+  editable,
+  inReview,
+  pending,
+  onSave,
+  onReview,
+}: {
+  submission: SubmissionDetail;
+  editable: boolean;
+  inReview: boolean;
+  pending: boolean;
+  /** Resolves to an error message, or null when saved. */
+  onSave: (fieldKey: string, value: unknown) => Promise<string | null>;
+  onReview: (fieldKey: string, status: "confirmed" | "rejected") => void;
+}) {
+  const [editing, setEditing] = React.useState<string | null>(null);
+  const [error, setError] = React.useState<string | null>(null);
+  const groups = groupFields(submission.availableFields, submission.fields);
+
+  const save = async (fieldKey: string, value: unknown) => {
+    const message = await onSave(fieldKey, value);
+    setError(message);
+    if (!message) setEditing(null);
+  };
+
+  return (
+    <div className="flex flex-col gap-8">
+      {groups.map(({ group, rows }) => (
+        <section key={group.key} aria-labelledby={`group-${group.key}`}>
+          <h2 id={`group-${group.key}`} className="font-display text-2xl">
+            {group.title}
+          </h2>
+          <p className="text-muted-foreground mt-1 mb-4 text-sm">
+            {group.description}
+          </p>
+          <ul className="border-border bg-card divide-border divide-y rounded-lg border">
+            {rows.map(({ field, candidate }) => (
+              <li
+                key={field.fieldKey}
+                className="grid gap-3 p-5 md:grid-cols-[14rem_1fr_auto]"
+              >
+                <div>
+                  <p className="font-medium">{field.label}</p>
+                </div>
+
+                <div className="min-w-0">
+                  {editing === field.fieldKey ? (
+                    <FieldEditor
+                      field={field}
+                      initial={candidate?.value}
+                      lookups={submission.lookups}
+                      pending={pending}
+                      error={error}
+                      onSave={(value) => save(field.fieldKey, value)}
+                      onCancel={() => {
+                        setEditing(null);
+                        setError(null);
+                      }}
+                    />
+                  ) : candidate ? (
+                    <>
+                      <FieldValue
+                        dataType={field.dataType}
+                        value={candidate.value}
+                        lookups={submission.lookups}
+                      />
+                      {candidate.confidence !== null ? (
+                        <p className="text-muted-foreground mt-2 text-xs">
+                          Read with{" "}
+                          {Math.round(Number(candidate.confidence) * 100)}%
+                          confidence
+                        </p>
+                      ) : null}
+                      {candidate.evidence.map((e) => (
+                        <p
+                          key={`${e.sourcePage}-${e.sourceSnippet}`}
+                          className="text-muted-foreground mt-1 text-xs"
+                        >
+                          Brochure page {e.sourcePage}
+                          {e.sourceSnippet ? ` — “${e.sourceSnippet}”` : ""}
+                        </p>
+                      ))}
+                    </>
+                  ) : (
+                    <span className="text-muted-foreground italic">
+                      Not stated
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex flex-col items-start gap-2 md:items-end">
+                  {candidate ? (
+                    <span
+                      className={cn(
+                        "rounded-full px-2.5 py-1 text-xs font-semibold tracking-[0.06em] uppercase",
+                        STATUS_TONE[candidate.reviewStatus] ??
+                          STATUS_TONE.needs_review,
+                      )}
+                    >
+                      {REVIEW_STATUS_LABEL[candidate.reviewStatus] ??
+                        candidate.reviewStatus}
+                    </span>
+                  ) : null}
+                  {editing !== field.fieldKey ? (
+                    <div className="flex flex-wrap gap-2">
+                      {editable ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={pending}
+                          onClick={() => {
+                            setError(null);
+                            setEditing(field.fieldKey);
+                          }}
+                        >
+                          {candidate ? "Edit" : "Add"}
+                        </Button>
+                      ) : null}
+                      {inReview && candidate ? (
+                        <>
+                          <Button
+                            type="button"
+                            size="sm"
+                            disabled={
+                              pending || candidate.reviewStatus === "confirmed"
+                            }
+                            onClick={() =>
+                              onReview(field.fieldKey, "confirmed")
+                            }
+                          >
+                            Confirm
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            disabled={
+                              pending || candidate.reviewStatus === "rejected"
+                            }
+                            onClick={() => onReview(field.fieldKey, "rejected")}
+                          >
+                            Reject
+                          </Button>
+                        </>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ))}
+    </div>
+  );
+}

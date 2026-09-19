@@ -1,366 +1,159 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import * as React from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { countNeedingReview } from "@/lib/submissions/field-display";
 import type { SubmissionDetail } from "@/lib/submissions/queue";
+import { FieldsPanel } from "./submission/fields-panel";
+import { MediaPanel, type MediaItem } from "./submission/media-panel";
+import { WorkflowPanel } from "./submission/workflow-panel";
 
-const displayValue = (value: unknown): string =>
-  typeof value === "string" ? value : JSON.stringify(value);
-
-const parseValue = (text: string): unknown => {
-  try {
-    return JSON.parse(text);
-  } catch {
-    return text;
-  }
-};
-
+/**
+ * The reconciliation screen for one submission, whether it began as a brochure or
+ * as manual entry — both are the same draft, edited and reviewed the same way.
+ * It lays out the workflow, the fields (grouped, with typed inputs) and the
+ * images, and turns each action into a call to the admin API. The API enforces
+ * every rule again; nothing here is the authority.
+ */
 export function SubmissionWorkbench({
   submission,
+  media,
   permissionLevel,
 }: {
   submission: SubmissionDetail;
+  media: MediaItem[];
   permissionLevel: "verifier" | "owner";
 }) {
   const router = useRouter();
-  const [error, setError] = useState<string | null>(null);
-  const [selectedField, setSelectedField] = useState(
-    submission.availableFields[0]?.fieldKey ?? "",
-  );
-  const [value, setValue] = useState("");
-  const [pending, startTransition] = useTransition();
+  const [error, setError] = React.useState<string | null>(null);
+  const [pending, startTransition] = React.useTransition();
+
   const editable =
     submission.status === "draft" || submission.status === "changes_requested";
   const inReview = submission.status === "in_review";
-  const existingKeys = useMemo(
-    () => new Set(submission.fields.map((field) => field.fieldKey)),
-    [submission.fields],
-  );
+  const base = `/api/v1/admin/submissions/${submission.id}`;
 
-  const request = (url: string, options: RequestInit) =>
+  /** Calls the API; resolves to an error message, or null on success. */
+  const call = async (
+    url: string,
+    init: RequestInit,
+  ): Promise<string | null> => {
+    try {
+      const response = await fetch(url, init);
+      if (response.ok) return null;
+      const payload = (await response.json().catch(() => null)) as {
+        error?: { message?: string };
+      } | null;
+      return payload?.error?.message ?? "That could not be saved.";
+    } catch {
+      return "Could not reach the server. Check your connection and try again.";
+    }
+  };
+
+  const run = (url: string, init: RequestInit) =>
     startTransition(async () => {
       setError(null);
-      const response = await fetch(url, options);
-      if (!response.ok) {
-        const payload = (await response.json().catch(() => null)) as {
-          error?: { message?: string };
-        } | null;
-        setError(payload?.error?.message ?? "The change could not be saved.");
-        return;
-      }
-      router.refresh();
+      const message = await call(url, init);
+      if (message) setError(message);
+      else router.refresh();
     });
 
-  const saveField = () => {
-    if (!selectedField) return;
-    request(
-      `/api/v1/admin/submissions/${submission.id}/fields/${encodeURIComponent(selectedField)}`,
+  const post = (path: string, body?: unknown): [string, RequestInit] => [
+    `${base}${path}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body ?? {}),
+    },
+  ];
+
+  const saveField = async (fieldKey: string, value: unknown) => {
+    const message = await call(
+      `${base}/fields/${encodeURIComponent(fieldKey)}`,
       {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ value: parseValue(value) }),
+        body: JSON.stringify({ value }),
       },
     );
+    if (!message) router.refresh();
+    return message;
   };
 
-  const transition = (action: string) =>
-    request(`/api/v1/admin/submissions/${submission.id}/review`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action }),
-    });
-
-  const reviewField = (
-    fieldKey: string,
-    reviewStatus: "confirmed" | "rejected",
-  ) =>
-    request(
-      `/api/v1/admin/submissions/${submission.id}/fields/${encodeURIComponent(fieldKey)}/review`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reviewStatus }),
-      },
-    );
-
-  const reviewMedia = (
-    mediaId: string,
-    reviewStatus: "confirmed" | "rejected",
-    isPublic: boolean,
-  ) =>
-    request(
-      `/api/v1/admin/submissions/${submission.id}/media/${mediaId}/review`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reviewStatus, isPublic }),
-      },
-    );
-
-  const publish = () =>
-    request(`/api/v1/admin/submissions/${submission.id}/publish`, {
-      method: "POST",
-    });
+  const variantNames = React.useMemo(() => {
+    const variants = submission.fields.find(
+      (f) => f.fieldKey === "unit_variants",
+    )?.value;
+    return Array.isArray(variants)
+      ? variants
+          .map((v) => (v as { variantName?: unknown }).variantName)
+          .filter((n): n is string => typeof n === "string")
+      : [];
+  }, [submission.fields]);
 
   return (
-    <div className="space-y-8">
+    <div className="flex flex-col gap-10">
       {error ? (
-        <p role="alert" className="text-destructive text-sm">
+        <p
+          role="alert"
+          className="border-destructive/40 text-destructive rounded-md border p-3 text-sm"
+        >
           {error}
         </p>
       ) : null}
 
-      {editable ? (
-        <section
-          className="border-border bg-card rounded-lg border p-5"
-          aria-labelledby="edit-field-heading"
-        >
-          <h2 id="edit-field-heading" className="font-display text-2xl">
-            Add or edit a field
-          </h2>
-          <p className="text-muted-foreground mt-1 text-sm">
-            Enter a JSON value for structured fields (for example an array);
-            plain text is accepted for text fields. A hand edit clears any OCR
-            evidence so it is never shown as support for a changed value.
+      <WorkflowPanel
+        status={submission.status}
+        permissionLevel={permissionLevel}
+        needsReview={countNeedingReview(submission.fields)}
+        pending={pending}
+        onAction={(action) => run(...post("/review", { action }))}
+        onPublish={() => run(...post("/publish"))}
+      />
+
+      {submission.source === "ocr_brochure" ? (
+        <div className="flex items-center justify-between gap-4">
+          <p className="text-muted-foreground text-sm">
+            This draft came from a brochure.
           </p>
-          <div className="mt-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)_auto]">
-            <select
-              className="border-input bg-background h-10 rounded-md border px-3 text-sm"
-              value={selectedField}
-              onChange={(event) => setSelectedField(event.target.value)}
-            >
-              {submission.availableFields.map((field) => (
-                <option key={field.fieldKey} value={field.fieldKey}>
-                  {field.label} ({field.dataType})
-                  {existingKeys.has(field.fieldKey) ? " — replace" : ""}
-                </option>
-              ))}
-            </select>
-            <input
-              className="border-input bg-background h-10 rounded-md border px-3 text-sm"
-              value={value}
-              onChange={(event) => setValue(event.target.value)}
-              placeholder="Value"
-              aria-label="Field value"
-            />
-            <Button
-              type="button"
-              onClick={saveField}
-              disabled={pending || !selectedField}
-            >
-              Save field
-            </Button>
-          </div>
-        </section>
+          <Button asChild variant="outline" size="sm">
+            <Link href={`/admin/submissions/${submission.id}/pages`}>
+              <FileText /> Review brochure pages
+            </Link>
+          </Button>
+        </div>
       ) : null}
 
-      <section aria-labelledby="fields-heading">
-        <h2 id="fields-heading" className="font-display mb-4 text-2xl">
-          Field reconciliation
-        </h2>
-        {submission.fields.length === 0 ? (
-          <div className="border-border bg-card rounded-lg border p-8 text-center text-muted-foreground text-sm">
-            No values have been proposed yet. Missing active fields are
-            explicitly Not stated until a value is entered.
-          </div>
-        ) : (
-          <div className="border-border bg-card overflow-x-auto rounded-lg border">
-            <table className="w-full text-left text-sm">
-              <thead>
-                <tr className="border-border bg-muted/50 text-muted-foreground border-b text-xs font-semibold tracking-[0.1em] uppercase">
-                  <th className="px-5 py-3">Field</th>
-                  <th className="px-5 py-3">Value & evidence</th>
-                  <th className="px-5 py-3">Review</th>
-                </tr>
-              </thead>
-              <tbody>
-                {submission.fields.map((field) => (
-                  <tr
-                    key={field.fieldKey}
-                    className="border-border border-b align-top last:border-b-0"
-                  >
-                    <td className="px-5 py-4">
-                      <p className="font-medium">{field.label}</p>
-                      <p className="text-muted-foreground text-xs">
-                        {field.fieldKey}
-                      </p>
-                    </td>
-                    <td className="max-w-xl px-5 py-4 break-words">
-                      <p>{displayValue(field.value)}</p>
-                      {field.confidence !== null ? (
-                        <p className="text-muted-foreground mt-1 text-xs">
-                          OCR confidence{" "}
-                          {Math.round(Number(field.confidence) * 100)}%
-                        </p>
-                      ) : null}
-                      {field.evidence.map((evidence) => (
-                        <p
-                          key={`${evidence.sourcePage}-${evidence.sourceSnippet}`}
-                          className="text-muted-foreground mt-2 text-xs"
-                        >
-                          Brochure p.{evidence.sourcePage}
-                          {evidence.sourceSnippet
-                            ? `: ${evidence.sourceSnippet}`
-                            : ""}
-                        </p>
-                      ))}
-                    </td>
-                    <td className="px-5 py-4">
-                      <p className="capitalize">
-                        {field.reviewStatus.replace(/_/g, " ")}
-                      </p>
-                      {inReview ? (
-                        <div className="mt-2 flex gap-2">
-                          <Button
-                            type="button"
-                            size="sm"
-                            onClick={() =>
-                              reviewField(field.fieldKey, "confirmed")
-                            }
-                            disabled={pending}
-                          >
-                            Confirm
-                          </Button>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            onClick={() =>
-                              reviewField(field.fieldKey, "rejected")
-                            }
-                            disabled={pending}
-                          >
-                            Reject
-                          </Button>
-                        </div>
-                      ) : null}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
+      <FieldsPanel
+        submission={submission}
+        editable={editable}
+        inReview={inReview}
+        pending={pending}
+        onSave={saveField}
+        onReview={(fieldKey, reviewStatus) =>
+          run(
+            ...post(`/fields/${encodeURIComponent(fieldKey)}/review`, {
+              reviewStatus,
+            }),
+          )
+        }
+      />
 
-      <section aria-labelledby="media-heading">
-        <h2 id="media-heading" className="font-display mb-4 text-2xl">
-          Proposed media
-        </h2>
-        {submission.media.length === 0 ? (
-          <p className="text-muted-foreground text-sm">
-            No media has been proposed. Image upload is available while the
-            draft is editable.
-          </p>
-        ) : (
-          <div className="space-y-3">
-            {submission.media.map((media) => (
-              <article
-                key={media.id}
-                className="border-border bg-card rounded-lg border p-4"
-              >
-                <p className="font-medium">
-                  {media.mediaType.replace(/_/g, " ")} ·{" "}
-                  {media.sourceKind.replace(/_/g, " ")}
-                </p>
-                <p className="text-muted-foreground mt-1 text-sm">
-                  {media.attribution}
-                  {media.unitVariantName ? ` · ${media.unitVariantName}` : ""}
-                  {media.caption ? ` · ${media.caption}` : ""}
-                </p>
-                <p className="text-muted-foreground mt-1 text-xs">
-                  {media.reviewStatus.replace(/_/g, " ")}
-                  {media.isPublic ? " · public if published" : " · private"}
-                </p>
-                {inReview ? (
-                  <div className="mt-3 flex gap-2">
-                    <Button
-                      type="button"
-                      size="sm"
-                      onClick={() => reviewMedia(media.id, "confirmed", true)}
-                      disabled={pending}
-                    >
-                      Approve public
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={() => reviewMedia(media.id, "rejected", false)}
-                      disabled={pending}
-                    >
-                      Reject
-                    </Button>
-                  </div>
-                ) : null}
-              </article>
-            ))}
-          </div>
-        )}
-      </section>
-
-      <section
-        className="border-border bg-card rounded-lg border p-5"
-        aria-labelledby="workflow-heading"
-      >
-        <h2 id="workflow-heading" className="font-display text-2xl">
-          Review workflow
-        </h2>
-        <div className="mt-4 flex flex-wrap gap-3">
-          {submission.status === "draft" ||
-          submission.status === "changes_requested" ? (
-            <Button
-              type="button"
-              onClick={() => transition("submit")}
-              disabled={pending || permissionLevel !== "owner"}
-            >
-              Submit for review
-            </Button>
-          ) : null}
-          {submission.status === "submitted" ? (
-            <Button
-              type="button"
-              onClick={() => transition("start_review")}
-              disabled={pending}
-            >
-              Start review
-            </Button>
-          ) : null}
-          {inReview ? (
-            <>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => transition("request_changes")}
-                disabled={pending}
-              >
-                Request changes
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => transition("reject")}
-                disabled={pending}
-              >
-                Reject submission
-              </Button>
-              <Button
-                type="button"
-                onClick={() => transition("approve")}
-                disabled={pending}
-              >
-                Approve
-              </Button>
-            </>
-          ) : null}
-          {submission.status === "approved" && permissionLevel === "owner" ? (
-            <Button type="button" onClick={publish} disabled={pending}>
-              Publish to catalog
-            </Button>
-          ) : null}
-        </div>
-      </section>
+      <MediaPanel
+        submissionId={submission.id}
+        media={media}
+        variantNames={variantNames}
+        editable={editable}
+        inReview={inReview}
+        pending={pending}
+        onReview={(mediaId, reviewStatus, isPublic) =>
+          run(...post(`/media/${mediaId}/review`, { reviewStatus, isPublic }))
+        }
+        onUploaded={() => router.refresh()}
+      />
     </div>
   );
 }

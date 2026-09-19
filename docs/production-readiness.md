@@ -19,6 +19,8 @@ Last updated: 2026-09-19 (session-aware header done)
 
 - [ ] **Firefox and Safari check of the brochure PDF viewer** (Chrome, Brave, Edge are verified on the maintainer machine; the other two engines need a person with those browsers).
 
+- [ ] **Uploaded image safety.** Admin-uploaded images are checked by file signature and size only. Before real use add a malware scan, a pixel-dimension limit and re-encoding (which also strips metadata such as location tags).
+
 ## Should be done before or soon after launch
 
 - [ ] **Admin MFA** (`admin_users.mfa_enforced` is a placeholder; Phase 5). Admins can publish to the live catalog, so this should not wait long.
