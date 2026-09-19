@@ -36,7 +36,9 @@ We upload every property ourselves until developers join. Consequences for this 
 - [x] Create a canonical developer profile (name required; RERA developer id and website optional; RERA id unique). Validation shared and unit-tested; integration-tested against Postgres.
 - [x] `/admin/developers/[id]`: profile detail and its linked users (empty until slice 2).
 
-### Slice 2 — inviting developer users (design approved 2026-09-19)
+### Slice 2 — inviting developer users (design approved 2026-09-19; **built 2026-09-20**)
+
+Done: invite / re-issue / withdraw / remove, the team panel, the accept page, owner-only, 11 integration + 13 route tests, and a Chrome + Brave run of the full lifecycle (18/18, `scripts/verify-developer-invite.mjs`). Choices recorded in `DECISIONS.md` 2026-09-20. Still open: email delivery of the link, and the developer portal screens beyond the holding page (deferred by the pre-launch operating model).
 
 Proposed, using only existing tables so no schema change is needed:
 

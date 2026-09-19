@@ -485,3 +485,15 @@ Server-side image extraction from brochure PDFs remains a separate dependency
 decision: it needs a rasteriser or embedded-image extractor and may not use
 browser canvas readback. This approval authorizes the schema, own-image
 upload/review, and atomic publish path, not an undeclared extraction library.
+
+---
+
+**2026-09-20 — Developer invites implemented as approved; the choices the approval left open.**
+The design approved on 2026-09-19 (invite an email to an existing developer profile, single-use seven-day token, on-screen link until email exists, several users per profile, no schema change) is built (`src/lib/developers/invites.ts`, the `/api/v1/admin/developers/{id}/invites` and `/api/v1/admin/developer-users/{id}` routes, the team panel on the developer page, and `/developers/accept-invite`). Choices made while building it, recorded because they are access-control behaviour:
+
+- **Owner only.** Inviting, re-issuing a link and removing access require the owner permission level, in the route and again in the UI. A verifier can see the team but not change it. Granting someone access to a developer's records is a higher-risk operation than editing a draft.
+- **An existing account is never repurposed.** Inviting an email that already has an account is refused (a buyer, an admin, another profile's member, a removed member). The one exception is re-inviting someone whose invitation to _this_ profile is still pending, which simply issues a fresh link. Why: silently attaching a developer role to an existing identity would let a buyer or admin account gain portal access without that person having proved they hold the invite.
+- **Only a hash is stored; failures are indistinguishable.** The token is 32 random bytes; the database holds its SHA-256 in `verifications`, compared in constant time. An unknown user, a wrong token, an expired link, a used link and a withdrawn invitation all get the same "this link no longer works" answer, so the page cannot reveal who has been invited.
+- **Acceptance is one transaction under a row lock**, so two simultaneous uses cannot both create an account. It writes the credential account directly (with Better Auth's own password hasher, injected) rather than through Better Auth's adapter, because that adapter cannot join our transaction.
+- **Removing access is immediate.** Revoking a member ends their open sessions, not just future sign-ins. The account itself is kept.
+- **Not built:** email delivery of the link (no provider yet; `docs/production-readiness.md`), rate limiting of the accept page beyond the token's entropy, and the developer-portal screens an invited person lands on, which are still the holding page. Under the pre-launch model (the maintainers upload every property) those screens are not needed until developers actually join.

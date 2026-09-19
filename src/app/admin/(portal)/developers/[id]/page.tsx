@@ -5,6 +5,8 @@ import { db } from "@/db";
 import { AdminPageHeader, AdminShell } from "@/components/admin/admin-shell";
 import { requirePortalRole } from "@/lib/accounts/session";
 import { getDeveloper } from "@/lib/developers/profiles";
+import { listDeveloperTeam } from "@/lib/developers/invites";
+import { TeamPanel } from "@/components/admin/team-panel";
 
 export const metadata: Metadata = {
   title: "Developer — Admin console",
@@ -22,6 +24,7 @@ export default async function DeveloperDetailPage({
   const session = await requirePortalRole("admin", `/admin/developers/${id}`);
   const developer = await getDeveloper(db, id);
   if (!developer) notFound();
+  const team = await listDeveloperTeam(db, developer.id);
 
   return (
     <AdminShell active="developers" email={session.email}>
@@ -62,6 +65,17 @@ export default async function DeveloperDetailPage({
           <dd className="data-tabular mt-2">{developer.propertyCount}</dd>
         </div>
       </dl>
+
+      <TeamPanel
+        developerId={developer.id}
+        developerName={developer.name}
+        isOwner={session.role.permissionLevel === "owner"}
+        members={team.map((m) => ({
+          ...m,
+          invitedAt: m.invitedAt.toISOString(),
+          inviteExpiresAt: m.inviteExpiresAt?.toISOString() ?? null,
+        }))}
+      />
     </AdminShell>
   );
 }

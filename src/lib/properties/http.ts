@@ -58,6 +58,10 @@ export type ApiErrorCode =
   | "invalid_value"
   | "transition_not_allowed"
   | "owner_required"
+  | "invalid_email"
+  | "account_exists"
+  | "already_member"
+  | "member_not_found"
   | "cannot_publish"
   | "provider_error"
   | "internal_error";

@@ -1,5 +1,15 @@
 # Progress
 
+## 2026-09-20 (night) — Developer invites
+
+**Done:** an owner can invite someone to an existing developer profile from the profile's new Team panel. The invitation is a one-time seven-day link shown once (no email service yet); the invitee sets a password at `/developers/accept-invite`, is signed in, and the link is dead. The owner can issue a new link, withdraw an invitation, or remove access, which also ends the person's open sessions. An existing account is never repurposed, only a hash of the token is stored, and every bad link gets the same plain answer. Decisions in `DECISIONS.md` 2026-09-20.
+
+**Verified:** 11 integration tests (including two simultaneous accepts), 13 route tests, and `scripts/verify-developer-invite.mjs` in Chrome and Brave, 18/18: invite, a wrong link, the real link, mismatched passwords, sign-in, link reuse refused, admin sees active, removal ends the session.
+
+**Note:** what an invited developer sees after signing in is still the holding page. The developer-facing upload and review screens are deliberately not built yet: under the pre-launch model we upload everything ourselves, so they can wait until developers actually join.
+
+**Phase 2A now:** everything not blocked is done except extracting brochure photos into the image list (needs a server-side PDF image extractor — a dependency decision) and GujRERA (to be planned). Blocked on OpenRouter credits: the live categorization test, then the OCR live run and accuracy spot-check.
+
 ## 2026-09-20 (evening) — Reconciliation, media review and manual entry, finished
 
 **Picked up from Codex:** its session (floor-plan OCR contract, confirmed routing before extraction, the `submission_media` schema and publish path — all committed) stopped while wiring the reconciliation screens. Its uncommitted backend compiled but had no tests and its screen took raw JSON for every field. Finished: the backend now has integration and route tests (including a race test for simultaneous submits and proof an upload cannot claim a brochure source); `requirePortalRole` is generic so admin pages read their permission level without a cast; and the screen is rebuilt — fields grouped as a listing reads, typed inputs from the approved vocabularies (numbers, choices, amenities by category, a real unit-types editor), image upload with credit and previews, and confirmations before approve, reject and publish.
