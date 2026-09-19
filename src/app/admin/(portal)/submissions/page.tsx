@@ -55,9 +55,14 @@ export default async function SubmissionQueuePage({
         title="Submission queue"
         description="Every property draft, from brochure or manual entry, on its way to the catalog."
         action={
-          <Button asChild size="lg" className="h-11 px-6">
-            <Link href="/admin/submissions/new">Upload brochure</Link>
-          </Button>
+          <div className="flex flex-wrap gap-3">
+            <Button asChild variant="outline" size="lg" className="h-11 px-6">
+              <Link href="/admin/submissions/manual">Add manually</Link>
+            </Button>
+            <Button asChild size="lg" className="h-11 px-6">
+              <Link href="/admin/submissions/new">Upload brochure</Link>
+            </Button>
+          </div>
         }
       />
 
