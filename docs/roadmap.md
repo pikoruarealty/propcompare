@@ -89,6 +89,8 @@ The submission-creating half of the developer portal (upload, page routing, OCR-
 
 - Portfolio/analytics dashboard (`GET /api/v1/developer/portfolio`) — completeness and interest analytics over the developer's own properties, no editorial or publishing authority.
 
+**Future scope — the paid developer analytics platform (recorded 2026-09-19, not scheduled).** The revenue model is charging developers for presence and for insights, and the intended product is a property-specific analytics platform in the spirit of Google Analytics but going well beyond it (discovery-to-enquiry funnels, competitor comparison behaviour, demand by budget band/configuration/locality, listing-quality benchmarks). It is designed after the app is live in beta, as its own tasklist; the beta start date is the deadline for event capture to exist because history cannot be rebuilt. The dashboard above is only its first, small slice. See the 2026-09-19 `DECISIONS.md` entry for the constraints it must respect (no exact prices, aggregates only for developers, declared trackers).
+
 ---
 
 ## Phase 5 — Polish & production readiness

@@ -23,7 +23,7 @@ We upload every property ourselves until developers join. Consequences for this 
 - **Enquiries** route to an admin inbox (buyer enquiries currently assume a developer). New admin screen + follow-up status; the existing `enquiries.status` enum is the starting point.
 - **Public trust links** on every property: "Report a problem / request removal" and "Are you the developer? Claim this listing". Both create items in an admin queue (fact-check and developer-lead). Not built.
 - **"Last checked" date** shown on every property; re-check rhythm supported by the GujRERA cross-check job.
-- **Buyer-interest events** (property views, saves, comparisons, enquiries) recorded per property from day one, for the future paid developer insights. Views are not tracked today. Needs a small schema decision and a privacy check (no exact prices, no phone numbers in event logs).
+- **Analytics (future scope, owner decision 2026-09-19):** the paid developer insights product is a platform-scale effort to be designed at beta, not a per-property counter. Nothing in this tasklist builds it; keep event-worthy actions (views, saves, comparisons, unlocks, enquiries) as stored records so a later capture design can consume them. See `DECISIONS.md` 2026-09-19 and `docs/roadmap.md` Phase 4.
 - **"Verified" wording** must say checked by PropCompare, not endorsed by the developer, until developers participate.
 - **Known gap:** `publishSubmission` cannot change an existing property's developer (`src/lib/submissions/publisher.ts` only sets `developer_id` on a new property). A profile merge or reassignment would need publisher work plus a decision entry — deliberately not needed under the real-profile-from-day-one model.
 

@@ -22,7 +22,7 @@ Last updated: 2026-09-19 (session-aware header done)
 - [ ] **Admin MFA** (`admin_users.mfa_enforced` is a placeholder; Phase 5). Admins can publish to the live catalog, so this should not wait long.
 - [ ] **Buyer retention screens** — saved properties and saved comparisons pages so returning buyers see their activity (backend done; UI is Deep's Phase 3). Also buyer email verification once an email provider exists (emails are stored unverified today).
 - [ ] **"Claim this listing" and "report a problem" links** on every property, feeding admin queues (developer recruiting funnel and corrections).
-- [ ] **Buyer-interest event recording** (views, saves, comparisons, enquiries) from day one for the future paid developer insights; views are not tracked yet.
+- [ ] **Analytics event capture (beta deadline).** The paid developer analytics platform is future scope, but raw event history cannot be rebuilt: capture must exist by the start of beta. Needs its own tasklist and decision (event taxonomy, anonymous vs signed-in identity, retention, consent, declared trackers) before beta. See `DECISIONS.md` 2026-09-19.
 - [ ] **"Last checked" dates and a re-check rhythm** for properties nobody else maintains; "Verified" copy says checked by PropCompare.
 - [ ] **Pre-login intake cookie claim** (`docs/tasklists/2026-09-18-pre-login-intake-cookie.md`) — direction agreed, not built.
 - [ ] **Password reset** for developer and admin accounts (invite links cover first-time setup only).
