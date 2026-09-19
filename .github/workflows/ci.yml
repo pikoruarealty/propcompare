@@ -8,6 +8,13 @@ on:
 jobs:
   verify:
     runs-on: ubuntu-latest
+    # Same three-role split as docs/local-database-setup.md, with CI-only credentials.
+    env:
+      DATABASE_URL: postgres://propcompare_app:propcompare_app_dev_only@localhost:5432/propcompare
+      DATABASE_ADMIN_URL: postgres://propcompare:propcompare_dev_only@localhost:5432/propcompare
+      DATABASE_SERVICE_URL: postgres://propcompare_service:propcompare_service_dev_only@localhost:5432/propcompare
+      BETTER_AUTH_SECRET: ci-only-secret-not-used-outside-tests-000000
+      BETTER_AUTH_URL: http://localhost:3000
     steps:
       - uses: actions/checkout@v4
 
@@ -26,6 +33,17 @@ jobs:
 
       - name: Typecheck
         run: bun run typecheck
+
+      # Reuses docker-compose.yml so CI builds the database exactly as the
+      # documented local setup does (init scripts create `private` and the roles).
+      - name: Start Postgres
+        run: docker compose up -d --wait postgres
+
+      - name: Migrate and seed
+        run: |
+          bun run db:migrate
+          bun run db:seed
+          bun run db:seed:private
 
       - name: Test
         run: bun run test
