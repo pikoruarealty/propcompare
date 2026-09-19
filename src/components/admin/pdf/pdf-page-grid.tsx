@@ -51,6 +51,7 @@ export function PdfPageGrid({
   pageCount,
   selected,
   onToggle,
+  selectionDisabled = false,
   onOpen,
   renderMeta,
 }: {
@@ -58,6 +59,7 @@ export function PdfPageGrid({
   pageCount: number;
   selected: ReadonlySet<number>;
   onToggle: (page: number) => void;
+  selectionDisabled?: boolean;
   onOpen: (page: number) => void;
   renderMeta?: (page: number) => React.ReactNode;
 }) {
@@ -97,11 +99,12 @@ export function PdfPageGrid({
                 </button>
               </div>
 
-              <label className="flex cursor-pointer items-center gap-2 text-sm">
+              <label className="flex items-center gap-2 text-sm has-disabled:cursor-default">
                 <input
                   type="checkbox"
                   checked={isSelected}
                   onChange={() => onToggle(page)}
+                  disabled={selectionDisabled}
                   className="size-4 accent-[var(--color-terracotta)]"
                 />
                 <span className="data-tabular">Page {page}</span>

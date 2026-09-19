@@ -1,6 +1,6 @@
 # Admin and verification portal flow
 
-**Status:** planned for Phase 2A. Being built alongside the developer portal's submission-creating half (2026-09-18 `DECISIONS.md` entry, `docs/tasklists/2026-09-18-phase-2a-completion.md`), so the "Future builder self-serve journey" section below is no longer future — it is in scope now, concurrently with this file's own admin-side flow.
+**Status:** in progress for Phase 2A. Admin brochure upload, human page-routing confirmation, and OCR queueing are implemented; field reconciliation, review, and publish UI remain. The developer self-serve half is in scope concurrently but not implemented.
 
 ## Purpose
 
@@ -21,9 +21,9 @@ Upload brochure
 1. An authorized admin selects an existing canonical builder profile or creates one through the controlled admin builder-profile flow. This does not require the builder to have an account.
 2. The admin links the brochure/submission to that profile and to an existing property where known.
 3. The system records an immutable `source_documents` row and draft submission.
-4. Cheap text-layer inspection may suggest page scopes. The uploader confirms every brochure page as project details, amenities, specifications, one unit-variant group, or ignored.
-5. A unit-variant group may contain several ordered pages and optional page labels such as Lower floor and Upper floor. It still proposes exactly one canonical variant.
-6. The system creates a versioned `ocr_extraction_jobs` attempt from the confirmed routing manifest. The implemented worker sends one native-PDF OpenRouter request per confirmed extraction scope and reads only active `property_schema_fields`; see [OCR adapter usage](../ocr-adapter-usage.md).
+4. A cheap vision routing pass may suggest page types. The uploader confirms every brochure page as project details, amenities, specifications, floor plan, or ignored; the server builds the complete versioned routing manifest from those choices.
+5. All confirmed floor-plan pages enter one ordered `floor_plans` scope. Claude discovers distinct unit variants from that complete set, so duplex/penthouse levels can be merged without the page router inventing unit identity. A manually pre-named `unit_variant` scope remains available for the existing hand-routed contract.
+6. The system queues the already-created versioned `ocr_extraction_jobs` attempt only after a second explicit confirmation. Queueing freezes the manifest but does not call a provider itself. The worker later sends one native-PDF OpenRouter request per confirmed extraction scope and reads only active `property_schema_fields`; see [OCR adapter usage](../ocr-adapter-usage.md).
 7. Each candidate retains value and confidence in `property_submission_fields`; its one-or-more page citations and snippets live in `property_submission_field_evidence`.
 8. The admin uses reconciliation to confirm, edit, or reject each field against all supporting evidence pages.
 9. The submitter submits the draft. An admin verifier or owner reviews it; only an owner publishes an approved submission. During the initial single-owner workflow, the same owner may perform each attributable step.

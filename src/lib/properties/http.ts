@@ -50,6 +50,8 @@ export type ApiErrorCode =
   | "invalid_document"
   | "ocr_job_not_found"
   | "invalid_state"
+  | "invalid_routing"
+  | "routing_unconfirmed"
   | "provider_error"
   | "internal_error";
 

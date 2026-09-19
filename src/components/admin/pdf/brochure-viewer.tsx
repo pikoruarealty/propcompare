@@ -12,6 +12,8 @@ export interface BrochureViewerProps {
   pageCount: number;
   selected: ReadonlySet<number>;
   onToggle: (page: number) => void;
+  /** Keeps the PDF inspectable after routing is frozen, without mutable controls. */
+  selectionDisabled?: boolean;
   renderMeta?: (page: number) => React.ReactNode;
   /** Per-page controls inside the large viewer. */
   renderLightboxFooter?: (page: number) => React.ReactNode;
@@ -28,6 +30,7 @@ export function BrochureViewer({
   pageCount,
   selected,
   onToggle,
+  selectionDisabled = false,
   renderMeta,
   renderLightboxFooter,
 }: BrochureViewerProps) {
@@ -95,6 +98,7 @@ export function BrochureViewer({
         pageCount={pageCount}
         selected={selected}
         onToggle={onToggle}
+        selectionDisabled={selectionDisabled}
         onOpen={setOpenPage}
         renderMeta={renderMeta}
       />

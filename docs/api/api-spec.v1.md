@@ -331,8 +331,9 @@ This is enforced in running code, not by convention: every successful buyer resp
 | `POST /api/v1/admin/submissions/{id}/review`            | Planned (Phase 2A)                          | Admin                | Request changes, reject, or approve; no direct catalog mutation.                                     |
 | `POST /api/v1/admin/submissions/{id}/publish`           | Planned (Phase 2A)                          | Authorized publisher | Executes the transactional live-catalog publish and revision snapshot.                               |
 | `POST /api/v1/admin/source-documents`                   | Implemented (multipart: developerId + file) | Admin                | Creates an immutable ingestion document and draft OCR submission; it does not start paid extraction. |
-| `POST /api/v1/admin/source-documents/{id}/ocr-jobs`     | Planned (Phase 2A)                          | Admin                | Creates or updates a draft, versioned page-routing manifest for one OCR attempt.                     |
-| `POST /api/v1/admin/ocr-jobs/{id}/queue`                | Planned (Phase 2A)                          | Admin                | Validates complete human-confirmed routing, freezes the manifest, and queues extraction.             |
+| `POST /api/v1/admin/source-documents/{id}/ocr-jobs`     | Superseded by upload + job routes below     | Admin                | Upload already creates the draft OCR attempt; no second draft-creation route exists.                 |
+| `PUT /api/v1/admin/ocr-jobs/{id}/routing-manifest`      | Implemented                                 | Admin                | Builds and saves a complete v2 manifest from human page choices while the attempt is a draft.        |
+| `POST /api/v1/admin/ocr-jobs/{id}/queue`                | Implemented                                 | Admin                | Revalidates and freezes the human-confirmed manifest, then changes the draft attempt to `queued`.    |
 | `GET /api/v1/admin/ocr-jobs/{id}`                       | Planned (Phase 2A)                          | Admin                | Returns attempt status, routing, and safe error metadata; provider secrets remain server-only.       |
 
 ## Developer API

@@ -1,5 +1,31 @@
 # Progress
 
+## 2026-09-20 (later) — Human-confirmed brochure routing and OCR queue
+
+**Done:** the admin page-review workbench now saves a complete human routing
+decision before extraction: every page is project details, amenities,
+specifications, floor plan, or explicitly ignored. The browser supplies those
+page-level choices only; the ingestion routing-confirmation module builds and
+validates the one v2 manifest server-side. A separate dialog then queues the
+draft OCR attempt, revalidating and freezing the manifest. Both operations are
+draft-only and conditional, so a concurrent or queued attempt cannot be
+changed. Queueing does not call OpenRouter; it changes status to queued for the
+existing worker to consume later. Queued pages remain inspectable but read-only.
+No live catalog table, schema, publish-transaction logic, cost display, or
+provider call was added.
+
+**API:** the admin routing-manifest PUT route and OCR queue POST route are
+implemented and admin-only. Upload already creates the draft attempt, so the
+old source-document OCR-job route is superseded.
+
+**Verified:** 715 tests across 63 files, lint, typecheck, targeted Prettier,
+and diff checks pass. Repository-wide format:check still reports five
+unrelated pre-existing files; no task file is unformatted.
+
+**Next:** add OpenRouter credits and run live categorization validation on
+Kimana, Amaris, and 360. Then queue controlled extraction through this flow.
+The next code slice after that is OCR-draft review and admin reconciliation.
+
 ## 2026-09-20 (later) — Floor-plan OCR contract v2
 
 **Done:** the versioned routing-manifest contract now supports `v2` and one ordered `floor_plans` scope. The existing v1 manifest and pre-named, one-variant `unit_variant` scope stay fully supported. Claude receives all confirmed floor-plan pages together and may return zero or more distinct, evidence-backed variants; the adapter rejects duplicate variant names and AI-supplied BHK/layout lookup keys, then assembles the results into the existing `unit_variants` submission field with correct per-item evidence paths. No database migration, new table, direct catalog write, or change to `publishSubmission` was made. Contract reference: `docs/ocr-routing-contract.v2.md`.
