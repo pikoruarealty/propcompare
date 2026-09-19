@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { desc, eq } from "drizzle-orm";
 import { PDFDocument } from "pdf-lib";
+import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { db } from "@/db";
 import { users } from "@/db/schema/auth";
@@ -96,6 +97,13 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  // Remove this test's fake ledger rows as the owner (the app role is append-only).
+  const owner = postgres(
+    process.env.DATABASE_ADMIN_URL ?? process.env.DATABASE_URL!,
+  );
+  await owner`delete from ai_usage_events where submission_id = ${submissionId}`;
+  await owner.end();
+
   await db
     .delete(propertySubmissions)
     .where(eq(propertySubmissions.id, submissionId));

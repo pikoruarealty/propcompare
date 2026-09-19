@@ -1,6 +1,7 @@
 import "dotenv/config";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
+import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { db } from "@/db";
 import { developers, propertySubmissions } from "@/db/schema/catalog";
@@ -38,9 +39,15 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  // The app role cannot delete ledger rows (by design), so tidy up as the owner
-  // would: removing the parents detaches them (`on delete set null`), and the
-  // marker model keeps these rows identifiable and out of real totals below.
+  // The app role cannot delete ledger rows (by design), so this test removes its
+  // own fake rows as the database owner. Left behind they would show made-up
+  // spend in the real admin Usage tab.
+  const owner = postgres(
+    process.env.DATABASE_ADMIN_URL ?? process.env.DATABASE_URL!,
+  );
+  await owner`delete from ai_usage_events where model like ${`${marker}%`}`;
+  await owner.end();
+
   await db
     .delete(propertySubmissions)
     .where(eq(propertySubmissions.id, submissionId));
