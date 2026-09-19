@@ -21,9 +21,21 @@ export const auth = betterAuth({
   baseURL: process.env.BETTER_AUTH_URL,
   emailAndPassword: {
     enabled: true,
+    // Developer and admin accounts are provisioned (an admin invite or the
+    // first-admin script), never self-registered — see DECISIONS.md 2026-09-19.
+    // Enforced here, not merely by leaving a sign-up screen out.
+    disableSignUp: true,
   },
   plugins: [
     phoneNumber({
+      // A buyer's first successful OTP creates their account: there is no
+      // separate buyer sign-up screen. The placeholder email is never shown or
+      // used to sign in (no credential account exists for it).
+      signUpOnVerification: {
+        getTempEmail: (phone) =>
+          `${phone.replace(/\D/g, "")}@buyers.propcompare.invalid`,
+        getTempName: () => "Buyer",
+      },
       sendOTP: async ({ phoneNumber, code }) => {
         if (process.env.NODE_ENV !== "production") {
           console.log(`[dev] OTP for ${phoneNumber}: ${code}`);
