@@ -88,6 +88,11 @@ export const mediaType = pgEnum("media_type", [
   "video",
   "brochure_pdf",
 ]);
+export const mediaSourceKind = pgEnum("media_source_kind", [
+  "developer_brochure",
+  "own",
+  "developer_supplied",
+]);
 export const reraFetchJobStatus = pgEnum("rera_fetch_job_status", [
   "queued",
   "running",
@@ -381,6 +386,8 @@ export const propertyMedia = pgTable(
     mediaType: mediaType("media_type").notNull(),
     gcsPath: text("gcs_path").notNull(),
     caption: text("caption"),
+    attribution: text("attribution"),
+    sourceKind: mediaSourceKind("source_kind"),
     displayOrder: integer("display_order").notNull(),
     isPrimary: boolean("is_primary").default(false).notNull(),
     ...timestamps(),
@@ -469,6 +476,58 @@ export const propertySubmissionFields = pgTable(
     uniqueIndex("submission_fields_submission_field_key_unique").on(
       table.submissionId,
       table.fieldKey,
+    ),
+  ],
+);
+
+/**
+ * Pre-publication media. A new property's live unit variants do not exist
+ * until publish, so an optional target is kept as the canonical variant name
+ * and resolved in `publishSubmission`; a missing match aborts rather than
+ * attaching a floor plan speculatively.
+ */
+export const propertySubmissionMedia = pgTable(
+  "property_submission_media",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    submissionId: uuid("submission_id")
+      .notNull()
+      .references(() => propertySubmissions.id, { onDelete: "cascade" }),
+    sourceDocumentId: uuid("source_document_id").references(
+      () => sourceDocuments.id,
+      { onDelete: "set null" },
+    ),
+    uploadedBy: text("uploaded_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    reviewedBy: text("reviewed_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    unitVariantName: text("unit_variant_name"),
+    mediaType: mediaType("media_type").notNull(),
+    sourceKind: mediaSourceKind("source_kind").notNull(),
+    gcsPath: text("gcs_path").notNull(),
+    caption: text("caption"),
+    attribution: text("attribution").notNull(),
+    displayOrder: integer("display_order").notNull(),
+    isPublic: boolean("is_public").default(false).notNull(),
+    reviewStatus: fieldReviewStatus("review_status")
+      .default("needs_review")
+      .notNull(),
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+    ...timestamps(),
+  },
+  (table) => [
+    uniqueIndex("property_submission_media_submission_order_unique").on(
+      table.submissionId,
+      table.displayOrder,
+    ),
+    index("property_submission_media_submission_id_idx").on(
+      table.submissionId,
+    ),
+    check(
+      "property_submission_media_display_order_non_negative",
+      sql`${table.displayOrder} >= 0`,
     ),
   ],
 );

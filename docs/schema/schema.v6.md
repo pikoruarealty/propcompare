@@ -1,12 +1,13 @@
 # PropCompare canonical data schema — v6 (PROPOSED)
 
-**Status:** partly approved. Section 1 (`ai_usage_events`) was approved by the owner and implemented 2026-09-20 (migration `0008`). Everything else in this file remains **proposed and unimplemented**, awaiting owner review per `AGENTS.md`; do not implement against those sections.
-**Supersedes:** nothing yet. On approval it supersedes [schema v5](schema.v5.md) for new implementation work; v5's content is not edited.
+**Status:** active for implemented sections. Section 1 (`ai_usage_events`) was approved and implemented 2026-09-20 (migration `0008`). Section 2 (`submission_media`) was approved 2026-09-19 and is implemented by migration `0009`. The developer legal-entity link remains proposed and unimplemented.
+**Supersedes:** [schema v5](schema.v5.md) for new implementation work; v5's content is not edited.
 
 v6 is a bundle of additive changes agreed in principle on 2026-09-19/20 (see the `DECISIONS.md` entries of those dates). Each is reviewed and approved separately; this file grows as they are drafted. Currently drafted:
 
 1. `ai_usage_events` — the admin-only usage and cost ledger. **Approved and implemented 2026-09-20.**
-2. _Still to draft:_ `submission_media` (photos, floor plans, optional public brochure; attribution and source kind), and the developer legal-entity link (brand profile with attached RERA legal entities).
+2. `submission_media` — reviewed media proposed by a submission and copied to the live catalog only during publication. **Approved and implemented 2026-09-19.**
+3. _Still to draft:_ the developer legal-entity link (brand profile with attached RERA legal entities).
 
 ## 1. `ai_usage_events` — AI usage and cost ledger
 
@@ -51,3 +52,49 @@ Design notes:
 - **Privileges:** the migration grants `propcompare_app` `SELECT, INSERT` only and explicitly `REVOKE`s `UPDATE, DELETE` — necessary because the local and CI roles carry default privileges that grant full CRUD on every new public table. A test asserts the refusal. The service role gets nothing, and nothing in `private` is involved.
 
 **Not in this change:** any per-developer billing or charging. This is an internal cost record; developer-facing pricing is a separate future product decision.
+
+## 2. `submission_media` — reviewable media that publishes atomically
+
+**Why:** a file has provenance, attribution, ordering and its own human review
+decision, so it does not fit the text/number field-contract JSON. A submission
+is its only pre-publication representation. `property_media` remains the one
+live representation and gains immutable origin metadata.
+
+```text
+media_source_kind = enum('developer_brochure', 'own', 'developer_supplied')
+
+property_submission_media (
+  id                   uuid pk default gen_random_uuid(),
+  submission_id        uuid not null references property_submissions(id) on delete cascade,
+  source_document_id   uuid null references source_documents(id) on delete set null,
+  uploaded_by          text null references users(id) on delete set null,
+  reviewed_by          text null references users(id) on delete set null,
+  unit_variant_name    text null, -- resolved by name inside publication; never a pre-publication FK
+  media_type           media_type not null,
+  source_kind          media_source_kind not null,
+  gcs_path             text not null,
+  caption              text null,
+  attribution          text not null,
+  display_order        integer not null check >= 0,
+  is_public            boolean not null default false,
+  review_status        field_review_status not null default 'needs_review',
+  reviewed_at          timestamptz null,
+  created_at, updated_at,
+  unique(submission_id, display_order)
+)
+
+property_media gains (
+  attribution          text null,
+  source_kind          media_source_kind null
+)
+```
+
+Publication selects only rows that are both `confirmed` and `is_public`. It
+copies their path, type, target variant, order, caption, attribution and source
+kind into `property_media` inside the existing `publishSubmission` transaction;
+no migration, upload route, seed, or review route writes the live table.
+`unit_variant_name` is resolved after the submission's variants have been
+upserted. An absent target aborts the transaction rather than guessing. A
+private brochure stays out of `property_media` unless its reviewed submission
+row is deliberately public. Existing `property_media` rows retain nullable
+origin metadata for migration compatibility; every newly published row has it.

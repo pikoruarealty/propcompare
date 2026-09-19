@@ -464,3 +464,24 @@ Owner approved the table as drafted in `docs/schema/schema.v6.md` section 1 (202
 Recording is wired into both paid paths: every page-router request (with any earlier-billed windows kept when a later one fails) in `runPageRouting`, and every extraction scope in `executeOcrExtractionJob`, including failed extraction requests that reported a request id. The admin-only `/admin/usage` tab shows totals (marked as a lower bound with "≥" when any request did not report a cost — costs are never estimated), by brochure, by developer, by model, and recent requests. A guard test (`src/lib/usage/usage-isolation.test.ts`) fails if any file outside the admin console and the ingestion code references the ledger, or if a cost field appears in the developer portal or buyer app.
 
 Known gap: if an extraction run fails part-way, the cost of scopes that succeeded before the failure is not recorded, because the adapter does not attach partial usage to its error; the failed request itself is. Closing this needs the adapter to carry partial usage on `OcrAdapterError`, as the router now does on `PageRouterError`.
+
+---
+
+**2026-09-19 — Owner approved schema v6 submission media: reviewable media is stored against a submission and only `publishSubmission` copies confirmed public rows into `property_media`.**
+
+The owner approved the remaining media schema work. `property_submission_media`
+holds each proposed file's immutable storage path, media type, caption,
+mandatory attribution, source kind, optional unit-variant name, ordering,
+public flag and field-style review state, plus uploader/reviewer audit links.
+It is the sole pre-publication media representation. The live `property_media`
+row gains attribution and source kind, copied by the existing publish
+transaction only. A unit target is a submission-local variant name because a
+new property's variant has no live id before publish; a missing name match
+aborts publication rather than attaching media speculatively. Private
+brochures are never copied unless a reviewer has confirmed the row and set it
+public. The table is additive and has no private-schema or price-data impact.
+
+Server-side image extraction from brochure PDFs remains a separate dependency
+decision: it needs a rasteriser or embedded-image extractor and may not use
+browser canvas readback. This approval authorizes the schema, own-image
+upload/review, and atomic publish path, not an undeclared extraction library.

@@ -7,10 +7,12 @@ import {
   layoutTypes,
   properties,
   propertyAmenities,
+  propertyMedia,
   propertyRevisions,
   propertySchemaFields,
   propertySpecifications,
   propertySubmissionFields,
+  propertySubmissionMedia,
   propertySubmissions,
   propertyTypes,
   specificationCatalog,
@@ -35,6 +37,7 @@ type UnitVariantInsert = typeof unitVariants.$inferInsert;
 type UnitAreaInsert = typeof unitAreas.$inferInsert;
 type PropertyAmenityInsert = typeof propertyAmenities.$inferInsert;
 type PropertySpecificationInsert = typeof propertySpecifications.$inferInsert;
+type PropertyMediaInsert = typeof propertyMedia.$inferInsert;
 
 export class SubmissionPublishError extends Error {
   constructor(message: string) {
@@ -137,7 +140,7 @@ const resolveNewPropertySlug = async (
 /**
  * The one write path into the live catalog tables (`properties`, `developers`,
  * `unit_variants`, `unit_areas`, `property_amenities`,
- * `property_specifications`) — see AGENTS.md. It applies exactly one
+ * `property_specifications`, `property_media`) — see AGENTS.md. It applies exactly one
  * approved submission's reviewed field values and writes a matching
  * `property_revisions` snapshot, all inside one transaction.
  */
@@ -168,12 +171,26 @@ export const publishSubmission = async (
       .from(propertySubmissionFields)
       .where(eq(propertySubmissionFields.submissionId, submission.id));
 
+    const submissionMedia = await tx
+      .select()
+      .from(propertySubmissionMedia)
+      .where(eq(propertySubmissionMedia.submissionId, submission.id))
+      .for("update");
+
     const pendingReview = submissionFields.find(
       (field) => field.reviewStatus === "needs_review",
     );
     if (pendingReview) {
       throw new SubmissionPublishError(
         `field ${pendingReview.fieldKey} is still needs_review and blocks publication`,
+      );
+    }
+    const pendingMediaReview = submissionMedia.find(
+      (media) => media.reviewStatus === "needs_review",
+    );
+    if (pendingMediaReview) {
+      throw new SubmissionPublishError(
+        `media ${pendingMediaReview.id} is still needs_review and blocks publication`,
       );
     }
 
@@ -398,6 +415,52 @@ export const publishSubmission = async (
       }
     }
 
+    const publicConfirmedMedia = submissionMedia.filter(
+      (media) => media.reviewStatus === "confirmed" && media.isPublic,
+    );
+    if (publicConfirmedMedia.length > 0) {
+      const targetedNames = new Set(
+        publicConfirmedMedia.flatMap((media) =>
+          media.unitVariantName === null ? [] : [media.unitVariantName],
+        ),
+      );
+      const variantIdByName = new Map<string, string>();
+      if (targetedNames.size > 0) {
+        const variants = await tx
+          .select({ id: unitVariants.id, variantName: unitVariants.variantName })
+          .from(unitVariants)
+          .where(eq(unitVariants.propertyId, propertyId));
+        for (const variant of variants) {
+          variantIdByName.set(variant.variantName, variant.id);
+        }
+      }
+
+      const mediaRows: PropertyMediaInsert[] = publicConfirmedMedia.map(
+        (media) => {
+          const unitVariantId =
+            media.unitVariantName === null
+              ? null
+              : variantIdByName.get(media.unitVariantName);
+          if (media.unitVariantName !== null && unitVariantId === undefined) {
+            throw new SubmissionPublishError(
+              `media ${media.id} targets unknown unit variant: ${media.unitVariantName}`,
+            );
+          }
+          return {
+            propertyId,
+            unitVariantId,
+            mediaType: media.mediaType,
+            gcsPath: media.gcsPath,
+            caption: media.caption,
+            attribution: media.attribution,
+            sourceKind: media.sourceKind,
+            displayOrder: media.displayOrder,
+          };
+        },
+      );
+      await tx.insert(propertyMedia).values(mediaRows);
+    }
+
     const selectedAmenityKeys = new Set(
       Array.isArray(payload["property.amenities"])
         ? (payload["property.amenities"] as string[])
@@ -493,6 +556,16 @@ export const publishSubmission = async (
           submissionId: submission.id,
           isNewProperty,
           fields: payload,
+          media: publicConfirmedMedia.map((media) => ({
+            id: media.id,
+            unitVariantName: media.unitVariantName,
+            mediaType: media.mediaType,
+            sourceKind: media.sourceKind,
+            gcsPath: media.gcsPath,
+            caption: media.caption,
+            attribution: media.attribution,
+            displayOrder: media.displayOrder,
+          })),
         },
         publishedAt: now,
       })

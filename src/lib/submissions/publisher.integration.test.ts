@@ -10,9 +10,11 @@ import {
   developers,
   properties,
   propertyAmenities,
+  propertyMedia,
   propertyRevisions,
   propertySpecifications,
   propertySubmissionFields,
+  propertySubmissionMedia,
   propertySubmissions,
   specificationCatalog,
   unitAreas,
@@ -41,6 +43,17 @@ const insertSubmission = async (params: {
   developerId?: string | null;
   status: "draft" | "approved";
   fields: Record<string, { value: unknown; reviewStatus?: string }>;
+  media?: {
+    unitVariantName?: string;
+    mediaType: "photo" | "floor_plan" | "video" | "brochure_pdf";
+    sourceKind: "developer_brochure" | "own" | "developer_supplied";
+    gcsPath: string;
+    caption?: string;
+    attribution: string;
+    displayOrder: number;
+    isPublic: boolean;
+    reviewStatus?: "needs_review" | "confirmed" | "rejected";
+  }[];
 }): Promise<string> => {
   const [submission] = await db
     .insert(propertySubmissions)
@@ -69,6 +82,22 @@ const insertSubmission = async (params: {
           | "confirmed"
           | "edited"
           | "rejected",
+      })),
+    );
+  }
+  if (params.media?.length) {
+    await db.insert(propertySubmissionMedia).values(
+      params.media.map((media) => ({
+        submissionId: submission.id,
+        unitVariantName: media.unitVariantName ?? null,
+        mediaType: media.mediaType,
+        sourceKind: media.sourceKind,
+        gcsPath: media.gcsPath,
+        caption: media.caption ?? null,
+        attribution: media.attribution,
+        displayOrder: media.displayOrder,
+        isPublic: media.isPublic,
+        reviewStatus: media.reviewStatus ?? "needs_review",
       })),
     );
   }
@@ -249,6 +278,129 @@ describe("publishSubmission", () => {
       }),
     ).rejects.toThrow(SubmissionPublishError);
 
+    const existing = await db
+      .select({ id: properties.id })
+      .from(properties)
+      .where(eq(properties.name, propertyName));
+    expect(existing).toHaveLength(0);
+  });
+
+  it("copies only confirmed public submission media inside the publish transaction", async () => {
+    const propertyName = `Test Media Property ${randomUUID()}`;
+    const submissionId = await insertSubmission({
+      developerId,
+      status: "approved",
+      fields: {
+        "property.name": { value: propertyName },
+        "property.type": { value: "apartment" },
+        "property.city": { value: "Ahmedabad" },
+        "property.locality": { value: "Test Locality" },
+        unit_variants: {
+          value: [{ variantName: "3 BHK - Type A" }],
+        },
+      },
+      media: [
+        {
+          mediaType: "photo",
+          sourceKind: "own",
+          gcsPath: "submission-media/test-photo.jpg",
+          caption: "Site view",
+          attribution: "PropCompare",
+          displayOrder: 0,
+          isPublic: true,
+          reviewStatus: "confirmed",
+        },
+        {
+          unitVariantName: "3 BHK - Type A",
+          mediaType: "floor_plan",
+          sourceKind: "developer_brochure",
+          gcsPath: "submission-media/test-plan.jpg",
+          attribution: "Test Developer",
+          displayOrder: 1,
+          isPublic: true,
+          reviewStatus: "confirmed",
+        },
+        {
+          mediaType: "brochure_pdf",
+          sourceKind: "developer_brochure",
+          gcsPath: "submission-media/private-brochure.pdf",
+          attribution: "Test Developer",
+          displayOrder: 2,
+          isPublic: false,
+          reviewStatus: "confirmed",
+        },
+      ],
+    });
+
+    const result = await publishSubmission({
+      submissionId,
+      actorUserId: testUserId,
+      actorRole: "owner",
+    });
+    createdPropertyIds.push(result.propertyId);
+
+    const mediaRows = await db
+      .select()
+      .from(propertyMedia)
+      .where(eq(propertyMedia.propertyId, result.propertyId));
+    expect(mediaRows).toHaveLength(2);
+    expect(mediaRows.map((media) => media.gcsPath)).toEqual([
+      "submission-media/test-photo.jpg",
+      "submission-media/test-plan.jpg",
+    ]);
+    expect(mediaRows[0]).toMatchObject({
+      attribution: "PropCompare",
+      sourceKind: "own",
+      unitVariantId: null,
+    });
+    expect(mediaRows[1]).toMatchObject({
+      attribution: "Test Developer",
+      sourceKind: "developer_brochure",
+    });
+    expect(mediaRows[1].unitVariantId).not.toBeNull();
+
+    const [revision] = await db
+      .select({ snapshot: propertyRevisions.snapshot })
+      .from(propertyRevisions)
+      .where(eq(propertyRevisions.submissionId, submissionId));
+    expect(revision.snapshot).toMatchObject({
+      media: [
+        { gcsPath: "submission-media/test-photo.jpg" },
+        { gcsPath: "submission-media/test-plan.jpg" },
+      ],
+    });
+  });
+
+  it("blocks publication on unreviewed media before it writes a live property", async () => {
+    const propertyName = `Test Pending Media ${randomUUID()}`;
+    const submissionId = await insertSubmission({
+      developerId,
+      status: "approved",
+      fields: {
+        "property.name": { value: propertyName },
+        "property.type": { value: "apartment" },
+        "property.city": { value: "Ahmedabad" },
+        "property.locality": { value: "Test Locality" },
+      },
+      media: [
+        {
+          mediaType: "photo",
+          sourceKind: "own",
+          gcsPath: "submission-media/pending.jpg",
+          attribution: "PropCompare",
+          displayOrder: 0,
+          isPublic: true,
+        },
+      ],
+    });
+
+    await expect(
+      publishSubmission({
+        submissionId,
+        actorUserId: testUserId,
+        actorRole: "owner",
+      }),
+    ).rejects.toThrow("media");
     const existing = await db
       .select({ id: properties.id })
       .from(properties)
