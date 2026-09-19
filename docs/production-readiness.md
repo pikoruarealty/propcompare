@@ -14,10 +14,16 @@ Last updated: 2026-09-19 (session-aware header done)
 - [ ] **Auth endpoint rate limiting** (sign-in, OTP send/verify). Better Auth has built-in limits; confirm they are on and tuned, and that they work behind whatever proxy or load balancer is used (client IP forwarding).
 - [ ] **HTTPS-only and cookie flags** confirmed in the deployed environment (session cookies `Secure`, `HttpOnly`, `SameSite=Lax`).
 
+- [ ] **Brochure-image copyright exposure (accepted 2026-09-19).** Publishing brochure floor plans and renders before a developer consents needs: visible attribution on every image, a working "request removal" route honoured promptly, media origin recorded per image, and ideally a short takedown policy page. Consider a lawyer's review of the takedown wording before launch.
+- [ ] **Enquiry handling with no developer accounts:** admin inbox and follow-up process so no buyer enquiry is left unanswered.
+
 ## Should be done before or soon after launch
 
 - [ ] **Admin MFA** (`admin_users.mfa_enforced` is a placeholder; Phase 5). Admins can publish to the live catalog, so this should not wait long.
 - [ ] **Buyer retention screens** — saved properties and saved comparisons pages so returning buyers see their activity (backend done; UI is Deep's Phase 3). Also buyer email verification once an email provider exists (emails are stored unverified today).
+- [ ] **"Claim this listing" and "report a problem" links** on every property, feeding admin queues (developer recruiting funnel and corrections).
+- [ ] **Buyer-interest event recording** (views, saves, comparisons, enquiries) from day one for the future paid developer insights; views are not tracked yet.
+- [ ] **"Last checked" dates and a re-check rhythm** for properties nobody else maintains; "Verified" copy says checked by PropCompare.
 - [ ] **Pre-login intake cookie claim** (`docs/tasklists/2026-09-18-pre-login-intake-cookie.md`) — direction agreed, not built.
 - [ ] **Password reset** for developer and admin accounts (invite links cover first-time setup only).
 - [ ] **Audit trail review:** confirm admin actions (approve, publish, request changes) are attributable to a user and cannot be edited after the fact.

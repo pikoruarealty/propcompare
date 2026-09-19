@@ -12,6 +12,21 @@ The admin portal is its own surface, not the buyer shell with a role gate (`DECI
 
 Every page and server action calls `requirePortalRole("admin", …)` itself; a layout guard alone is not enough (`src/lib/accounts/session.ts`). Nothing in the portal writes a live catalog table except through `publishSubmission`.
 
+## Pre-launch operating model (decided 2026-09-19 — see `DECISIONS.md`)
+
+We upload every property ourselves until developers join. Consequences for this tasklist and the ones after it:
+
+- **Ownership:** every property is uploaded under the real developer's canonical profile (no account needed). Joining later means inviting their user to the existing profile (slice 2) — no transfer. No mock/placeholder profile.
+- **Manual entry alongside brochure OCR** (`source = manual_form`, already in the schema): the same reconciliation/edit screen opens a blank draft with every field `not_stated`. Build it in slice 5 with the reconciliation screen so both paths share one UI, and make "Add property manually" a first-class action next to "Upload brochure" in slice 3/4.
+- **Dedupe:** two uploads of one project must not create two properties — match on RERA project number before creating; surface a warning in the queue. Decide whether a profile is the brand or the legal promoter entity (RERA registers the promoter; brand names differ).
+- **Media:** brochure floor plans/renders may be published with attribution and a takedown route. The `submission_media` design (schema v6) carries `attribution` and `source_kind` (`developer_brochure` | `own` | `developer_supplied`) and each property page shows attribution. Open sub-question: how an admin turns a brochure page into a floor-plan image (crop or whole page) — decide when slice 4/5 UI is designed.
+- **Enquiries** route to an admin inbox (buyer enquiries currently assume a developer). New admin screen + follow-up status; the existing `enquiries.status` enum is the starting point.
+- **Public trust links** on every property: "Report a problem / request removal" and "Are you the developer? Claim this listing". Both create items in an admin queue (fact-check and developer-lead). Not built.
+- **"Last checked" date** shown on every property; re-check rhythm supported by the GujRERA cross-check job.
+- **Buyer-interest events** (property views, saves, comparisons, enquiries) recorded per property from day one, for the future paid developer insights. Views are not tracked today. Needs a small schema decision and a privacy check (no exact prices, no phone numbers in event logs).
+- **"Verified" wording** must say checked by PropCompare, not endorsed by the developer, until developers participate.
+- **Known gap:** `publishSubmission` cannot change an existing property's developer (`src/lib/submissions/publisher.ts` only sets `developer_id` on a new property). A profile merge or reassignment would need publisher work plus a decision entry — deliberately not needed under the real-profile-from-day-one model.
+
 ## Slices, in order
 
 ### Slice 1 — shell and developer profiles
@@ -30,7 +45,7 @@ Proposed, using only existing tables so no schema change is needed:
 3. The developer opens the link, sets a password (12+ characters). The server verifies the token hash and expiry, creates the credential account, sets `developer_users.status = active`, deletes the token. Replays fail.
 4. Admin can revoke (`status = revoked`, token deleted) and re-issue.
 
-Decision needed from the owner: is an on-screen link acceptable until email exists, and is a 7-day expiry right? Also: should a developer profile allow more than one linked user (the schema does).
+Under the pre-launch model the invite goes to the existing canonical profile the admin already uploaded properties under. Decision still needed from the owner: is an on-screen link acceptable until email exists, and is a 7-day expiry right? Also: should a developer profile allow more than one linked user (the schema does).
 
 ### Slice 3 — submission queue
 

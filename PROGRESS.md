@@ -1,5 +1,13 @@
 # Progress
 
+## 2026-09-19 (evening) — Pre-launch operating model decided
+
+**Decided (owner sign-off, `DECISIONS.md`):** we upload all properties ourselves under the real developer's canonical profile (no account needed); when the developer joins we invite their user to that profile, so nothing is ever transferred — and no hand edit of `properties` is needed, which the one-write-path rule would forbid. Manual entry sits beside brochure OCR (`manual_form` already exists; one shared reconciliation screen). Brochure floor plans and renders may be published with attribution and a takedown route (copyright exposure accepted, recorded). Enquiries go to an admin inbox; "Verified" means checked by PropCompare.
+
+**Recorded:** the full friction list is in `docs/tasklists/2026-09-19-admin-portal.md` (operating-model section) and `docs/production-readiness.md`. **Found:** `publishSubmission` cannot change an existing property's developer — not needed under this model, noted for any future merge.
+
+**Still waiting on the owner:** the developer-invite design (on-screen link, 7-day expiry, multiple users per profile).
+
 ## 2026-09-19 (later still) — Admin console shell and developer profiles
 
 **Done:** `/admin` is now a real console: a sidebar shell after the Stitch "Editorial Desk" layout, a developer directory (`/admin/developers`), create-profile (`/admin/developers/new`) and a profile page. Profiles enforce one per RERA developer id. Every page and the create action re-check the admin role themselves. Logic lives in `src/lib/developers/profiles.ts` (10 tests, including Postgres integration). Tasklist: `docs/tasklists/2026-09-19-admin-portal.md`.
