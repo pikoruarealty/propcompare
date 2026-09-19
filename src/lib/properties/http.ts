@@ -45,6 +45,9 @@ export type ApiErrorCode =
   | "media_not_found"
   | "unauthenticated"
   | "phone_not_verified"
+  | "forbidden"
+  | "developer_not_found"
+  | "invalid_document"
   | "internal_error";
 
 export interface ApiErrorBody {

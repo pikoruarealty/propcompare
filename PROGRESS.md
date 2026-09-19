@@ -1,5 +1,15 @@
 # Progress
 
+## 2026-09-20 — Brochure upload and the zoomable page viewer
+
+**Done:** an admin can upload a brochure PDF for a developer (`/admin/submissions/new` → `POST /api/v1/admin/source-documents`); it is validated as a real PDF, stored through `StorageAdapter`, and creates the immutable source document, a draft submission and a draft OCR attempt with an empty routing manifest — no paid OCR runs. The page-review screen (`/admin/submissions/[id]/pages`) shows every page as a lazily rendered thumbnail, any page selectable or deselectable, and any page opens in a large viewer with zoom in/out/fit, previous/next and keyboard shortcuts. pdf.js runs in the browser only (legacy build, bundler-loaded worker), and only ever draws to visible canvases — it never reads pixels back, which is what would break under Brave Shields.
+
+**Verified:** `scripts/verify-brochure-viewer.mjs` drives the real app (sign in, create developer, upload, grid, select, zoom, page, Esc) in Chrome, Brave and Edge — 48/48 checks pass, screenshots inspected (text is crisp at 200% in Brave). Full suite, lint and typecheck green. **Not verified:** Firefox and Safari (no access; tracked in `docs/production-readiness.md`).
+
+**Notes:** run that script with Node, not Bun (Playwright's pipes hang under Bun on Windows). It leaves three "Verify Developer …" drafts in your local database — harmless, visible in the queue. `playwright-core` was added as a dev dependency (uses installed browsers, downloads none). pdfjs-dist v6 has no `isEvalSupported` option and `destroy` lives on the loading task — the code follows the installed types.
+
+**Next:** assign each page to what it contains (project details, amenities, specifications, unit types incl. multi-page groups, ignore), auto-suggestions, then an explicit confirm step before OCR is queued; then manual entry and reconciliation.
+
 ## 2026-09-19 (late night) — Local storage driver
 
 **Done:** `STORAGE_DRIVER=local` keeps objects on disk (`src/lib/storage/local-adapter.ts`, path-traversal-safe keys, HMAC-signed short-lived read URLs served by `/api/v1/local-files/*`, which is a 404 unless the local driver is selected). `gcs` remains the default; an unknown driver fails loudly. 31 storage tests. Approvals recorded in `DECISIONS.md` (invite design, pdf.js with a Brave-safe rendering rule, brand-level profiles). Also the base for a VPS move.

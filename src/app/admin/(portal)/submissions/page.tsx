@@ -54,6 +54,11 @@ export default async function SubmissionQueuePage({
       <AdminPageHeader
         title="Submission queue"
         description="Every property draft, from brochure or manual entry, on its way to the catalog."
+        action={
+          <Button asChild size="lg" className="h-11 px-6">
+            <Link href="/admin/submissions/new">Upload brochure</Link>
+          </Button>
+        }
       />
 
       <nav aria-label="Filter by status" className="mb-6 flex flex-wrap gap-2">

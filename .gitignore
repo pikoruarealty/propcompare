@@ -37,6 +37,7 @@ coverage/
 **/ocr-eval/results/
 .local/ocr-checkpoints/
 .local/storage/
+.local/verify/
 
 # Local database data (if running Postgres via local volume)
 .pgdata/
