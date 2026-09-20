@@ -1,5 +1,6 @@
 import { and, asc, desc, eq, inArray, sql, type SQL } from "drizzle-orm";
 import { isListed, mediaIsLive, variantIsLive } from "./visibility";
+import { reraSourcedFacts, type CheckedRecord } from "./rera-source";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import {
   amenityCatalog,
@@ -10,7 +11,9 @@ import {
   propertyAmenities,
   propertyMedia,
   propertySpecifications,
+  propertySubmissions,
   propertyTypes,
+  reraFetchJobs,
   specificationCatalog,
   unitAreas,
   unitVariants,
@@ -46,6 +49,48 @@ import type {
  * here filters on a status column. There isn't one, and no one should add one.
  */
 export type ReadDb = PostgresJsDatabase<Record<string, never>>;
+
+/**
+ * The latest successful check of the regulator's record for a property: when it
+ * ran, and the handful of facts it stated. A check made while the property was
+ * still a draft (its submission, before it had a property id) counts too, since
+ * that is where a new listing's values are usually taken from. Only the named
+ * facts are read from the stored record; nothing else leaves this function.
+ */
+const latestRegulatorCheck = async (
+  db: PostgresJsDatabase,
+  propertyId: string,
+): Promise<{ checkedAt: Date | null; record: CheckedRecord | null }> => {
+  const [job] = await db
+    .select({
+      runAt: reraFetchJobs.runAt,
+      createdAt: reraFetchJobs.createdAt,
+      payload: reraFetchJobs.fetchedPayload,
+    })
+    .from(reraFetchJobs)
+    .where(
+      and(
+        eq(reraFetchJobs.status, "succeeded"),
+        sql`(${reraFetchJobs.propertyId} = ${propertyId} or ${reraFetchJobs.submissionId} in (select ${propertySubmissions.id} from ${propertySubmissions} where ${propertySubmissions.propertyId} = ${propertyId}))`,
+      ),
+    )
+    .orderBy(desc(reraFetchJobs.createdAt))
+    .limit(1);
+  if (!job) return { checkedAt: null, record: null };
+  const stated = (job.payload as { record?: Record<string, unknown> } | null)
+    ?.record;
+  return {
+    checkedAt: job.runAt ?? job.createdAt,
+    record: stated
+      ? {
+          registrationNumber: stated.registrationNumber,
+          constructionProgressPercent: stated.constructionProgressPercent,
+          completionDate: stated.completionDate,
+          totalUnits: stated.totalUnits,
+        }
+      : null,
+  };
+};
 
 const toIsoString = (value: Date | null): string | null =>
   value === null ? null : value.toISOString();
@@ -426,6 +471,8 @@ export const getPublishedPropertyBySlug = async (
     .where(and(eq(unitVariants.propertyId, row.id), variantIsLive))
     .orderBy(asc(unitVariants.createdAt), asc(unitVariants.variantName));
 
+  const regulatorCheck = await latestRegulatorCheck(db, row.id);
+
   const variantIds = variantRows.map((variant) => variant.id);
   const areaRows =
     variantIds.length === 0
@@ -579,6 +626,14 @@ export const getPublishedPropertyBySlug = async (
       carpetAreaRangeMinSqft: row.reraCarpetAreaRangeMinSqft ?? null,
       carpetAreaRangeMaxSqft: row.reraCarpetAreaRangeMaxSqft ?? null,
       constructionProgressPercent: row.reraConstructionProgressPercent ?? null,
+      lastCheckedAt: toIsoString(regulatorCheck.checkedAt),
+      sourcedFacts: reraSourcedFacts(regulatorCheck.record, {
+        registrationNumber: row.reraRegistrationNumber ?? null,
+        constructionProgressPercent:
+          row.reraConstructionProgressPercent ?? null,
+        possessionDate: row.possessionDate ?? null,
+        totalUnits: row.totalUnits ?? null,
+      }),
     },
     totalTowers: row.totalTowers ?? null,
     totalUnits: row.totalUnits ?? null,

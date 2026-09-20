@@ -22,8 +22,10 @@ import {
   humaniseCategory,
   readRoomDimensions,
 } from "@/lib/properties/dossier";
+import type { ReraSourcedFact } from "@/lib/properties/rera-source";
 import type {
   DossierMedia,
+  DossierRera,
   DossierUnitVariant,
   MediaType,
   PropertyDossier,
@@ -76,6 +78,69 @@ function Fact({
       </dt>
       <dd className="text-foreground text-sm">{children}</dd>
     </div>
+  );
+}
+
+const MONTHS = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+];
+
+/** "20 Sep 2026" in Indian time, spelled out here so it never varies with the
+ * runtime's locale data. */
+const shortDate = (iso: string): string => {
+  const [year, month, day] = new Date(iso)
+    .toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" })
+    .split("-")
+    .map(Number);
+  return `${day} ${MONTHS[month - 1]} ${year}`;
+};
+
+const GUJRERA_URL = "https://gujrera.gujarat.gov.in/";
+
+/**
+ * A quiet "Source: GujRERA, checked 20 September 2026" under a fact, only when the
+ * regulator's record at its last check stated exactly this value (see
+ * `reraSourcedFacts`). It is never put on a derived or brochure-sourced value.
+ */
+function ReraSource({
+  rera,
+  fact,
+}: {
+  rera: DossierRera;
+  fact: ReraSourcedFact;
+}) {
+  if (rera.lastCheckedAt === null || !rera.sourcedFacts.includes(fact)) {
+    return null;
+  }
+  const checked = shortDate(rera.lastCheckedAt);
+  return (
+    <span
+      data-slot="rera-source"
+      data-fact={fact}
+      className="text-muted-foreground mt-1 block text-xs"
+    >
+      Source:{" "}
+      <a
+        href={GUJRERA_URL}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="underline underline-offset-2"
+      >
+        GujRERA
+      </a>
+      , checked {checked}
+    </span>
   );
 }
 
@@ -513,6 +578,7 @@ export function DossierScreen({ dossier }: DossierScreenProps) {
               </Fact>
               <Fact label="Possession date">
                 <FactValue value={possessionDate} tabular />
+                <ReraSource rera={rera} fact="possession_date" />
               </Fact>
               <Fact label="Launched">
                 <FactValue value={launchDate} tabular />
@@ -522,6 +588,7 @@ export function DossierScreen({ dossier }: DossierScreenProps) {
               </Fact>
               <Fact label="Units">
                 <FactValue value={dossier.totalUnits} tabular />
+                <ReraSource rera={rera} fact="total_units" />
               </Fact>
             </dl>
           </GridRow>
@@ -571,6 +638,7 @@ export function DossierScreen({ dossier }: DossierScreenProps) {
               </Fact>
               <Fact label="Registration number">
                 <FactValue value={rera.registrationNumber} tabular />
+                <ReraSource rera={rera} fact="registration_number" />
               </Fact>
               <Fact label="Last verified">
                 <FactValue
@@ -600,6 +668,7 @@ export function DossierScreen({ dossier }: DossierScreenProps) {
                   value={formatPercent(rera.constructionProgressPercent)}
                   tabular
                 />
+                <ReraSource rera={rera} fact="construction_progress" />
               </Fact>
             </dl>
           </Section>

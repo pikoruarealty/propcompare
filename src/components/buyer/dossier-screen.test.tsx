@@ -423,3 +423,89 @@ describe("DossierScreen — navigation", () => {
     }
   });
 });
+
+describe("DossierScreen — crediting the regulator", () => {
+  const notes = (container: HTMLElement) =>
+    Array.from(container.querySelectorAll('[data-slot="rera-source"]'));
+
+  it("credits GujRERA, with the check date, on exactly the facts the record stated", () => {
+    const { container } = renderDossier(richDossierFixture);
+
+    expect(
+      notes(container).map((note) => note.getAttribute("data-fact")),
+    ).toEqual(["registration_number", "construction_progress"]);
+    expect(notes(container)[0]).toHaveTextContent(
+      "Source: GujRERA, checked 20 Sep 2026",
+    );
+    const link = within(notes(container)[0] as HTMLElement).getByRole("link", {
+      name: "GujRERA",
+    });
+    expect(link).toHaveAttribute("href", "https://gujrera.gujarat.gov.in/");
+    expect(link).toHaveAttribute("rel", expect.stringContaining("noopener"));
+  });
+
+  it("credits a possession date and unit count only when the record stated them", () => {
+    const { container } = renderDossier({
+      ...richDossierFixture,
+      rera: {
+        ...richDossierFixture.rera,
+        sourcedFacts: ["possession_date", "total_units"],
+      },
+    });
+    const keyFacts = sectionOf(container, "key-facts");
+    expect(keyFacts.querySelectorAll('[data-slot="rera-source"]')).toHaveLength(
+      2,
+    );
+    expect(
+      sectionOf(container, "dossier-rera").querySelector(
+        '[data-slot="rera-source"]',
+      ),
+    ).toBeNull();
+  });
+
+  it("never credits the derived possession status", () => {
+    const { container } = renderDossier({
+      ...richDossierFixture,
+      rera: {
+        ...richDossierFixture.rera,
+        sourcedFacts: [
+          "registration_number",
+          "construction_progress",
+          "possession_date",
+          "total_units",
+        ],
+      },
+    });
+    const status = Array.from(
+      sectionOf(container, "key-facts").querySelectorAll("div"),
+    ).find(
+      (fact) =>
+        fact.textContent?.startsWith("Possession") &&
+        !fact.textContent.startsWith("Possession date"),
+    );
+    expect(status).toBeDefined();
+    expect(status?.querySelector('[data-slot="rera-source"]')).toBeNull();
+  });
+
+  it("says nothing when the record was never checked or stated none of the published values", () => {
+    expect(notes(renderDossier(sparseDossierFixture).container)).toHaveLength(
+      0,
+    );
+    expect(
+      notes(
+        renderDossier({
+          ...richDossierFixture,
+          rera: { ...richDossierFixture.rera, lastCheckedAt: null },
+        }).container,
+      ),
+    ).toHaveLength(0);
+    expect(
+      notes(
+        renderDossier({
+          ...richDossierFixture,
+          rera: { ...richDossierFixture.rera, sourcedFacts: [] },
+        }).container,
+      ),
+    ).toHaveLength(0);
+  });
+});

@@ -1,5 +1,9 @@
 # Progress
 
+## 2026-09-20 (late night) — Buyer pages credit GujRERA
+
+**Done:** the buyer dossier shows a muted "Source: GujRERA, checked 20 Sep 2026" under a fact, only when the regulator's record at the last successful check stated exactly the published value: registration number, construction progress, possession date and unit count. It never appears on a brochure-sourced or differing value, on possession status (derived by us), or when the record was never checked. The API's `rera` object gains `lastCheckedAt` and `sourcedFacts`. On Kimana all four facts are credited. **Verified:** typecheck, lint and prettier clean, the full suite (109 files, 1352 tests), and a look at Kimana's page in a real browser. **Still open:** the email to inforera@gujarat.gov.in about the Copyright Policy wording (yours to send).
+
 ## 2026-09-20 (night) — RERA carpet area per unit type, buyer configurations as tabs, GujRERA terms reviewed
 
 **Terms:** I read GujRERA's Terms & Conditions, Copyright Policy, Disclaimer, Privacy and Hyperlinking pages in a real browser (the site is a JavaScript app) and its robots.txt (none). **Nothing forbids periodic reading**, and nothing mentions automated access. Reuse is allowed if the data is accurate, not misleading, and the source is acknowledged; the Copyright page says "after due approval" while the Disclaimer says no permission is needed. Two soft items: show "Source: GujRERA, checked on …" wherever RERA facts reach buyers, and email `inforera@gujarat.gov.in` for written confirmation. Details in `DECISIONS.md`; this is a reading of the pages, not legal advice.

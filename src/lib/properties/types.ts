@@ -96,6 +96,8 @@ export interface DossierPossession {
   launchDate: string | null;
 }
 
+import type { ReraSourcedFact } from "./rera-source";
+
 export interface DossierRera {
   registered: boolean;
   registrationNumber: string | null;
@@ -105,6 +107,13 @@ export interface DossierRera {
   carpetAreaRangeMinSqft: string | null;
   carpetAreaRangeMaxSqft: string | null;
   constructionProgressPercent: string | null;
+  /** ISO-8601: the latest successful check of the regulator's record, or null when
+   * it has never been checked. */
+  lastCheckedAt: string | null;
+  /** The published facts the regulator's record, at that check, stated exactly as
+   * published. Only these may carry a "Source: GujRERA" line; a value that came
+   * from a brochure or that differs from RERA's is not listed. */
+  sourcedFacts: ReraSourcedFact[];
 }
 
 export interface UnitArea {

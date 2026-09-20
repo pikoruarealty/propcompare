@@ -131,7 +131,9 @@ Full published dossier for one property, resolved by `properties.slug`.
     "projectLandAreaSqft": "string" | null,
     "carpetAreaRangeMinSqft": "string" | null,
     "carpetAreaRangeMaxSqft": "string" | null,
-    "constructionProgressPercent": "string" | null
+    "constructionProgressPercent": "string" | null,
+    "lastCheckedAt": "ISO-8601" | null,
+    "sourcedFacts": ["registration_number" | "construction_progress" | "possession_date" | "total_units"]
   },
   "totalTowers": 0 | null,
   "totalUnits": 0 | null,
@@ -160,7 +162,7 @@ Full published dossier for one property, resolved by `properties.slug`.
 
 Ordering: `unitVariants` and `media` are returned ordered by their existing `display_order`/creation order in the schema (`property_media.displayOrder`; `unit_variants` by `createdAt`). `amenities` and `specifications` include every catalog row associated with the property regardless of `status` — the honest-incompleteness states (`not_stated`, `explicitly_not_offered`) are data for the client to render explicitly, never filtered out.
 
-A property with no media, no RERA registration, or unit variants missing one or more area bases returns those as empty arrays / `null` fields — never a fabricated value and never an omitted key.
+`rera.lastCheckedAt` is when the regulator's record was last read successfully (null if never), and `rera.sourcedFacts` lists which published facts that record stated exactly as published; only those may be credited to the regulator ("Source: GujRERA, checked on …"). A value from a brochure, or one that differs from RERA's, or a derived one such as possession status, is never listed. A property with no media, no RERA registration, or unit variants missing one or more area bases returns those as empty arrays / `null` fields — never a fabricated value and never an omitted key.
 
 The slug route takes no query parameters; any it receives are ignored rather than rejected. The `422` contract belongs to the listing route alone.
 
