@@ -58,3 +58,6 @@ stitch_propcompare_residence_concierge
 
 # Real developer brochures used for OCR/routing evaluation: large, and not ours to redistribute.
 brochures/
+
+# All local scratch: screenshots, logs, throwaway scripts, storage, checkpoints.
+.local/

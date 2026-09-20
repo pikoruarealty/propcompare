@@ -1,6 +1,6 @@
 # Tasklist — the visual pass (image-led buyer UI) and the admin add/edit flow
 
-**Status:** planned 2026-09-20; waiting for the owner to add 2 to 3 more properties (real pictures, several developers) so the result can be judged on real data. No code yet.
+**Status:** admin flow built 2026-09-20 (not yet driven in a real browser); the visual pass is not started. The owner is to add 2 to 3 more properties with good pictures, and OpenRouter credit is needed for any brochure upload. See "Pending" in `PROGRESS.md`.
 **Owner:** Bhavarth
 **References:** `docs/design/visual-direction.v1.md` (findings and order), `docs/design/comparison.v1.md`, `docs/design/design.v1.md`, `docs/design/design-tokens.md`, the Stitch export `_stitch_export/stitch_propcompare_residence_concierge/`, `AGENTS.md` (comparison is the product; no price; gold only for trust)
 
@@ -26,14 +26,18 @@
 
 ### Admin flow (independent of the visual pass)
 
-- [ ] Fields are always editable inline (no Edit toggle), saved on leaving a field, with a quiet "Saved" mark; the status tag sits right-aligned in the field's header row, never stacked with a button.
-- [ ] Guided path: a progress line ("12 of 30 fields"), a primary "Next: <section>" on every tab, "Save draft and leave" as the secondary action, and a last step "Review and publish". Sections show how much is filled. Nothing forces completion.
-- [ ] Images an admin uploads are approved (public, with credit) unless they choose otherwise, so there is no dead end; brochure-extracted pictures keep their review.
-- [ ] One **Publish** for an owner (submit, start review, approve and publish in one action, each recorded); a verifier sees "Send for approval". A developer's own submission keeps the review steps.
-- [ ] Version history moves to the end of the page.
-- [ ] Tests, and a real-browser run of adding a property from nothing to published.
+- [x] Fields are always editable inline (no Edit toggle), saved on leaving a field, with a quiet "Saved" mark; the status tag sits right-aligned in the field's header row, never stacked with a button.
+- [x] Guided path: a progress line ("12 of 30 fields"), a primary "Next: <section>" on every tab, "Save draft and leave" as the secondary action, and a last step "Review and publish". Sections show how much is filled. Nothing forces completion.
+- [x] Images an admin uploads are approved (public, with credit) unless they choose otherwise, so there is no dead end; brochure-extracted pictures keep their review.
+- [x] One **Publish** for an owner (submit, start review, approve and publish in one action, each recorded); a verifier sees "Send for approval". A developer's own submission keeps the review steps.
+- [x] Version history moves to the end of the page.
+- [x] Editing and reviewing at every stage before publication (the stuck-submission bug).
+- [x] Unit, integration and component tests (119 files, 1456 tests).
+- [ ] A real-browser run of adding a property from nothing to published, and of the previously stuck submission.
 
-### Visual pass (see `visual-direction.v1.md`, in this order)
+### Visual pass (see `visual-direction.v1.md`, in this order; none started)
+
+Owner additions (2026-09-20, later): the landing page must make the visitor feel it will help them decide and lead them to compare properties side by side; its copy must not claim facts come from "developer submissions and RERA records" (they are extracted from brochures and cross-checked with RERA); the tagline "Compare homes, not brochures" is rejected (candidates in `PROGRESS.md`); the footer copy needs the same fix.
 
 - [ ] 1 Foundations: type scale, elevated cards, tonal layers, chips, icons, hero treatment, buttons.
 - [ ] 2 Landing with the split hero, tagline, featured properties, three icon cards.
