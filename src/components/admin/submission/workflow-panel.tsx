@@ -1,31 +1,39 @@
 "use client";
 
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import type { SubmissionStatus } from "@/lib/submissions/queue";
 import { ConfirmAction } from "./confirm-action";
 
 const GUIDANCE: Record<SubmissionStatus, string> = {
   draft:
-    "Enter or check the details and add any images, then submit for review.",
-  submitted: "Submitted. Start the review to check each field and image.",
+    "When the details and pictures look right, publish it. Your changes are saved as you go, so you can also leave and come back.",
+  submitted:
+    "When the details and pictures look right, publish it. You can keep editing until then.",
   in_review:
-    "Confirm or reject each field and image, then approve, ask for changes, or reject the submission.",
+    "When the details and pictures look right, publish it. You can keep editing until then.",
   changes_requested:
-    "Changes were requested. Fix the details, then submit again.",
-  approved: "Approved. An owner can now publish it to the live catalog.",
+    "Changes were requested. Fix the details, then publish or send it back.",
+  approved:
+    "Approved but not yet live. You can still edit and check pictures; publish when it is right.",
   rejected: "Rejected. It will not be published.",
   published: "Published to the live catalog.",
 };
 
 /**
- * Where the submission is and what can happen next. The steps that are hard to
- * undo — approving, rejecting and above all publishing — ask for confirmation;
- * publish is offered only to an owner, and the server enforces that again.
+ * The end of the path: publish. An owner working on a submission is its reviewer,
+ * so there is one Publish button that takes it from wherever it is to live (each
+ * stage is still recorded). Values or pictures nobody has confirmed yet are named
+ * before anything goes live, and confirming them as they stand is a deliberate
+ * choice. "Save draft and leave" is always there and is not a failure: nothing has
+ * to be finished. A verifier, who cannot publish, gets the same guidance and the
+ * review steps they are allowed.
  */
 export function WorkflowPanel({
   status,
   permissionLevel,
-  needsReview,
+  waitingFields,
+  waitingPictures,
   pending,
   onAction,
   onPublish,
@@ -33,61 +41,87 @@ export function WorkflowPanel({
   status: SubmissionStatus;
   permissionLevel: "verifier" | "owner";
   /** Proposed values not yet confirmed or rejected. */
-  needsReview: number;
+  waitingFields: number;
+  /** Pictures not yet confirmed or rejected. */
+  waitingPictures: number;
   pending: boolean;
   onAction: (action: string) => void;
-  onPublish: () => void;
+  /** Publishes; `confirmRemaining` confirms what is still waiting, as it stands. */
+  onPublish: (confirmRemaining: boolean) => void;
 }) {
   const isOwner = permissionLevel === "owner";
+  const waiting = waitingFields + waitingPictures;
+  const working = status !== "published" && status !== "rejected";
+  const parts = [
+    waitingFields > 0
+      ? `${waitingFields} ${waitingFields === 1 ? "value" : "values"}`
+      : null,
+    waitingPictures > 0
+      ? `${waitingPictures} ${waitingPictures === 1 ? "picture" : "pictures"}`
+      : null,
+  ].filter(Boolean);
 
   return (
     <section
+      id="publish-panel"
       aria-labelledby="workflow-heading"
-      className="border-border bg-card rounded-lg border p-5"
+      data-slot="publish-panel"
+      className="border-border bg-card rounded-xl border p-6 shadow-[0_1px_2px_rgb(0_0_0/0.04),0_8px_24px_rgb(0_0_0/0.04)]"
     >
       <h2 id="workflow-heading" className="font-display text-2xl">
-        Review
+        {working ? "Ready to publish?" : "Status"}
       </h2>
       <p className="text-muted-foreground mt-1 text-sm">{GUIDANCE[status]}</p>
-      {status === "in_review" && needsReview > 0 ? (
-        <p className="mt-2 text-sm">
-          <span className="data-tabular">{needsReview}</span> value
-          {needsReview === 1 ? " is" : "s are"} still waiting for a decision.
+      {working && waiting > 0 ? (
+        <p data-slot="waiting-note" className="mt-2 text-sm">
+          {parts.join(" and ")} {waiting === 1 ? "is" : "are"} not confirmed
+          yet.
         </p>
       ) : null}
 
-      <div className="mt-4 flex flex-wrap gap-3">
-        {status === "draft" || status === "changes_requested" ? (
-          isOwner ? (
-            <Button
-              type="button"
-              disabled={pending}
-              onClick={() => onAction("submit")}
-            >
-              Submit for review
-            </Button>
+      {working ? (
+        <div className="mt-5 flex flex-wrap items-center gap-3">
+          {isOwner ? (
+            waiting > 0 ? (
+              <ConfirmAction
+                label="Publish"
+                title="Some items are not confirmed yet"
+                description={`${parts.join(" and ")} ${waiting === 1 ? "has" : "have"} not been confirmed. Go back to check ${waiting === 1 ? "it" : "them"}, or publish anyway: they are confirmed as they stand and pictures become public.`}
+                confirmLabel="Confirm them and publish"
+                disabled={pending}
+                onConfirm={() => onPublish(true)}
+              />
+            ) : (
+              <ConfirmAction
+                label="Publish"
+                title="Publish to the live catalog?"
+                description="This makes the details and pictures visible to buyers straight away. Each step is recorded, and you can change it later by editing the property."
+                confirmLabel="Publish"
+                disabled={pending}
+                onConfirm={() => onPublish(false)}
+              />
+            )
           ) : (
             <p className="text-muted-foreground text-sm">
-              Only an owner can submit in the current workflow.
+              Only an owner can publish.
             </p>
-          )
-        ) : null}
-
-        {status === "submitted" ? (
-          <Button
-            type="button"
-            disabled={pending}
-            onClick={() => onAction("start_review")}
-          >
-            Start review
+          )}
+          <Button asChild variant="outline">
+            <Link href="/admin/submissions">Save draft and leave</Link>
           </Button>
-        ) : null}
+        </div>
+      ) : null}
 
-        {status === "in_review" ? (
-          <>
+      {status === "in_review" ? (
+        <details className="mt-5 text-sm">
+          <summary className="text-muted-foreground hover:text-foreground w-fit cursor-pointer underline underline-offset-4">
+            Other review actions
+          </summary>
+          <div className="mt-3 flex flex-wrap gap-3">
             <Button
               type="button"
               variant="outline"
+              size="sm"
               disabled={pending}
               onClick={() => onAction("request_changes")}
             >
@@ -102,33 +136,19 @@ export function WorkflowPanel({
               disabled={pending}
               onConfirm={() => onAction("reject")}
             />
-            <ConfirmAction
-              label="Approve"
-              title="Approve this submission?"
-              description="Only the fields and images you confirmed will go into the catalog when an owner publishes it."
-              confirmLabel="Approve"
-              disabled={pending}
-              onConfirm={() => onAction("approve")}
-            />
-          </>
-        ) : null}
-
-        {status === "approved" && isOwner ? (
-          <ConfirmAction
-            label="Publish to catalog"
-            title="Publish to the live catalog?"
-            description="This makes the confirmed details and images visible to buyers straight away. It cannot be undone from here."
-            confirmLabel="Publish"
-            disabled={pending}
-            onConfirm={onPublish}
-          />
-        ) : null}
-        {status === "approved" && !isOwner ? (
-          <p className="text-muted-foreground text-sm">
-            Only an owner can publish.
-          </p>
-        ) : null}
-      </div>
+            {!isOwner ? (
+              <ConfirmAction
+                label="Approve"
+                title="Approve this submission?"
+                description="An owner can then publish it."
+                confirmLabel="Approve"
+                disabled={pending}
+                onConfirm={() => onAction("approve")}
+              />
+            ) : null}
+          </div>
+        </details>
+      ) : null}
     </section>
   );
 }

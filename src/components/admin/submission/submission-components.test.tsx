@@ -250,7 +250,8 @@ describe("WorkflowPanel", () => {
       <WorkflowPanel
         status="draft"
         permissionLevel="owner"
-        needsReview={0}
+        waitingFields={0}
+        waitingPictures={0}
         pending={false}
         onAction={onAction}
         onPublish={onPublish}
@@ -260,69 +261,88 @@ describe("WorkflowPanel", () => {
     return { onAction, onPublish };
   };
 
-  it("lets an owner submit a draft", async () => {
+  it.each([
+    "draft",
+    "submitted",
+    "in_review",
+    "changes_requested",
+    "approved",
+  ] as const)(
+    "lets an owner publish a submission that is %s, in one step after confirming",
+    async (status) => {
+      const user = userEvent.setup();
+      const { onPublish } = render_({ status });
+      await user.click(screen.getByRole("button", { name: "Publish" }));
+      expect(onPublish).not.toHaveBeenCalled();
+      await user.click(
+        within(await screen.findByRole("alertdialog")).getByRole("button", {
+          name: "Publish",
+        }),
+      );
+      expect(onPublish).toHaveBeenCalledWith(false);
+    },
+  );
+
+  it("never asks an owner to submit, start a review and approve their own work", () => {
+    render_({ status: "draft" });
+    for (const name of ["Submit for review", "Start review", "Approve"]) {
+      expect(screen.queryByRole("button", { name })).toBeNull();
+    }
+  });
+
+  it("names what is still unconfirmed before publishing, and confirming it is a deliberate choice", async () => {
     const user = userEvent.setup();
-    const { onAction } = render_();
-    await user.click(screen.getByRole("button", { name: "Submit for review" }));
-    expect(onAction).toHaveBeenCalledWith("submit");
-  });
+    const { onPublish } = render_({
+      status: "approved",
+      waitingFields: 3,
+      waitingPictures: 1,
+    });
+    expect(screen.getByText(/3 values and 1 picture/)).toBeVisible();
 
-  it("tells a verifier they cannot submit rather than showing a dead button", () => {
-    render_({ permissionLevel: "verifier" });
-    expect(
-      screen.queryByRole("button", { name: "Submit for review" }),
-    ).toBeNull();
-    expect(screen.getByText(/only an owner can submit/i)).toBeVisible();
-  });
-
-  it("counts values still waiting for a decision during review", () => {
-    render_({ status: "in_review", needsReview: 3 });
-    expect(screen.getByText(/values are/)).toBeVisible();
-  });
-
-  it("asks before approving and only then acts", async () => {
-    const user = userEvent.setup();
-    const { onAction } = render_({ status: "in_review" });
-    await user.click(screen.getByRole("button", { name: "Approve" }));
-    expect(onAction).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Publish" }));
     const dialog = await screen.findByRole("alertdialog");
-    await user.click(within(dialog).getByRole("button", { name: "Approve" }));
-    expect(onAction).toHaveBeenCalledWith("approve");
+    expect(dialog).toHaveTextContent(/have not been confirmed/);
+    await user.click(
+      within(dialog).getByRole("button", {
+        name: "Confirm them and publish",
+      }),
+    );
+    expect(onPublish).toHaveBeenCalledWith(true);
   });
 
-  it("does not act if the confirmation is dismissed", async () => {
+  it("always offers a way to save and leave, which is not a failure", () => {
+    render_({ status: "draft" });
+    expect(
+      screen.getByRole("link", { name: "Save draft and leave" }),
+    ).toHaveAttribute("href", "/admin/submissions");
+  });
+
+  it("hides publish from a verifier and says why", () => {
+    render_({ status: "approved", permissionLevel: "verifier" });
+    expect(screen.queryByRole("button", { name: "Publish" })).toBeNull();
+    expect(screen.getByText("Only an owner can publish.")).toBeVisible();
+  });
+
+  it("keeps request changes and reject one step away, for a submission in review", async () => {
     const user = userEvent.setup();
     const { onAction } = render_({ status: "in_review" });
+    await user.click(screen.getByText("Other review actions"));
+    await user.click(screen.getByRole("button", { name: "Request changes" }));
+    expect(onAction).toHaveBeenCalledWith("request_changes");
+
     await user.click(screen.getByRole("button", { name: "Reject submission" }));
     await user.click(
       within(await screen.findByRole("alertdialog")).getByRole("button", {
         name: "Not yet",
       }),
     );
-    expect(onAction).not.toHaveBeenCalled();
+    expect(onAction).toHaveBeenCalledTimes(1);
   });
 
-  it("offers publish only to an owner, and only after confirmation", async () => {
-    const user = userEvent.setup();
-    const { onPublish } = render_({ status: "approved" });
-    await user.click(
-      screen.getByRole("button", { name: "Publish to catalog" }),
-    );
-    expect(onPublish).not.toHaveBeenCalled();
-    await user.click(
-      within(await screen.findByRole("alertdialog")).getByRole("button", {
-        name: "Publish",
-      }),
-    );
-    expect(onPublish).toHaveBeenCalledTimes(1);
-  });
-
-  it("hides publish from a verifier", () => {
-    render_({ status: "approved", permissionLevel: "verifier" });
-    expect(
-      screen.queryByRole("button", { name: "Publish to catalog" }),
-    ).toBeNull();
-    expect(screen.getByText("Only an owner can publish.")).toBeVisible();
+  it("shows no actions once published or rejected", () => {
+    render_({ status: "published" });
+    expect(screen.queryByRole("button", { name: "Publish" })).toBeNull();
+    expect(screen.getByText("Published to the live catalog.")).toBeVisible();
   });
 });
 

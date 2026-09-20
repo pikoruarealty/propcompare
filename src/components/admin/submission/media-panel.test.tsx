@@ -43,7 +43,7 @@ const renderPanel = (
       media={[]}
       variantNames={[]}
       editable
-      inReview={false}
+      reviewable
       pending={false}
       onReview={() => undefined}
       onUploaded={() => undefined}
@@ -124,7 +124,7 @@ describe("MediaPanel — pictures already on the listing", () => {
         media={[]}
         variantNames={[]}
         editable={false}
-        inReview={false}
+        reviewable
         pending={false}
         onReview={() => undefined}
         onUploaded={() => undefined}

@@ -15,6 +15,7 @@ import { ExtractionStatus } from "./extraction-status";
 import { ConfirmAction } from "./submission/confirm-action";
 import { ConfirmAllBar, FieldsPanel } from "./submission/fields-panel";
 import { isEditOnlyField } from "@/lib/submissions/edit-only-fields";
+import { WORKING_STATUSES } from "@/lib/submissions/working-statuses";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { MediaPanel, type MediaItem } from "./submission/media-panel";
 import { ReraPanel } from "./submission/rera-panel";
@@ -53,6 +54,63 @@ function TabBadge({
  * images, and turns each action into a call to the admin API. The API enforces
  * every rule again; nothing here is the authority.
  */
+/**
+ * The end of every tab while the submission can still be worked on: a primary
+ * button that leads to the next section (and from the last, to Publish), and a
+ * secondary way out. Nothing has to be filled in to go on or to leave.
+ */
+function GuidedFooter({
+  show,
+  current,
+  order,
+  filled,
+  onGo,
+}: {
+  show: boolean;
+  current: string;
+  order: { key: string; title: string }[];
+  filled: { filled: number; total: number } | null;
+  onGo: (key: string) => void;
+}) {
+  if (!show) return null;
+  const index = order.findIndex((item) => item.key === current);
+  const next = order[index + 1];
+  return (
+    <div
+      data-slot="guided-footer"
+      className="border-border mt-8 flex flex-wrap items-center justify-between gap-4 border-t pt-6"
+    >
+      <p className="text-muted-foreground text-sm">
+        {filled
+          ? `${filled.filled} of ${filled.total} filled in this section. Skip anything you do not have.`
+          : "Skip anything you do not have."}
+      </p>
+      <div className="flex flex-wrap items-center gap-3">
+        <Button asChild variant="outline">
+          <Link href="/admin/submissions">Save draft and leave</Link>
+        </Button>
+        {next ? (
+          <Button type="button" size="lg" onClick={() => onGo(next.key)}>
+            Next: {next.title} →
+          </Button>
+        ) : (
+          <Button
+            type="button"
+            size="lg"
+            onClick={() =>
+              document
+                .getElementById("publish-panel")
+                ?.scrollIntoView({ behavior: "smooth", block: "center" })
+            }
+          >
+            Go to publish →
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function SubmissionWorkbench({
   submission,
   media,
@@ -66,9 +124,12 @@ export function SubmissionWorkbench({
   const [error, setError] = React.useState<string | null>(null);
   const [pending, startTransition] = React.useTransition();
 
-  const editable =
-    submission.status === "draft" || submission.status === "changes_requested";
-  const inReview = submission.status === "in_review";
+  // Everything before publication can still be worked on and reviewed: an admin
+  // who moved on too early is never locked out.
+  const editable = (WORKING_STATUSES as readonly string[]).includes(
+    submission.status,
+  );
+  const reviewable = editable;
   const base = `/api/v1/admin/submissions/${submission.id}`;
 
   /** Calls the API; resolves to an error message, or null on success. */
@@ -166,6 +227,49 @@ export function SubmissionWorkbench({
     (field) => field.reviewStatus === "needs_review",
   ).length;
   const differsFromRera = Object.keys(reraDifferences).length;
+
+  // How much of the listing is filled in, per tab and overall. Nothing forces
+  // completion; this only shows where the gaps are.
+  const isFilled = (fieldKey: string, hasCandidate: boolean) =>
+    hasCandidate ||
+    (submission.propertyId !== null && submission.live[fieldKey] !== undefined);
+  const filledByGroup = Object.fromEntries(
+    groups.map(({ group, rows }) => {
+      const counted = rows.filter(
+        (row) => !isEditOnlyField(row.field.fieldKey),
+      );
+      return [
+        group.key,
+        {
+          filled: counted.filter((row) =>
+            isFilled(row.field.fieldKey, row.candidate != null),
+          ).length,
+          total: counted.length,
+        },
+      ];
+    }),
+  );
+  const filledTotal = Object.values(filledByGroup).reduce(
+    (sum, item) => sum + item.filled,
+    0,
+  );
+  const fieldTotal = Object.values(filledByGroup).reduce(
+    (sum, item) => sum + item.total,
+    0,
+  );
+  const tabOrder = [
+    { key: "rera", title: "RERA" },
+    ...groups.map(({ group }) => ({ key: group.key, title: group.title })),
+    { key: "images", title: "Images" },
+  ];
+  const tabsTop = React.useRef<HTMLDivElement>(null);
+  const goToTab = (key: string) => {
+    setTab(key);
+    tabsTop.current?.scrollIntoView?.({ block: "start", behavior: "smooth" });
+  };
+  const waitingPictures = media.filter(
+    (item) => item.reviewStatus === "needs_review",
+  ).length;
 
   /** Lists, unlists or soft-deletes the property. */
   const changeListing = async (status: "listed" | "unlisted" | "deleted") => {
@@ -355,6 +459,191 @@ export function SubmissionWorkbench({
         </p>
       ) : null}
 
+      {submission.source === "ocr_brochure" ? (
+        <div className="flex items-center justify-between gap-4">
+          <p className="text-muted-foreground text-sm">
+            This draft came from a brochure.
+          </p>
+          <Button asChild variant="outline" size="sm">
+            <Link href={`/admin/submissions/${submission.id}/pages`}>
+              <FileText /> Review brochure pages
+            </Link>
+          </Button>
+        </div>
+      ) : null}
+
+      {submission.extraction ? (
+        <ExtractionStatus
+          ocrJobId={submission.extraction.jobId}
+          status={submission.extraction.status}
+          failureMessage={submission.extraction.failureMessage}
+        />
+      ) : null}
+
+      {reviewable ? (
+        <ConfirmAllBar
+          waiting={waitingForReview}
+          pending={pending}
+          onConfirmAll={() => run(...post("/fields/confirm-pending"))}
+        />
+      ) : null}
+
+      {editable ? (
+        <div data-slot="progress" className="flex flex-col gap-2">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <p className="text-sm">
+              <span className="font-medium">
+                {filledTotal} of {fieldTotal}
+              </span>{" "}
+              fields filled in.{" "}
+              <span className="text-muted-foreground">
+                Fill what you have and skip the rest; you can come back.
+              </span>
+            </p>
+          </div>
+          <div
+            role="progressbar"
+            aria-label="Fields filled in"
+            aria-valuemin={0}
+            aria-valuemax={fieldTotal}
+            aria-valuenow={filledTotal}
+            className="bg-muted h-2 overflow-hidden rounded-full"
+          >
+            <div
+              className="bg-primary h-full rounded-full transition-[width]"
+              style={{
+                width: `${fieldTotal === 0 ? 0 : Math.round((filledTotal / fieldTotal) * 100)}%`,
+              }}
+            />
+          </div>
+        </div>
+      ) : null}
+
+      <div ref={tabsTop} />
+      <Tabs value={tab} onValueChange={setTab} data-slot="edit-tabs">
+        <TabsList aria-label="Sections of this submission">
+          <TabsTrigger value="rera">
+            RERA
+            {differsFromRera > 0 ? (
+              <TabBadge tone="attention">{differsFromRera}</TabBadge>
+            ) : null}
+          </TabsTrigger>
+          {groups.map(({ group }) => (
+            <TabsTrigger key={group.key} value={group.key}>
+              {group.title}
+              {editable ? (
+                <TabBadge>
+                  {filledByGroup[group.key].filled}/
+                  {filledByGroup[group.key].total}
+                </TabBadge>
+              ) : null}
+              {reviewCount[group.key] > 0 ? (
+                <TabBadge tone="attention">{reviewCount[group.key]}</TabBadge>
+              ) : null}
+            </TabsTrigger>
+          ))}
+          <TabsTrigger value="images">
+            Images
+            {media.length > 0 ? <TabBadge>{media.length}</TabBadge> : null}
+          </TabsTrigger>
+        </TabsList>
+
+        {/* Every tab stays mounted, only hidden, so a half-edited field is kept
+            when you look at another tab. */}
+        <TabsContent value="rera" forceMount hidden={tab !== "rera"}>
+          <ReraPanel
+            rera={submission.rera}
+            editable={editable}
+            pending={pending}
+            onFetch={(registrationNumber) =>
+              postJson("/rera/fetch", { registrationNumber })
+            }
+            onApply={(jobId) => postJson("/rera/apply", { jobId })}
+          />
+          <GuidedFooter
+            show={editable}
+            current="rera"
+            order={tabOrder}
+            filled={null}
+            onGo={goToTab}
+          />
+        </TabsContent>
+
+        {groups.map(({ group }) => (
+          <TabsContent
+            key={group.key}
+            value={group.key}
+            forceMount
+            hidden={tab !== group.key}
+          >
+            <FieldsPanel
+              submission={submission}
+              only={group.key}
+              reraDifferences={reraDifferences}
+              editable={editable}
+              reviewable={reviewable}
+              pending={pending}
+              onSave={saveField}
+              onReview={(fieldKey, reviewStatus) =>
+                run(
+                  ...post(`/fields/${encodeURIComponent(fieldKey)}/review`, {
+                    reviewStatus,
+                  }),
+                )
+              }
+            />
+            <GuidedFooter
+              show={editable}
+              current={group.key}
+              order={tabOrder}
+              filled={filledByGroup[group.key]}
+              onGo={goToTab}
+            />
+          </TabsContent>
+        ))}
+
+        <TabsContent value="images" forceMount hidden={tab !== "images"}>
+          <MediaPanel
+            submissionId={submission.id}
+            published={submission.publishedMedia}
+            removedIds={removedMediaIds}
+            onSetRemoved={(ids) => saveField("property.media_removed", ids)}
+            media={media}
+            variantNames={variantNames}
+            editable={editable}
+            reviewable={reviewable}
+            pending={pending}
+            onReview={(mediaId, reviewStatus, isPublic) =>
+              run(
+                ...post(`/media/${mediaId}/review`, { reviewStatus, isPublic }),
+              )
+            }
+            onUploaded={() => router.refresh()}
+          />
+          <GuidedFooter
+            show={editable}
+            current="images"
+            order={tabOrder}
+            filled={null}
+            onGo={goToTab}
+          />
+        </TabsContent>
+      </Tabs>
+
+      <WorkflowPanel
+        status={submission.status}
+        permissionLevel={permissionLevel}
+        waitingFields={countNeedingReview(
+          submission.fields.filter((field) => !isEditOnlyField(field.fieldKey)),
+        )}
+        waitingPictures={waitingPictures}
+        pending={pending}
+        onAction={(action) => run(...post("/review", { action }))}
+        onPublish={(confirmRemaining) =>
+          run(...post("/publish", { confirmRemaining }))
+        }
+      />
+
       {submission.versions.length > 1 ? (
         <section
           data-slot="versions"
@@ -416,129 +705,6 @@ export function SubmissionWorkbench({
           </ol>
         </section>
       ) : null}
-
-      <WorkflowPanel
-        status={submission.status}
-        permissionLevel={permissionLevel}
-        needsReview={countNeedingReview(
-          submission.fields.filter((field) => !isEditOnlyField(field.fieldKey)),
-        )}
-        pending={pending}
-        onAction={(action) => run(...post("/review", { action }))}
-        onPublish={() => run(...post("/publish"))}
-      />
-
-      {submission.source === "ocr_brochure" ? (
-        <div className="flex items-center justify-between gap-4">
-          <p className="text-muted-foreground text-sm">
-            This draft came from a brochure.
-          </p>
-          <Button asChild variant="outline" size="sm">
-            <Link href={`/admin/submissions/${submission.id}/pages`}>
-              <FileText /> Review brochure pages
-            </Link>
-          </Button>
-        </div>
-      ) : null}
-
-      {submission.extraction ? (
-        <ExtractionStatus
-          ocrJobId={submission.extraction.jobId}
-          status={submission.extraction.status}
-          failureMessage={submission.extraction.failureMessage}
-        />
-      ) : null}
-
-      {inReview ? (
-        <ConfirmAllBar
-          waiting={waitingForReview}
-          pending={pending}
-          onConfirmAll={() => run(...post("/fields/confirm-pending"))}
-        />
-      ) : null}
-
-      <Tabs value={tab} onValueChange={setTab} data-slot="edit-tabs">
-        <TabsList aria-label="Sections of this submission">
-          <TabsTrigger value="rera">
-            RERA
-            {differsFromRera > 0 ? (
-              <TabBadge tone="attention">{differsFromRera}</TabBadge>
-            ) : null}
-          </TabsTrigger>
-          {groups.map(({ group }) => (
-            <TabsTrigger key={group.key} value={group.key}>
-              {group.title}
-              {reviewCount[group.key] > 0 ? (
-                <TabBadge tone="attention">{reviewCount[group.key]}</TabBadge>
-              ) : null}
-            </TabsTrigger>
-          ))}
-          <TabsTrigger value="images">
-            Images
-            {media.length > 0 ? <TabBadge>{media.length}</TabBadge> : null}
-          </TabsTrigger>
-        </TabsList>
-
-        {/* Every tab stays mounted, only hidden, so a half-edited field is kept
-            when you look at another tab. */}
-        <TabsContent value="rera" forceMount hidden={tab !== "rera"}>
-          <ReraPanel
-            rera={submission.rera}
-            editable={editable}
-            pending={pending}
-            onFetch={(registrationNumber) =>
-              postJson("/rera/fetch", { registrationNumber })
-            }
-            onApply={(jobId) => postJson("/rera/apply", { jobId })}
-          />
-        </TabsContent>
-
-        {groups.map(({ group }) => (
-          <TabsContent
-            key={group.key}
-            value={group.key}
-            forceMount
-            hidden={tab !== group.key}
-          >
-            <FieldsPanel
-              submission={submission}
-              only={group.key}
-              reraDifferences={reraDifferences}
-              editable={editable}
-              inReview={inReview}
-              pending={pending}
-              onSave={saveField}
-              onReview={(fieldKey, reviewStatus) =>
-                run(
-                  ...post(`/fields/${encodeURIComponent(fieldKey)}/review`, {
-                    reviewStatus,
-                  }),
-                )
-              }
-            />
-          </TabsContent>
-        ))}
-
-        <TabsContent value="images" forceMount hidden={tab !== "images"}>
-          <MediaPanel
-            submissionId={submission.id}
-            published={submission.publishedMedia}
-            removedIds={removedMediaIds}
-            onSetRemoved={(ids) => saveField("property.media_removed", ids)}
-            media={media}
-            variantNames={variantNames}
-            editable={editable}
-            inReview={inReview}
-            pending={pending}
-            onReview={(mediaId, reviewStatus, isPublic) =>
-              run(
-                ...post(`/media/${mediaId}/review`, { reviewStatus, isPublic }),
-              )
-            }
-            onUploaded={() => router.refresh()}
-          />
-        </TabsContent>
-      </Tabs>
     </div>
   );
 }

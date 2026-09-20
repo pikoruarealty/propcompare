@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SubmissionDetail } from "@/lib/submissions/queue";
@@ -117,7 +117,7 @@ const panel = (submission: SubmissionDetail, editable = true) =>
     <FieldsPanel
       submission={submission}
       editable={editable}
-      inReview={false}
+      reviewable={false}
       pending={false}
       onSave={async () => null}
       onReview={() => {}}
@@ -140,14 +140,15 @@ describe("an edit of a published property — the fields", () => {
     panel(editing());
 
     const name = rowOf("Property name");
-    expect(name.getByText("THE KIMANA TOWERS")).toBeInTheDocument();
+    // The input is simply there, holding the published value: no Edit button.
+    expect(name.getByRole("textbox")).toHaveValue("THE KIMANA TOWERS");
     expect(name.getByText("Unchanged")).toBeInTheDocument();
     expect(name.queryByText("Not stated")).toBeNull();
-    expect(name.getByRole("button", { name: "Edit" })).toBeInTheDocument();
+    expect(name.queryByRole("button", { name: "Edit" })).toBeNull();
   });
 
   it("shows the real amenities and unit types too, not a sentence about them", () => {
-    panel(editing());
+    panel(editing(), false);
 
     const amenities = rowOf("Amenities");
     expect(amenities.getByText(/Gymnasium/)).toBeInTheDocument();
@@ -173,23 +174,11 @@ describe("an edit of a published property — the fields", () => {
   it("starts an edit from the published value, never blank", async () => {
     panel(editing());
 
-    await userEvent.click(
-      within(
-        rowOf("Total units")
-          .getByRole("button", { name: "Edit" })
-          .closest("li")!,
-      ).getByRole("button", { name: "Edit" }),
-    );
-
-    expect(screen.getByRole("textbox")).toHaveValue("76");
+    expect(rowOf("Total units").getByRole("textbox")).toHaveValue("76");
   });
 
   it("says what an edit of unit types can and cannot do", async () => {
     panel(editing());
-
-    await userEvent.click(
-      rowOf("Unit configurations").getByRole("button", { name: "Edit" }),
-    );
 
     expect(
       screen.getByText(/removing one hides it from buyers/i),
@@ -200,9 +189,6 @@ describe("an edit of a published property — the fields", () => {
 
   it("locks the name of a published unit type, but lets it be removed", async () => {
     panel(editing());
-    await userEvent.click(
-      rowOf("Unit configurations").getByRole("button", { name: "Edit" }),
-    );
 
     expect(screen.getByPlaceholderText(/3 BHK/)).toBeDisabled();
     expect(screen.getByText(/name is fixed/i)).toBeInTheDocument();
@@ -227,14 +213,11 @@ describe("an edit of a published property — the fields", () => {
           },
         } as Partial<SubmissionDetail>)}
         editable
-        inReview={false}
+        reviewable={false}
         pending={false}
         onSave={onSave}
         onReview={() => {}}
       />,
-    );
-    await userEvent.click(
-      rowOf("Unit configurations").getByRole("button", { name: "Edit" }),
     );
     await userEvent.click(screen.getByRole("tab", { name: "Type B" }));
     await userEvent.click(
@@ -259,14 +242,11 @@ describe("an edit of a published property — the fields", () => {
           live: { unit_variants: [{ variantName: "Type A" }] },
         } as Partial<SubmissionDetail>)}
         editable
-        inReview={false}
+        reviewable={false}
         pending={false}
         onSave={onSave}
         onReview={() => {}}
       />,
-    );
-    await userEvent.click(
-      rowOf("Unit configurations").getByRole("button", { name: "Edit" }),
     );
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
 
@@ -275,9 +255,6 @@ describe("an edit of a published property — the fields", () => {
 
   it("lets a new unit type be added, renamed and removed, and selects it", async () => {
     panel(editing());
-    await userEvent.click(
-      rowOf("Unit configurations").getByRole("button", { name: "Edit" }),
-    );
 
     await userEvent.click(
       screen.getByRole("button", { name: /Add a unit type/ }),
@@ -321,14 +298,11 @@ describe("an edit of a published property — the fields", () => {
           },
         } as Partial<SubmissionDetail>)}
         editable
-        inReview={false}
+        reviewable={false}
         pending={false}
         onSave={onSave}
         onReview={() => {}}
       />,
-    );
-    await userEvent.click(
-      rowOf("Unit configurations").getByRole("button", { name: "Edit" }),
     );
 
     await userEvent.click(screen.getByRole("tab", { name: /Rooms/ }));
@@ -387,14 +361,11 @@ describe("an edit of a published property — the fields", () => {
           },
         } as Partial<SubmissionDetail>)}
         editable
-        inReview={false}
+        reviewable={false}
         pending={false}
         onSave={onSave}
         onReview={() => {}}
       />,
-    );
-    await userEvent.click(
-      rowOf("Unit configurations").getByRole("button", { name: "Edit" }),
     );
     await userEvent.click(screen.getByRole("tab", { name: /Rooms/ }));
 
@@ -413,9 +384,6 @@ describe("an edit of a published property — the fields", () => {
 
   it("says in words when a room has no measurement", async () => {
     panel(editing());
-    await userEvent.click(
-      rowOf("Unit configurations").getByRole("button", { name: "Edit" }),
-    );
     await userEvent.click(screen.getByRole("tab", { name: /Rooms/ }));
     await userEvent.click(screen.getByRole("button", { name: "Add a room" }));
     await userEvent.type(screen.getByLabelText("Rooms 1 name"), "Study");
@@ -444,27 +412,28 @@ describe("an edit of a published property — the fields", () => {
           },
         } as Partial<SubmissionDetail>)}
         editable
-        inReview={false}
+        reviewable={false}
         pending={false}
         onSave={onSave}
         onReview={() => {}}
       />,
     );
-    await userEvent.click(
-      rowOf("Amenities").getByRole("button", { name: "Edit" }),
-    );
     expect(screen.getByText(/Untick one to take it off/i)).toBeInTheDocument();
-    // Untick the published one, tick another, save.
+    // Untick the published one and tick another: it saves by itself a moment
+    // after the last change, with no Save button to press.
     await userEvent.click(screen.getByRole("checkbox", { name: /Gymnasium/ }));
     await userEvent.click(screen.getByRole("checkbox", { name: /Clubhouse/ }));
-    await userEvent.click(screen.getByRole("button", { name: "Save" }));
 
-    expect(onSave).toHaveBeenNthCalledWith(1, "property.amenities", [
-      "clubhouse",
-    ]);
-    expect(onSave).toHaveBeenNthCalledWith(2, "property.amenities_removed", [
-      "gymnasium",
-    ]);
+    await waitFor(() =>
+      expect(onSave).toHaveBeenNthCalledWith(1, "property.amenities", [
+        "clubhouse",
+      ]),
+    );
+    await waitFor(() =>
+      expect(onSave).toHaveBeenNthCalledWith(2, "property.amenities_removed", [
+        "gymnasium",
+      ]),
+    );
   });
 
   it("shows what will be removed when published, and hides the removal lists as rows", () => {
@@ -525,7 +494,8 @@ describe("a unit that slipped through", () => {
   };
 
   it("warns on the unit-type summary when the sizes look like metres saved as feet", () => {
-    panel(editing({ live: metres } as Partial<SubmissionDetail>));
+    // The read-only summary (a submission that can no longer be changed).
+    panel(editing({ live: metres } as Partial<SubmissionDetail>), false);
 
     expect(
       rowOf("Unit configurations").getByText(/Check the unit.*metres/),
@@ -534,9 +504,6 @@ describe("a unit that slipped through", () => {
 
   it("warns in the Rooms tab, and stops warning once the sizes are corrected", async () => {
     panel(editing({ live: metres } as Partial<SubmissionDetail>));
-    await userEvent.click(
-      rowOf("Unit configurations").getByRole("button", { name: "Edit" }),
-    );
     await userEvent.click(screen.getByRole("tab", { name: /Rooms/ }));
 
     expect(screen.getByText(/Check the unit./)).toBeInTheDocument();
@@ -725,7 +692,10 @@ describe("the tabs of the edit screen", () => {
   it("groups the screen into tabs instead of one long page", () => {
     renderScreen(editing());
 
-    const tabs = screen.getAllByRole("tab").map((tab) => tab.textContent);
+    // Each tab also shows how much of it is filled in ("4/4").
+    const tabs = screen
+      .getAllByRole("tab")
+      .map((tab) => tab.textContent?.replace(/\d+\/\d+.*$/, ""));
     expect(tabs).toEqual([
       "RERA",
       "Project",
@@ -741,7 +711,7 @@ describe("the tabs of the edit screen", () => {
     renderScreen(editing());
 
     expect(
-      screen.getByRole("tab", { name: "Project", selected: true }),
+      screen.getByRole("tab", { name: /^Project/, selected: true }),
     ).toBeInTheDocument();
     expect(screen.getByText("Property name")).toBeVisible();
     // Other tabs are in the page but hidden.
@@ -752,7 +722,7 @@ describe("the tabs of the edit screen", () => {
   it("switches tab and shows that tab's content", async () => {
     renderScreen(editing());
 
-    await userEvent.click(screen.getByRole("tab", { name: "Unit types" }));
+    await userEvent.click(screen.getByRole("tab", { name: /^Unit types/ }));
 
     expect(screen.getByText("Unit configurations")).toBeVisible();
     expect(screen.getByText("Property name")).not.toBeVisible();
@@ -760,27 +730,24 @@ describe("the tabs of the edit screen", () => {
 
   it("moves between tabs with the arrow keys", async () => {
     renderScreen(editing());
-    screen.getByRole("tab", { name: "Project" }).focus();
+    screen.getByRole("tab", { name: /^Project/ }).focus();
 
     await userEvent.keyboard("{ArrowRight}");
 
     expect(
-      screen.getByRole("tab", { name: "Developer", selected: true }),
+      screen.getByRole("tab", { name: /^Developer/, selected: true }),
     ).toBeInTheDocument();
   });
 
   it("keeps a half-edited field when another tab is opened and closed", async () => {
     renderScreen(editing());
-    await userEvent.click(
-      rowOf("Total units").getByRole("button", { name: "Edit" }),
-    );
-    await userEvent.clear(screen.getByRole("textbox"));
-    await userEvent.type(screen.getByRole("textbox"), "99");
+    await userEvent.clear(rowOf("Total units").getByRole("textbox"));
+    await userEvent.type(rowOf("Total units").getByRole("textbox"), "99");
 
-    await userEvent.click(screen.getByRole("tab", { name: "Amenities" }));
-    await userEvent.click(screen.getByRole("tab", { name: "Project" }));
+    await userEvent.click(screen.getByRole("tab", { name: /^Amenities/ }));
+    await userEvent.click(screen.getByRole("tab", { name: /^Project/ }));
 
-    expect(screen.getByRole("textbox")).toHaveValue("99");
+    expect(rowOf("Total units").getByRole("textbox")).toHaveValue("99");
   });
 
   it("counts values still to review on the tab that holds them", () => {

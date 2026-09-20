@@ -82,6 +82,7 @@ export function FieldEditor({
   onSave,
   onCancel,
   lockedVariantNames,
+  alwaysOpen = false,
 }: {
   field: EditableField;
   initial: unknown;
@@ -92,6 +93,8 @@ export function FieldEditor({
   error: string | null;
   onSave: (value: unknown) => void;
   onCancel: () => void;
+  /** Shown open all the time, so there is nothing to cancel out of. */
+  alwaysOpen?: boolean;
 }) {
   const [draft, setDraft] = React.useState<Draft>(() =>
     initialDraft(field.dataType, initial),
@@ -279,7 +282,8 @@ export function FieldEditor({
 
   return (
     <form onSubmit={submit} className="flex flex-col gap-4" noValidate>
-      {type === "amenity_key_array" || type === "unit_variant_array" ? (
+      {alwaysOpen ? null : type === "amenity_key_array" ||
+        type === "unit_variant_array" ? (
         <p className={labelClass}>{field.label}</p>
       ) : (
         <label htmlFor={id} className={labelClass}>
@@ -301,14 +305,16 @@ export function FieldEditor({
         <Button type="submit" disabled={pending}>
           {pending ? "Saving…" : "Save"}
         </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          onClick={onCancel}
-          disabled={pending}
-        >
-          Cancel
-        </Button>
+        {alwaysOpen ? null : (
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={onCancel}
+            disabled={pending}
+          >
+            Cancel
+          </Button>
+        )}
       </div>
     </form>
   );

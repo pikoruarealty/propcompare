@@ -32,7 +32,7 @@ export function MediaPanel({
   media,
   variantNames,
   editable,
-  inReview,
+  reviewable,
   pending,
   onReview,
   onUploaded,
@@ -47,7 +47,8 @@ export function MediaPanel({
   media: MediaItem[];
   variantNames: string[];
   editable: boolean;
-  inReview: boolean;
+  /** Pictures can be approved or rejected (any stage before publication). */
+  reviewable: boolean;
   pending: boolean;
   onReview: (
     mediaId: string,
@@ -266,7 +267,7 @@ export function MediaPanel({
                       : " · kept private"
                     : ""}
                 </p>
-                {inReview ? (
+                {reviewable ? (
                   <div className="flex flex-wrap gap-2 pt-1">
                     <Button
                       type="button"

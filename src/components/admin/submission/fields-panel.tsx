@@ -11,7 +11,7 @@ import type { SubmissionDetail } from "@/lib/submissions/queue";
 import { cn } from "@/lib/utils";
 import { isEditOnlyField } from "@/lib/submissions/edit-only-fields";
 import { ConfirmAction } from "./confirm-action";
-import { FieldEditor } from "./field-editor";
+import { InlineField } from "./inline-field";
 import { FieldValue } from "./field-value";
 import { displayReraValue } from "./rera-panel";
 
@@ -77,18 +77,21 @@ export function ConfirmAllBar({
 }
 
 /**
- * Every active contract field, grouped the way a listing reads. A field with a
- * candidate shows its value, confidence, the brochure pages it came from and its
- * review state; a field with none says "Not stated". While the draft is editable
- * each row can be edited or filled in with a typed input; while it is in review
- * each candidate can be confirmed or rejected.
+ * Every active contract field, grouped the way a listing reads. While the
+ * submission can still be worked on, each field is simply an input: type into it
+ * and it saves when you leave it. There is no Edit button to press first. Each row
+ * keeps its name on the left and its status on the right, on one line, so a tag
+ * never stacks on a button; a value read from a brochure that nobody has checked
+ * yet shows Confirm and Reject beside its status.
+ *
+ * Once a submission is published or rejected the fields are read-only.
  */
 export function FieldsPanel({
   submission,
   reraDifferences = {},
   only,
   editable,
-  inReview,
+  reviewable,
   pending,
   onSave,
   onReview,
@@ -99,8 +102,10 @@ export function FieldsPanel({
   only?: string;
   /** Fields whose held value differs from RERA's, keyed by field key. */
   reraDifferences?: Record<string, ReraComparisonItem>;
+  /** The submission can still be worked on (anything before published or rejected). */
   editable: boolean;
-  inReview: boolean;
+  /** Values can be confirmed or rejected (the same stages). */
+  reviewable: boolean;
   pending: boolean;
   /** Resolves to an error message, or null when saved. */
   onSave: (fieldKey: string, value: unknown) => Promise<string | null>;
@@ -108,8 +113,6 @@ export function FieldsPanel({
   /** Confirms every value still waiting for review. */
   onConfirmAll?: () => void;
 }) {
-  const [editing, setEditing] = React.useState<string | null>(null);
-  const [error, setError] = React.useState<string | null>(null);
   const groups = groupFields(submission.availableFields, submission.fields)
     .map(({ group, rows }) => ({
       group,
@@ -131,24 +134,24 @@ export function FieldsPanel({
       )
     : [];
 
-  const save = async (fieldKey: string, value: unknown) => {
+  /** Saves one field; resolves to an error message, or null. */
+  const save = async (
+    fieldKey: string,
+    value: unknown,
+  ): Promise<string | null> => {
     const message = await onSave(fieldKey, value);
-    if (message) {
-      setError(message);
-      return;
-    }
+    if (message) return message;
     // Taking something off a live listing is its own recorded change: what was
     // published and is no longer in the list is sent as a removal, so unticking
     // an amenity or removing a unit type really applies when this is published.
     if (submission.propertyId) {
-      let removalMessage: string | null = null;
       const published = submission.live[fieldKey];
       if (
         fieldKey === "property.amenities" &&
         Array.isArray(published) &&
         Array.isArray(value)
       ) {
-        removalMessage = await onSave(
+        return onSave(
           "property.amenities_removed",
           published.filter((key) => !value.includes(key)),
         );
@@ -163,20 +166,15 @@ export function FieldsPanel({
             String(variant.variantName ?? "").toLowerCase(),
           ),
         );
-        removalMessage = await onSave(
+        return onSave(
           "unit_variants_removed",
           (published as { variantName: string }[])
             .map((variant) => variant.variantName)
             .filter((name) => !kept.has(name.toLowerCase())),
         );
       }
-      if (removalMessage) {
-        setError(removalMessage);
-        return;
-      }
     }
-    setError(null);
-    setEditing(null);
+    return null;
   };
 
   const waiting = submission.fields.filter(
@@ -185,7 +183,7 @@ export function FieldsPanel({
 
   return (
     <div className="flex flex-col gap-8">
-      {inReview && onConfirmAll && only === undefined ? (
+      {reviewable && onConfirmAll && only === undefined ? (
         <ConfirmAllBar
           waiting={waiting}
           pending={pending}
@@ -210,104 +208,97 @@ export function FieldsPanel({
                 candidate &&
                 live !== undefined &&
                 JSON.stringify(live) !== JSON.stringify(candidate.value);
+              const waitingForCheck =
+                reviewable && candidate?.reviewStatus === "needs_review";
+              const removalKey = REMOVAL_FIELD[field.fieldKey];
+              const removed = removalKey
+                ? submission.fields.find((f) => f.fieldKey === removalKey)
+                    ?.value
+                : undefined;
+
               return (
-                <li
-                  key={field.fieldKey}
-                  className="grid gap-3 p-5 md:grid-cols-[14rem_1fr_auto]"
-                >
-                  <div>
-                    <p className="font-medium">{field.label}</p>
+                <li key={field.fieldKey} data-slot="field-row" className="p-5">
+                  <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+                    <label
+                      htmlFor={`field-${field.fieldKey}`}
+                      className="font-medium"
+                    >
+                      {field.label}
+                    </label>
+                    <div className="flex flex-wrap items-center justify-end gap-2">
+                      {!candidate && live !== undefined ? (
+                        <span
+                          data-slot="unchanged-mark"
+                          className="border-border text-muted-foreground rounded-full border px-2.5 py-1 text-xs font-semibold tracking-[0.06em] uppercase"
+                        >
+                          Unchanged
+                        </span>
+                      ) : null}
+                      {changed ? (
+                        <span
+                          data-slot="changed-mark"
+                          className="text-primary rounded-full bg-[color-mix(in_oklab,var(--color-terracotta)_10%,var(--color-chalk))] px-2.5 py-1 text-xs font-semibold tracking-[0.06em] uppercase"
+                        >
+                          Changed
+                        </span>
+                      ) : null}
+                      {candidate ? (
+                        <span
+                          className={cn(
+                            "rounded-full px-2.5 py-1 text-xs font-semibold tracking-[0.06em] uppercase",
+                            STATUS_TONE[candidate.reviewStatus] ??
+                              STATUS_TONE.needs_review,
+                          )}
+                        >
+                          {REVIEW_STATUS_LABEL[candidate.reviewStatus] ??
+                            candidate.reviewStatus}
+                        </span>
+                      ) : null}
+                      {waitingForCheck ? (
+                        <>
+                          <Button
+                            type="button"
+                            size="sm"
+                            disabled={pending}
+                            onClick={() =>
+                              onReview(field.fieldKey, "confirmed")
+                            }
+                          >
+                            Confirm
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            disabled={pending}
+                            onClick={() => onReview(field.fieldKey, "rejected")}
+                          >
+                            Reject
+                          </Button>
+                        </>
+                      ) : null}
+                    </div>
                   </div>
 
-                  <div className="min-w-0">
-                    {editing === field.fieldKey ? (
-                      <FieldEditor
+                  <div className="mt-3 min-w-0">
+                    {editable ? (
+                      <InlineField
+                        // A value that arrives from elsewhere (a RERA fetch, a
+                        // review) starts the input afresh.
+                        key={JSON.stringify(candidate?.value ?? live ?? null)}
                         field={field}
                         initial={candidate?.value ?? live}
-                        lockedVariantNames={publishedVariantNames}
                         lookups={submission.lookups}
-                        pending={pending}
-                        error={error}
-                        onSave={(value) => save(field.fieldKey, value)}
-                        onCancel={() => {
-                          setEditing(null);
-                          setError(null);
-                        }}
+                        lockedVariantNames={publishedVariantNames}
+                        disabled={pending}
+                        onSave={save}
                       />
                     ) : candidate ? (
-                      <>
-                        <FieldValue
-                          dataType={field.dataType}
-                          value={candidate.value}
-                          lookups={submission.lookups}
-                        />
-                        {changed &&
-                        (typeof live === "string" ||
-                          typeof live === "number") &&
-                        field.fieldKey !== "property.legal_entity_id" ? (
-                          <p
-                            data-slot="live-value"
-                            className="text-muted-foreground mt-2 text-xs"
-                          >
-                            Currently published:{" "}
-                            {displayReraValue(field.fieldKey, live)}
-                          </p>
-                        ) : null}
-                        {(() => {
-                          const removalKey = REMOVAL_FIELD[field.fieldKey];
-                          const removed = removalKey
-                            ? submission.fields.find(
-                                (f) => f.fieldKey === removalKey,
-                              )?.value
-                            : undefined;
-                          if (!Array.isArray(removed) || removed.length === 0) {
-                            return null;
-                          }
-                          const names = (removed as string[]).map(
-                            (key) =>
-                              submission.lookups.amenities.find(
-                                (amenity) => amenity.key === key,
-                              )?.label ?? key,
-                          );
-                          return (
-                            <p
-                              data-slot="removal-note"
-                              className="text-destructive mt-2 text-xs font-medium"
-                            >
-                              Removing when published: {names.join(", ")}
-                            </p>
-                          );
-                        })()}
-                        {reraDifferences[field.fieldKey] ? (
-                          <p
-                            data-slot="rera-difference"
-                            className="text-primary mt-2 text-xs font-medium"
-                          >
-                            Differs from RERA. RERA says{" "}
-                            {displayReraValue(
-                              field.fieldKey,
-                              reraDifferences[field.fieldKey].reraValue,
-                            )}
-                            .
-                          </p>
-                        ) : null}
-                        {candidate.confidence !== null ? (
-                          <p className="text-muted-foreground mt-2 text-xs">
-                            Read with{" "}
-                            {Math.round(Number(candidate.confidence) * 100)}%
-                            confidence
-                          </p>
-                        ) : null}
-                        {candidate.evidence.map((e) => (
-                          <p
-                            key={`${e.sourcePage}-${e.sourceSnippet}`}
-                            className="text-muted-foreground mt-1 text-xs"
-                          >
-                            Brochure page {e.sourcePage}
-                            {e.sourceSnippet ? ` — “${e.sourceSnippet}”` : ""}
-                          </p>
-                        ))}
-                      </>
+                      <FieldValue
+                        dataType={field.dataType}
+                        value={candidate.value}
+                        lookups={submission.lookups}
+                      />
                     ) : live !== undefined ? (
                       <FieldValue
                         dataType={field.dataType}
@@ -319,94 +310,72 @@ export function FieldsPanel({
                         Not stated
                       </span>
                     )}
-                    {editing === field.fieldKey && submission.propertyId ? (
+
+                    {changed &&
+                    (typeof live === "string" || typeof live === "number") &&
+                    field.fieldKey !== "property.legal_entity_id" ? (
+                      <p
+                        data-slot="live-value"
+                        className="text-muted-foreground mt-2 text-xs"
+                      >
+                        Currently published:{" "}
+                        {displayReraValue(field.fieldKey, live)}
+                      </p>
+                    ) : null}
+                    {Array.isArray(removed) && removed.length > 0 ? (
+                      <p
+                        data-slot="removal-note"
+                        className="text-destructive mt-2 text-xs font-medium"
+                      >
+                        Removing when published:{" "}
+                        {(removed as string[])
+                          .map(
+                            (key) =>
+                              submission.lookups.amenities.find(
+                                (amenity) => amenity.key === key,
+                              )?.label ?? key,
+                          )
+                          .join(", ")}
+                      </p>
+                    ) : null}
+                    {reraDifferences[field.fieldKey] ? (
+                      <p
+                        data-slot="rera-difference"
+                        className="text-primary mt-2 text-xs font-medium"
+                      >
+                        Differs from RERA. RERA says{" "}
+                        {displayReraValue(
+                          field.fieldKey,
+                          reraDifferences[field.fieldKey].reraValue,
+                        )}
+                        .
+                      </p>
+                    ) : null}
+                    {candidate && candidate.confidence !== null ? (
+                      <p className="text-muted-foreground mt-2 text-xs">
+                        Read with{" "}
+                        {Math.round(Number(candidate.confidence) * 100)}%
+                        confidence
+                      </p>
+                    ) : null}
+                    {candidate?.evidence.map((e) => (
+                      <p
+                        key={`${e.sourcePage}-${e.sourceSnippet}`}
+                        className="text-muted-foreground mt-1 text-xs"
+                      >
+                        Brochure page {e.sourcePage}
+                        {e.sourceSnippet ? ` — “${e.sourceSnippet}”` : ""}
+                      </p>
+                    ))}
+                    {editable &&
+                    submission.propertyId &&
+                    EDIT_NOTES[field.fieldKey] ? (
                       <p
                         data-slot="edit-note"
                         className="text-muted-foreground mt-3 text-xs"
                       >
-                        {EDIT_NOTES[field.fieldKey] ?? ""}
+                        {EDIT_NOTES[field.fieldKey]}
                       </p>
-                    ) : null}
-                  </div>
-
-                  <div className="flex flex-col items-start gap-2 md:items-end">
-                    {editing !== field.fieldKey &&
-                    !candidate &&
-                    live !== undefined ? (
-                      <span
-                        data-slot="unchanged-mark"
-                        className="border-border text-muted-foreground rounded-full border px-2.5 py-1 text-xs font-semibold tracking-[0.06em] uppercase"
-                      >
-                        Unchanged
-                      </span>
-                    ) : null}
-                    {editing !== field.fieldKey && changed ? (
-                      <span
-                        data-slot="changed-mark"
-                        className="text-primary rounded-full bg-[color-mix(in_oklab,var(--color-terracotta)_10%,var(--color-chalk))] px-2.5 py-1 text-xs font-semibold tracking-[0.06em] uppercase"
-                      >
-                        Changed
-                      </span>
-                    ) : null}
-                    {candidate ? (
-                      <span
-                        className={cn(
-                          "rounded-full px-2.5 py-1 text-xs font-semibold tracking-[0.06em] uppercase",
-                          STATUS_TONE[candidate.reviewStatus] ??
-                            STATUS_TONE.needs_review,
-                        )}
-                      >
-                        {REVIEW_STATUS_LABEL[candidate.reviewStatus] ??
-                          candidate.reviewStatus}
-                      </span>
-                    ) : null}
-                    {editing !== field.fieldKey ? (
-                      <div className="flex flex-wrap gap-2">
-                        {editable ? (
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            disabled={pending}
-                            onClick={() => {
-                              setError(null);
-                              setEditing(field.fieldKey);
-                            }}
-                          >
-                            {candidate || live !== undefined ? "Edit" : "Add"}
-                          </Button>
-                        ) : null}
-                        {inReview && candidate ? (
-                          <>
-                            <Button
-                              type="button"
-                              size="sm"
-                              disabled={
-                                pending ||
-                                candidate.reviewStatus === "confirmed"
-                              }
-                              onClick={() =>
-                                onReview(field.fieldKey, "confirmed")
-                              }
-                            >
-                              Confirm
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              disabled={
-                                pending || candidate.reviewStatus === "rejected"
-                              }
-                              onClick={() =>
-                                onReview(field.fieldKey, "rejected")
-                              }
-                            >
-                              Reject
-                            </Button>
-                          </>
-                        ) : null}
-                      </div>
                     ) : null}
                   </div>
                 </li>
