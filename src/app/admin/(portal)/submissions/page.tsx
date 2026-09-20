@@ -6,6 +6,7 @@ import { AdminPageHeader, AdminShell } from "@/components/admin/admin-shell";
 import { StatusPill } from "@/components/admin/status-pill";
 import { Button } from "@/components/ui/button";
 import { requirePortalRole } from "@/lib/accounts/session";
+import { listFailingReraChecks } from "@/lib/rera/health";
 import {
   isSubmissionStatus,
   listSubmissionQueue,
@@ -48,6 +49,7 @@ export default async function SubmissionQueuePage({
   const candidate = Array.isArray(rawStatus) ? rawStatus[0] : rawStatus;
   const status = isSubmissionStatus(candidate) ? candidate : undefined;
   const submissions = await listSubmissionQueue(db, { status });
+  const failingChecks = await listFailingReraChecks(db);
 
   return (
     <AdminShell active="submissions" email={session.email}>
@@ -65,6 +67,41 @@ export default async function SubmissionQueuePage({
           </div>
         }
       />
+
+      {failingChecks.length > 0 ? (
+        <section
+          role="alert"
+          data-slot="rera-failing"
+          className="border-destructive/40 mb-6 rounded-lg border p-4 text-sm"
+        >
+          <p className="text-destructive font-medium">
+            RERA checks are failing for {failingChecks.length}{" "}
+            {failingChecks.length === 1 ? "property" : "properties"}.
+          </p>
+          <ul className="mt-2 flex flex-col gap-1.5">
+            {failingChecks.map((check) => (
+              <li key={check.propertyId}>
+                {check.submissionId ? (
+                  <Link
+                    href={`/admin/submissions/${check.submissionId}`}
+                    className="text-primary underline underline-offset-4"
+                  >
+                    {check.propertyName}
+                  </Link>
+                ) : (
+                  check.propertyName
+                )}
+                : {check.consecutiveFailures} failed in a row
+                {check.lastError ? ` (${check.lastError})` : ""}; last worked{" "}
+                {check.lastSuccessAt
+                  ? dateFormat.format(check.lastSuccessAt)
+                  : "never"}
+                .
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
 
       <nav aria-label="Filter by status" className="mb-6 flex flex-wrap gap-2">
         {FILTERS.map(({ key, label }) => {
