@@ -44,6 +44,10 @@ export interface RegulatorRecord {
   /** Amenity-catalogue keys the regulator affirmatively declares. Only a positive
    * declaration is listed: a blank flag is not stated, never "not offered". */
   declaredAmenityKeys: string[];
+  /** The distinct carpet areas the regulator lists per block, with how many flats
+   * have each. Square metres, as printed; converted once, where they are offered.
+   * Flat numbers only: no price, status or person ever enters this. */
+  carpetGroups: RegulatorCarpetGroup[];
   /** The most recent quarterly filing the regulator lists, if any. */
   latestQuarter: RegulatorQuarter | null;
   /** The public page a person can open to check this record. */
@@ -51,6 +55,15 @@ export interface RegulatorRecord {
   fetchedAt: string;
   /** Pieces the regulator did not return this time; the record is still usable. */
   gaps: string[];
+}
+
+export interface RegulatorCarpetGroup {
+  /** The block letter from the flat number ("A" for "A-301"), or null. */
+  block: string | null;
+  carpetAreaSqm: number;
+  flatCount: number;
+  firstFlat: string;
+  lastFlat: string;
 }
 
 export interface RegulatorQuarter {

@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { Button } from "@/components/ui/button";
+import { describeGroup, type CarpetUnitRow } from "@/lib/rera/carpet-area";
 import type { ReraComparisonItem } from "@/lib/rera/mapping";
 import { writableItems } from "@/lib/rera/mapping";
 import type { ReraState } from "@/lib/rera/submission-fetch";
@@ -264,6 +265,12 @@ export function ReraPanel({
             </table>
           </div>
 
+          <CarpetAreaTable
+            item={rera.comparison.find(
+              (candidate) => candidate.fieldKey === "unit_variants",
+            )}
+          />
+
           <div className="flex flex-wrap items-center gap-4">
             {editable && writable.length > 0 ? (
               <ConfirmAction
@@ -291,6 +298,103 @@ export function ReraPanel({
         </p>
       )}
     </section>
+  );
+}
+
+const sqft = (value: number | null): string =>
+  value === null ? "—" : `${Math.round(value).toLocaleString("en-IN")} sq ft`;
+
+const signedPercent = (fraction: number): string =>
+  `${fraction > 0 ? "+" : fraction < 0 ? "−" : ""}${Math.abs(Math.round(fraction * 100))}%`;
+
+/**
+ * RERA's carpet areas beside each unit type, and the check of the room sizes
+ * against them. The RERA figure is offered for the admin to confirm; where a block
+ * has several areas the nearest is chosen and says so. The rooms total is a
+ * cross-check only (it is computed here, never stored): a gap of a few tens of
+ * percent is ordinary reading noise, but a far larger one usually means a wrong
+ * unit, so it is flagged.
+ */
+function CarpetAreaTable({ item }: { item: ReraComparisonItem | undefined }) {
+  const rows: CarpetUnitRow[] = item?.unitRows ?? [];
+  const groups = item?.carpetGroups ?? [];
+  if (!item || (rows.length === 0 && groups.length === 0)) return null;
+  return (
+    <div data-slot="carpet-areas" className="flex flex-col gap-3">
+      <h3 className="font-display text-xl">Carpet area by unit type</h3>
+      {groups.length > 0 ? (
+        <ul className="text-muted-foreground text-sm">
+          {groups.map((group) => (
+            <li key={`${group.block}-${group.carpetAreaSqm}`}>
+              RERA lists {describeGroup(group)}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {item.note ? (
+        <p className="text-muted-foreground text-sm">{item.note}</p>
+      ) : null}
+      {rows.length > 0 ? (
+        <div className="border-border bg-card overflow-x-auto rounded-lg border">
+          <table className="w-full text-left text-sm">
+            <thead>
+              <tr className="border-border border-b">
+                <th className={cn(labelClass, "p-3 font-semibold")}>
+                  Unit type
+                </th>
+                <th className={cn(labelClass, "p-3 font-semibold")}>We hold</th>
+                <th className={cn(labelClass, "p-3 font-semibold")}>
+                  RERA says
+                </th>
+                <th className={cn(labelClass, "p-3 font-semibold")}>
+                  Rooms add up to
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-border divide-y">
+              {rows.map((row) => (
+                <tr key={row.variantName} data-status={row.status}>
+                  <td className="p-3 font-medium">{row.variantName}</td>
+                  <td className="p-3">{sqft(row.currentSqft)}</td>
+                  <td className="p-3">
+                    {sqft(row.reraSqft)}
+                    {row.note ? (
+                      <p className="text-muted-foreground mt-1 max-w-sm text-xs">
+                        {row.note}
+                      </p>
+                    ) : null}
+                  </td>
+                  <td className="p-3">
+                    {sqft(row.roomsTotalSqft)}
+                    {row.roomsGap !== null ? (
+                      <p
+                        data-slot="rooms-gap"
+                        data-flagged={row.roomsGapFlagged}
+                        className={cn(
+                          "mt-1 max-w-xs text-xs",
+                          row.roomsGapFlagged
+                            ? "text-destructive font-medium"
+                            : "text-muted-foreground",
+                        )}
+                      >
+                        {row.roomsGapFlagged
+                          ? `Rooms add up to ${sqft(row.roomsTotalSqft)}; RERA says ${sqft(row.reraSqft)} (${signedPercent(row.roomsGap)}). Check the room sizes and their unit.`
+                          : `${signedPercent(row.roomsGap)} against RERA: ordinary reading difference.`}
+                      </p>
+                    ) : null}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
+      <p className="text-muted-foreground text-xs">
+        RERA reports carpet area in square metres, converted here once. Rooms
+        exclude balconies and the foyer. The rooms total is a check for this
+        screen only and is never saved.
+      </p>
+    </div>
   );
 }
 

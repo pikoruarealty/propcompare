@@ -1,4 +1,4 @@
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, isNull } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import {
   amenityCatalog,
@@ -142,7 +142,14 @@ export const loadLiveValues = async (
     .from(unitVariants)
     .leftJoin(bhkTypes, eq(bhkTypes.id, unitVariants.bhkTypeId))
     .leftJoin(layoutTypes, eq(layoutTypes.id, unitVariants.layoutTypeId))
-    .where(eq(unitVariants.propertyId, propertyId))
+    // A removed unit type is not live: listing it here would let an edit that
+    // rewrites the list bring it back.
+    .where(
+      and(
+        eq(unitVariants.propertyId, propertyId),
+        isNull(unitVariants.removedAt),
+      ),
+    )
     .orderBy(asc(unitVariants.variantName));
   if (variants.length > 0) {
     const areas = await database

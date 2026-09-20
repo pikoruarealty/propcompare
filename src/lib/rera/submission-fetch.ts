@@ -159,6 +159,14 @@ const withDefaults = (record: RegulatorRecord): RegulatorRecord => ({
   coveredParkingSlots: record.coveredParkingSlots ?? null,
   blocks: record.blocks ?? [],
   declaredAmenityKeys: record.declaredAmenityKeys ?? [],
+  carpetGroups: record.carpetGroups ?? [],
+  // A record fetched before carpet areas were read did not fail to list them: it
+  // never asked. Say so, so it is not mistaken for "RERA lists none".
+  gaps:
+    record.carpetGroups === undefined &&
+    !record.gaps.includes("flat carpet areas")
+      ? [...record.gaps, "flat carpet areas"]
+      : record.gaps,
 });
 
 export const isRegulatorRecord = (value: unknown): value is RegulatorRecord =>

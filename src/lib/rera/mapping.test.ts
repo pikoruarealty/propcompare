@@ -5,6 +5,7 @@ import {
   LEGAL_ENTITY_FIELD_KEY,
   matchLegalEntity,
   writableItems,
+  UNIT_VARIANTS_FIELD_KEY,
 } from "./mapping";
 import type { RegulatorRecord } from "./types";
 
@@ -28,6 +29,7 @@ const record: RegulatorRecord = {
   coveredParkingSlots: 246,
   blocks: [{ name: "A+B", slabs: 24 }],
   declaredAmenityKeys: [],
+  carpetGroups: [],
   latestQuarter: null,
   sourceUrl: "https://gujrera.gujarat.gov.in/",
   fetchedAt: "2026-09-20T06:00:00.000Z",
@@ -141,6 +143,7 @@ describe("compareWithRecord", () => {
       "property.possession_status",
       "property.amenities",
       LEGAL_ENTITY_FIELD_KEY,
+      "unit_variants",
     ]);
   });
 });
@@ -351,5 +354,71 @@ describe("amenities", () => {
       status: "same",
       proposedValue: null,
     });
+  });
+});
+
+describe("compareWithRecord — carpet area by unit type", () => {
+  const groups = [
+    {
+      block: "A",
+      carpetAreaSqm: 369.54,
+      flatCount: 36,
+      firstFlat: "A-301",
+      lastFlat: "A-2002",
+    },
+  ];
+  const carpet = (overrides: Partial<RegulatorRecord>, variants: unknown) =>
+    compareWithRecord(
+      { ...record, ...overrides },
+      { unit_variants: variants },
+      [],
+    ).find((entry) => entry.fieldKey === UNIT_VARIANTS_FIELD_KEY)!;
+
+  it("proposes the full unit-type list with RERA's carpet area and counts as writable", () => {
+    const item = carpet({ carpetGroups: groups }, [
+      { variantName: "Block A - 3rd", areas: [] },
+    ]);
+    expect(item.status).toBe("not_held");
+    expect(item.reraValue).toBe("1 carpet area listed");
+    expect(item.proposedValue).toEqual([
+      {
+        variantName: "Block A - 3rd",
+        areas: [{ basis: "carpet", areaSqft: 3977.7 }],
+      },
+    ]);
+    expect(writableItems([item]).map((entry) => entry.fieldKey)).toEqual([
+      UNIT_VARIANTS_FIELD_KEY,
+    ]);
+  });
+
+  it("is quiet when the held carpet areas already match", () => {
+    const item = carpet({ carpetGroups: groups }, [
+      {
+        variantName: "Block A - 3rd",
+        areas: [{ basis: "carpet", areaSqft: 3978 }],
+      },
+    ]);
+    expect(item.status).toBe("same");
+    expect(item.proposedValue).toBeNull();
+    expect(writableItems([item])).toEqual([]);
+  });
+
+  it("says RERA lists none only when the flat list was read and was empty", () => {
+    const read = carpet({ carpetGroups: [], gaps: [] }, []);
+    expect(read.status).toBe("rera_silent");
+    expect(read.note).toMatch(/lists no carpet areas/i);
+
+    const unread = carpet(
+      { carpetGroups: [], gaps: ["flat carpet areas"] },
+      [],
+    );
+    expect(unread.status).toBe("rera_silent");
+    expect(unread.note).toMatch(/not read on this fetch/i);
+  });
+
+  it("explains an empty unit-type list instead of proposing anything", () => {
+    const item = carpet({ carpetGroups: groups }, undefined);
+    expect(item.proposedValue).toBeNull();
+    expect(item.note).toMatch(/no unit types are entered yet/i);
   });
 });

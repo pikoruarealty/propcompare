@@ -1,4 +1,5 @@
-import type { RegulatorRecord } from "./types";
+import { compareCarpetAreas, type CarpetUnitRow } from "./carpet-area";
+import type { RegulatorCarpetGroup, RegulatorRecord } from "./types";
 
 /**
  * Where a regulator's record outranks a brochure or a hand entry.
@@ -9,10 +10,11 @@ import type { RegulatorRecord } from "./types";
  * blocking. Fields RERA does not cover (amenities, specifications, unit types,
  * pictures) are not here and are never touched by a fetch.
  *
- * Deliberately not mapped, because the meaning or unit is not settled: property
- * type (RERA's "Residential/Group Housing" is not our catalogue), city and
- * locality (RERA gives a district), and areas (RERA reports square metres; we hold
- * square feet). Add them here once agreed, not by inference.
+ * Deliberately not mapped, because the meaning is not settled: property type
+ * (RERA's "Residential/Group Housing" is not our catalogue), city and locality
+ * (RERA gives a district), and the project land area. Carpet area per unit type is
+ * mapped separately (`compareCarpetAreas`): RERA reports square metres and it is
+ * converted once, there. Add others here once agreed, not by inference.
  */
 export interface ReraFieldRule {
   fieldKey: string;
@@ -51,6 +53,7 @@ export const RERA_AUTHORITATIVE_FIELDS: ReraFieldRule[] = [
 export const LEGAL_ENTITY_FIELD_KEY = "property.legal_entity_id";
 export const POSSESSION_STATUS_FIELD_KEY = "property.possession_status";
 export const AMENITIES_FIELD_KEY = "property.amenities";
+export const UNIT_VARIANTS_FIELD_KEY = "unit_variants";
 
 /**
  * Possession status has no field on RERA, but declared progress does, so it is
@@ -83,12 +86,16 @@ export interface ReraComparisonItem {
   reraValue: string | number | null;
   /** What we would write. Null when nothing can be proposed for this field. A
    * list (the amenity set) for a set-valued field. */
-  proposedValue: string | number | string[] | null;
+  proposedValue: string | number | string[] | Record<string, unknown>[] | null;
   /** What we hold now, for display. */
   currentValue: string | number | null;
   status: ComparisonStatus;
   /** A plain-words remark, when the difference needs explaining. */
   note?: string;
+  /** For carpet area by unit type: one row per unit type held, and the distinct
+   * areas RERA lists, for the panel to show. */
+  unitRows?: CarpetUnitRow[];
+  carpetGroups?: RegulatorCarpetGroup[];
 }
 
 export interface LegalEntityChoice {
@@ -250,6 +257,48 @@ export const compareWithRecord = (
       record.promoterName !== null && matched === null
         ? "None of this developer's recorded legal entities matches this promoter name. Add it on the developer page, then fetch again."
         : undefined,
+  });
+
+  // Carpet area by unit type, from RERA's per-flat list. Written as the carpet
+  // basis of each matched unit type; nothing else about a type changes.
+  const carpet = compareCarpetAreas(
+    record.carpetGroups ?? [],
+    current[UNIT_VARIANTS_FIELD_KEY],
+  );
+  const rowStatuses = carpet.rows.map((row) => row.status);
+  const carpetStatus: ComparisonStatus = rowStatuses.includes("differs")
+    ? "differs"
+    : rowStatuses.includes("not_held")
+      ? "not_held"
+      : rowStatuses.includes("same")
+        ? "same"
+        : "rera_silent";
+  const withCarpet = carpet.rows.filter(
+    (row) => row.currentSqft !== null,
+  ).length;
+  items.push({
+    fieldKey: UNIT_VARIANTS_FIELD_KEY,
+    label: "Carpet area by unit type",
+    reraValue:
+      carpet.groups.length > 0
+        ? `${carpet.groups.length} carpet area${carpet.groups.length === 1 ? "" : "s"} listed`
+        : null,
+    proposedValue: carpet.proposedVariants,
+    currentValue:
+      carpet.rows.length > 0
+        ? `${withCarpet} of ${carpet.rows.length} unit types`
+        : null,
+    status: carpetStatus,
+    note:
+      carpet.groups.length === 0
+        ? (record.gaps ?? []).includes("flat carpet areas")
+          ? "RERA's flat list was not read on this fetch. Fetch again to get carpet areas."
+          : "RERA lists no carpet areas for this project."
+        : carpet.rows.length === 0
+          ? "No unit types are entered yet. Add them, then fetch again to match RERA's carpet areas."
+          : undefined,
+    unitRows: carpet.rows,
+    carpetGroups: carpet.groups,
   });
   return items;
 };

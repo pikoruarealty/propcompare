@@ -25,6 +25,7 @@ const record: RegulatorRecord = {
   coveredParkingSlots: 246,
   blocks: [{ name: "A+B", slabs: 24 }],
   declaredAmenityKeys: [],
+  carpetGroups: [],
   latestQuarter: {
     name: "Q-14",
     periodEndsOn: "2026-06-30",
@@ -294,5 +295,106 @@ describe("ReraPanel — a fetched record", () => {
     expect(document.body.textContent).not.toMatch(
       /₹|\bINR\b|\bcost\b|\bprice\b/i,
     );
+  });
+});
+
+describe("ReraPanel — carpet area by unit type", () => {
+  const row = (overrides: Record<string, unknown>) => ({
+    variantName: "Block A - 3rd Floor",
+    currentSqft: null,
+    reraSqft: 3977.7,
+    groupLabel: "Block A: 3,978 sq ft (36 flats, A-301 to A-2002)",
+    how: "nearest",
+    roomsTotalSqft: 3980,
+    roomsGap: 0,
+    roomsGapFlagged: false,
+    status: "not_held",
+    note: null,
+    ...overrides,
+  });
+  const carpetItem = (rows: unknown[]) =>
+    ({
+      fieldKey: "unit_variants",
+      label: "Carpet area by unit type",
+      reraValue: "2 carpet areas listed",
+      proposedValue: [],
+      currentValue: "0 of 2 unit types",
+      status: "not_held",
+      unitRows: rows,
+      carpetGroups: [
+        {
+          block: "A",
+          carpetAreaSqm: 369.54,
+          flatCount: 36,
+          firstFlat: "A-301",
+          lastFlat: "A-2002",
+        },
+      ],
+    }) as unknown as ReraState["comparison"][number];
+
+  it("lists RERA's carpet areas, and each unit type beside what we hold and its rooms total", () => {
+    renderPanel(
+      fetched([
+        carpetItem([
+          row({}),
+          row({
+            variantName: "Block A Penthouse",
+            reraSqft: 6163.31,
+            roomsTotalSqft: 5268,
+            roomsGap: -0.145,
+            note: "Chosen as the nearest of 2 carpet areas in this block: check it.",
+          }),
+        ]),
+      ]),
+    );
+
+    const section = document.querySelector('[data-slot="carpet-areas"]')!;
+    expect(section).toHaveTextContent(
+      "RERA lists Block A: 3,978 sq ft (36 flats, A-301 to A-2002)",
+    );
+    const rows = within(section as HTMLElement).getAllByRole("row");
+    expect(rows[1]).toHaveTextContent("Block A - 3rd Floor");
+    expect(rows[1]).toHaveTextContent("3,978 sq ft");
+    expect(rows[2]).toHaveTextContent("6,163 sq ft");
+    expect(rows[2]).toHaveTextContent("nearest of 2 carpet areas");
+    expect(section).toHaveTextContent("never saved");
+  });
+
+  it("shows ordinary reading noise quietly and flags a large gap in words", () => {
+    renderPanel(
+      fetched([
+        carpetItem([
+          row({ roomsGap: -0.066 }),
+          row({
+            variantName: "Block A - Odd",
+            roomsTotalSqft: 345,
+            roomsGap: -0.91,
+            roomsGapFlagged: true,
+          }),
+        ]),
+      ]),
+    );
+    const gaps = document.querySelectorAll('[data-slot="rooms-gap"]');
+    expect(gaps[0]).toHaveAttribute("data-flagged", "false");
+    expect(gaps[0]).toHaveTextContent(
+      "−7% against RERA: ordinary reading difference",
+    );
+    expect(gaps[1]).toHaveAttribute("data-flagged", "true");
+    expect(gaps[1]).toHaveTextContent(
+      "Rooms add up to 345 sq ft; RERA says 3,978 sq ft (−91%). Check the room sizes and their unit.",
+    );
+  });
+
+  it("shows nothing when the record has no carpet areas and no unit types", () => {
+    renderPanel(
+      fetched([
+        {
+          ...carpetItem([]),
+          carpetGroups: [],
+          status: "rera_silent",
+        } as ReraState["comparison"][number],
+      ]),
+    );
+    expect(document.querySelector('[data-slot="carpet-areas"]')).toBeNull();
   });
 });

@@ -183,3 +183,54 @@ export const quartersResponse = {
     },
   ],
 };
+
+/** One row of the per-flat list, with the price, buyer and phone fields the real
+ * response carries (poisoned) beside the three the adapter may read. */
+const flatRow = (flatNo: string, carpetArea: number) => ({
+  id: POISON,
+  formThreePk: 417562,
+  blockId: null,
+  blockName: "A+B",
+  usage: "Residential",
+  flatNo,
+  carpetArea,
+  areaofExBalcony: 194.42,
+  status: "BOOKED",
+  unitConsideration: String(POISON),
+  receivedAmount: String(POISON),
+  balanceAmount: String(POISON),
+  encumbranceStatus: "Created",
+  dateOfAgrrement: "2025-01-01",
+  alloteeName: POISON_TEXT,
+  typeofKYC: "PAN",
+  kycId: POISON_TEXT,
+  redeveloped: null,
+  mobileNumber: POISON_TEXT,
+  createdOn: "2025-01-01",
+  kycid: POISON_TEXT,
+});
+
+/** Kimana's flat list as GujRERA shows it: 76 flats in four carpet areas (square
+ * metres): block A 36 at 369.54 and 2 at 572.59, block B 36 at 277.26 and 2 at
+ * 463.24. Flat numbers run from floor 3 to floor 20, then the two penthouses. */
+export const flatListResponse = (() => {
+  const rows: ReturnType<typeof flatRow>[] = [];
+  for (const [block, typical, penthouse] of [
+    ["A", 369.54, 572.59],
+    ["B", 277.26, 463.24],
+  ] as const) {
+    for (let floor = 3; floor <= 20; floor += 1) {
+      rows.push(flatRow(`${block}-${floor}01`, typical));
+      rows.push(flatRow(`${block}-${floor}02`, typical));
+    }
+    rows.push(flatRow(`${block}-2101`, penthouse));
+    rows.push(flatRow(`${block}-2102`, penthouse));
+  }
+  return {
+    status: 200,
+    masssge: "Success",
+    errKey: null,
+    code: null,
+    data: rows,
+  };
+})();

@@ -4,6 +4,7 @@ import {
   amarisDetailResponse,
   amarisFormOneResponse,
   detailResponse,
+  flatListResponse,
   formOneResponse,
   inventoryResponse,
   kimanaSearchHit,
@@ -30,6 +31,7 @@ const fakeSite = (overrides: Routes = {}) => {
     "/formthree/public/get-fromthree-a-details-byid/417562": inventoryResponse,
     "/quarter/public/getprojectqtrs/17929": quartersResponse,
     "/formone/public/getfrom-one-byformone-id/278008": formOneResponse,
+    "/formthree/public/get-inv-details-for-view": flatListResponse,
     ...overrides,
   };
   const fetchImpl: FetchLike = async (url, init) => {
@@ -136,7 +138,8 @@ describe("GujRERA adapter — a full record", () => {
       await adapterFor(site).lookupByRegistrationNumber(KIMANA_NUMBER);
 
     expect(record.blocks).toEqual([]);
-    expect(record.gaps).toEqual(["blocks"]);
+    // No block names means no way to ask for the flat list either.
+    expect(record.gaps).toEqual(["blocks", "flat carpet areas"]);
   });
 
   it("reports the latest quarterly filing, ignoring other filing kinds", async () => {
@@ -189,7 +192,9 @@ describe("GujRERA adapter — a full record", () => {
     });
     await adapter.lookupByRegistrationNumber(KIMANA_NUMBER);
 
-    expect(seen.length).toBe(7);
+    // Search, detail, summary, progress, unit count, blocks, one flat list per
+    // block, and quarterly filings.
+    expect(seen.length).toBe(8);
     for (const init of seen) {
       const headers = init.headers as Record<string, string>;
       expect(headers["User-Agent"]).toMatch(/^PropCompare-RERA-Check/);
@@ -368,5 +373,130 @@ describe("GujRERA adapter — when the site misbehaves", () => {
       await adapterFor(site).lookupByRegistrationNumber(KIMANA_NUMBER);
 
     expect(record.totalUnits).toBeNull();
+  });
+});
+
+describe("GujRERA adapter — carpet area per flat", () => {
+  it("reduces the 76-flat list to four carpet areas, in square metres, per block", async () => {
+    const site = fakeSite();
+    const record =
+      await adapterFor(site).lookupByRegistrationNumber(KIMANA_NUMBER);
+
+    expect(record.carpetGroups).toEqual([
+      {
+        block: "A",
+        carpetAreaSqm: 369.54,
+        flatCount: 36,
+        firstFlat: "A-301",
+        lastFlat: "A-2002",
+      },
+      {
+        block: "A",
+        carpetAreaSqm: 572.59,
+        flatCount: 2,
+        firstFlat: "A-2101",
+        lastFlat: "A-2102",
+      },
+      {
+        block: "B",
+        carpetAreaSqm: 277.26,
+        flatCount: 36,
+        firstFlat: "B-301",
+        lastFlat: "B-2002",
+      },
+      {
+        block: "B",
+        carpetAreaSqm: 463.24,
+        flatCount: 2,
+        firstFlat: "B-2101",
+        lastFlat: "B-2102",
+      },
+    ]);
+    expect(record.gaps).toEqual([]);
+    // Asked for by the registration's own block name and form-three id.
+    const call = site.calls.find((entry) =>
+      entry.url.endsWith("/get-inv-details-for-view"),
+    );
+    expect(call?.method).toBe("POST");
+    expect(JSON.parse(call?.body ?? "{}")).toEqual({
+      blockName: "A+B",
+      formThreeId: 417562,
+    });
+  });
+
+  it("asks for the flat list once per block the registration lists", async () => {
+    const site = fakeSite({
+      "/project_reg/public/getproject-details/17929": amarisDetailResponse,
+      "/formone/public/getfrom-one-byformone-id/278008": amarisFormOneResponse,
+    });
+    await adapterFor(site).lookupByRegistrationNumber(KIMANA_NUMBER);
+    const asked = site.calls
+      .filter((call) => call.url.endsWith("/get-inv-details-for-view"))
+      .map((call) => JSON.parse(call.body ?? "{}").blockName);
+    expect(asked).toEqual(["A", "B", "C", "D"]);
+  });
+
+  it("keeps no price, buyer name, phone number or per-flat row from the list", async () => {
+    const record =
+      await adapterFor(fakeSite()).lookupByRegistrationNumber(KIMANA_NUMBER);
+    const stored = JSON.stringify(record);
+    expect(stored).not.toContain(String(POISON));
+    expect(stored).not.toContain(POISON_TEXT);
+    expect(stored).not.toMatch(
+      /allottee|mobile|unitConsideration|received|balance|BOOKED/i,
+    );
+    expect(stored).not.toContain("A-305");
+  });
+
+  it("reports a failed flat list as a gap and leaves the rest of the record intact", async () => {
+    const record = await adapterFor(
+      fakeSite({
+        "/formthree/public/get-inv-details-for-view": () =>
+          new Response("boom", { status: 500 }),
+      }),
+    ).lookupByRegistrationNumber(KIMANA_NUMBER);
+
+    expect(record.carpetGroups).toEqual([]);
+    expect(record.gaps).toEqual(["flat carpet areas"]);
+    expect(record.totalUnits).toBe(76);
+  });
+
+  it("reports an empty list as a gap, not as 'no carpet areas'", async () => {
+    const record = await adapterFor(
+      fakeSite({
+        "/formthree/public/get-inv-details-for-view": {
+          status: 200,
+          data: [],
+        },
+      }),
+    ).lookupByRegistrationNumber(KIMANA_NUMBER);
+    expect(record.carpetGroups).toEqual([]);
+    expect(record.gaps).toEqual(["flat carpet areas"]);
+  });
+
+  it("skips commercial flats and impossible areas", async () => {
+    const rows = flatListResponse.data.slice(0, 3);
+    const record = await adapterFor(
+      fakeSite({
+        "/formthree/public/get-inv-details-for-view": {
+          status: 200,
+          data: [
+            { ...rows[0], usage: "Commercial" },
+            { ...rows[1], carpetArea: 90000 },
+            { ...rows[2], carpetArea: 0 },
+            { ...rows[0], flatNo: "A-999" },
+          ],
+        },
+      }),
+    ).lookupByRegistrationNumber(KIMANA_NUMBER);
+    expect(record.carpetGroups).toEqual([
+      {
+        block: "A",
+        carpetAreaSqm: 369.54,
+        flatCount: 1,
+        firstFlat: "A-999",
+        lastFlat: "A-999",
+      },
+    ]);
   });
 });

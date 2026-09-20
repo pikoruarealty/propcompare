@@ -1,3 +1,4 @@
+import { groupCarpetAreas, type FlatCarpetArea } from "./carpet-area";
 import { legacyTlsFetch } from "./legacy-tls-fetch";
 import {
   RegulatorError,
@@ -19,6 +20,9 @@ import {
  *    cost, the detail carries land and construction cost, and the form-three
  *    inventory lists a price for every unit. This adapter reads only the named
  *    fields it needs and never stores a raw response.
+ *  - The per-flat list carries a price, a buyer's name and a mobile number for every
+ *    flat. Only the flat number, carpet area and usage are read from it, and only
+ *    the distinct carpet areas per block are kept, never a per-flat row.
  *  - Requests are polite: one at a time, a short pause between them, a timeout, and
  *    a plain user agent.
  */
@@ -129,6 +133,46 @@ export const createGujreraAdapter = (
       gaps.push(label);
       return null;
     }
+  };
+
+  /** Distinct carpet areas per block from the per-flat list. A failure or an empty
+   * list is a recorded gap, never "no carpet areas". */
+  const readCarpetGroups = async (
+    formThreeId: string,
+    blocks: RegulatorRecord["blocks"],
+    gaps: string[],
+  ) => {
+    if (!/^\d{1,12}$/.test(formThreeId) || blocks.length === 0) {
+      gaps.push("flat carpet areas");
+      return [];
+    }
+    const flats: FlatCarpetArea[] = [];
+    let failed = false;
+    for (const block of blocks) {
+      await sleep(delayMs);
+      try {
+        const body = asRecord(
+          await request("/formthree/public/get-inv-details-for-view", {
+            body: { blockName: block.name, formThreeId: Number(formThreeId) },
+          }),
+        );
+        for (const row of Array.isArray(body?.data) ? body.data : []) {
+          const flat = asRecord(row);
+          const flatNumber = text(flat?.flatNo);
+          const carpetAreaSqm = positive(flat?.carpetArea);
+          const usage = text(flat?.usage);
+          if (!flatNumber || carpetAreaSqm === null) continue;
+          // A flat is at least a few square metres and never a hectare.
+          if (carpetAreaSqm < 1 || carpetAreaSqm > 5000) continue;
+          if (usage !== null && !/resid/i.test(usage)) continue;
+          flats.push({ flatNumber, carpetAreaSqm });
+        }
+      } catch {
+        failed = true;
+      }
+    }
+    if (failed || flats.length === 0) gaps.push("flat carpet areas");
+    return groupCarpetAreas(flats);
   };
 
   return {
@@ -280,6 +324,11 @@ export const createGujreraAdapter = (
         });
       }
 
+      // Carpet area of every flat, in square metres, reduced to the distinct areas
+      // per block. Read from the same list the site's own inventory tab shows;
+      // only the named fields are taken.
+      const carpetGroups = await readCarpetGroups(formThreeId, blocks, gaps);
+
       const developments = Array.isArray(detail?.dev) ? detail.dev : [];
       const swimmingPool = developments.some(
         (entry) => asRecord(entry)?.sewSwimCapacityFlag === "Yes",
@@ -319,6 +368,7 @@ export const createGujreraAdapter = (
         ),
         coveredParkingSlots: positive(project.coveredParking),
         blocks,
+        carpetGroups,
         declaredAmenityKeys: swimmingPool ? ["swimming_pool"] : [],
         latestQuarter: latestQuarter(quarters?.data),
         sourceUrl: `${ORIGIN}/#/search-glob/gloabl-data`,

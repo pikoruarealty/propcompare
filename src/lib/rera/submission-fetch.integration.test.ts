@@ -190,6 +190,7 @@ describe("fetching a RERA record for a submission", () => {
       "not_held", // possession status (derived)
       "rera_silent", // amenities: Kimana declares no pool
       "not_held", // promoter
+      "rera_silent", // carpet area by unit type: a draft with no unit types yet
     ]);
     // Looking is not applying.
     expect(await fieldsOf(submissionId)).toEqual({});
