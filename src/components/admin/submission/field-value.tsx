@@ -1,4 +1,5 @@
 import type { SubmissionLookups } from "@/lib/submissions/queue";
+import { dimensionsWarning } from "@/lib/units/measurements";
 import {
   AREA_BASIS_LABEL,
   POSSESSION_STATUS_LABEL,
@@ -87,6 +88,21 @@ export function FieldValue({
                 {v.dimensions.rooms.length === 1 ? "" : "s"} recorded
               </p>
             ) : null}
+            {(() => {
+              const warning = dimensionsWarning([
+                ...(v.dimensions?.rooms ?? []),
+                ...(v.dimensions?.balconies ?? []),
+              ]);
+              return warning ? (
+                <p
+                  role="note"
+                  data-slot="unit-warning"
+                  className="text-destructive mt-1 text-xs font-medium"
+                >
+                  Check the unit: {warning}
+                </p>
+              ) : null;
+            })()}
           </li>
         ))}
       </ul>

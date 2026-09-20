@@ -90,10 +90,11 @@ const assertValidRange = (params: BudgetRangeMatchParams): void => {
  * value and the resolved figure never exists as a value this function could
  * return.
  *
- * A property is published by virtue of having a `properties` row — see the
- * note on that in `src/lib/properties/queries.ts` — so no separate status
- * filter is needed here either; `unit_variants` only ever contains rows for
- * properties that reached that state through the publish transaction.
+ * A removed unit type (`removed_at` set) never matches. Whether the property
+ * itself is listed is NOT decided here: this role reads only the tables the
+ * matcher needs, not `properties`, and `matchPublishedProperties` applies the
+ * listing check to the ids this returns. `unit_variants` only ever contains rows
+ * for properties that reached publication through the publish transaction.
  */
 export const matchPropertiesByBudgetRange = async (
   db: ServiceDb,
@@ -123,6 +124,11 @@ export const matchPropertiesByBudgetRange = async (
     .where(
       and(
         isNull(unitPriceHistory.effectiveTo),
+        // A removed unit type never matches. Whether the PROPERTY is listed is not
+        // checked here: this role can read only the tables the matcher needs, not
+        // `properties`. `matchPublishedProperties` applies `isListed` to the ids
+        // this returns, so an unlisted property never reaches a buyer.
+        isNull(unitVariants.removedAt),
         sql`${unitPriceHistory.priceInr} >= (${params.minInr}::numeric * 0.80)`,
         upperBound,
       ),

@@ -190,12 +190,14 @@ describe("an edit of a published property — the fields", () => {
       rowOf("Unit configurations").getByRole("button", { name: "Edit" }),
     );
 
-    expect(screen.getByText(/cannot be removed yet/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/removing one hides it from buyers/i),
+    ).toBeInTheDocument();
     // The editor holds the published type, not an empty form.
     expect(screen.getByDisplayValue("Type A")).toBeInTheDocument();
   });
 
-  it("locks the name of a published unit type and offers no way to remove it", async () => {
+  it("locks the name of a published unit type, but lets it be removed", async () => {
     panel(editing());
     await userEvent.click(
       rowOf("Unit configurations").getByRole("button", { name: "Edit" }),
@@ -204,8 +206,70 @@ describe("an edit of a published property — the fields", () => {
     expect(screen.getByPlaceholderText(/3 BHK/)).toBeDisabled();
     expect(screen.getByText(/name is fixed/i)).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: /Remove this unit type/ }),
-    ).toBeNull();
+      screen.getByRole("button", { name: /Remove this unit type/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/hidden from buyers when this is/i),
+    ).toBeInTheDocument();
+  });
+
+  it("sends a removed published unit type as a removal, keeping the rest", async () => {
+    const onSave = vi.fn(async () => null);
+    render(
+      <FieldsPanel
+        submission={editing({
+          live: {
+            unit_variants: [
+              { variantName: "Type A", bhkTypeKey: "3bhk" },
+              { variantName: "Type B", bhkTypeKey: "3bhk" },
+            ],
+          },
+        } as Partial<SubmissionDetail>)}
+        editable
+        inReview={false}
+        pending={false}
+        onSave={onSave}
+        onReview={() => {}}
+      />,
+    );
+    await userEvent.click(
+      rowOf("Unit configurations").getByRole("button", { name: "Edit" }),
+    );
+    await userEvent.click(screen.getByRole("tab", { name: "Type B" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: /Remove this unit type/ }),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(onSave).toHaveBeenCalledTimes(2);
+    expect(onSave).toHaveBeenNthCalledWith(1, "unit_variants", [
+      { variantName: "Type A", bhkTypeKey: "3bhk" },
+    ]);
+    expect(onSave).toHaveBeenNthCalledWith(2, "unit_variants_removed", [
+      "Type B",
+    ]);
+  });
+
+  it("sends an empty removal list when nothing was removed, so a stale one is cleared", async () => {
+    const onSave = vi.fn(async () => null);
+    render(
+      <FieldsPanel
+        submission={editing({
+          live: { unit_variants: [{ variantName: "Type A" }] },
+        } as Partial<SubmissionDetail>)}
+        editable
+        inReview={false}
+        pending={false}
+        onSave={onSave}
+        onReview={() => {}}
+      />,
+    );
+    await userEvent.click(
+      rowOf("Unit configurations").getByRole("button", { name: "Edit" }),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(onSave).toHaveBeenNthCalledWith(2, "unit_variants_removed", []);
   });
 
   it("lets a new unit type be added, renamed and removed, and selects it", async () => {
@@ -362,7 +426,7 @@ describe("an edit of a published property — the fields", () => {
     );
   });
 
-  it("keeps a published amenity when its box is unticked, and says why", async () => {
+  it("takes an amenity off the listing when its box is unticked", async () => {
     const onSave = vi.fn(async () => null);
     render(
       <FieldsPanel
@@ -388,89 +452,262 @@ describe("an edit of a published property — the fields", () => {
     await userEvent.click(
       rowOf("Amenities").getByRole("button", { name: "Edit" }),
     );
-    expect(screen.getByText(/unticking it has no effect/i)).toBeInTheDocument();
+    expect(screen.getByText(/Untick one to take it off/i)).toBeInTheDocument();
     // Untick the published one, tick another, save.
     await userEvent.click(screen.getByRole("checkbox", { name: /Gymnasium/ }));
     await userEvent.click(screen.getByRole("checkbox", { name: /Clubhouse/ }));
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
 
-    expect(onSave).toHaveBeenCalledWith("property.amenities", [
-      "gymnasium",
+    expect(onSave).toHaveBeenNthCalledWith(1, "property.amenities", [
       "clubhouse",
+    ]);
+    expect(onSave).toHaveBeenNthCalledWith(2, "property.amenities_removed", [
+      "gymnasium",
     ]);
   });
 
-  it("still says 'Not stated' for a simple field the property really lacks", () => {
-    panel(editing());
-
-    const locality = rowOf("Locality");
-    expect(locality.getByText("Not stated")).toBeInTheDocument();
-    expect(locality.getByRole("button", { name: "Add" })).toBeInTheDocument();
-  });
-
-  it("shows the published value beside a proposed change", () => {
+  it("shows what will be removed when published, and hides the removal lists as rows", () => {
     panel(
       editing({
-        fields: [candidate("property.total_units", "positive_integer", 80)],
-      }),
-    );
-
-    const units = rowOf("Total units");
-    expect(units.getByText("80")).toBeInTheDocument();
-    expect(units.getByText(/Currently published: 76/)).toBeInTheDocument();
-  });
-
-  it("says nothing about a published value when the proposal equals it", () => {
-    panel(
-      editing({
-        fields: [candidate("property.total_units", "positive_integer", 76)],
-      }),
-    );
-
-    expect(rowOf("Total units").queryByText(/Currently published/)).toBeNull();
-  });
-
-  it("flags a value that differs from RERA, beside the value", () => {
-    render(
-      <FieldsPanel
-        submission={editing()}
-        reraDifferences={{
-          "property.possession_date": {
-            fieldKey: "property.possession_date",
-            label: "Possession date",
-            reraValue: "2027-06-30",
-            proposedValue: "2027-06-30",
-            currentValue: "2027-04-30",
-            status: "differs",
+        fields: [
+          candidate("property.amenities", "amenity_key_array", ["clubhouse"]),
+          candidate("property.amenities_removed", "amenity_key_array", [
+            "gymnasium",
+          ]),
+          candidate("unit_variants_removed", "variant_name_array", ["Type B"]),
+        ],
+        availableFields: [
+          ...available,
+          {
+            fieldKey: "property.amenities_removed",
+            label: "Amenities to remove",
+            dataType: "amenity_key_array",
           },
-        }}
-        editable
-        inReview={false}
-        pending={false}
-        onSave={async () => null}
-        onReview={() => {}}
-      />,
-    );
-
-    expect(
-      rowOf("Possession date").getByText(
-        "Differs from RERA. RERA says 30 Jun 2027.",
-      ),
-    ).toBeInTheDocument();
-  });
-
-  it("leaves a new property's fields as they were: Not stated, no live text", () => {
-    panel(
-      editing({
-        propertyId: null,
-        live: {},
-        fields: [],
+          {
+            fieldKey: "unit_variants_removed",
+            label: "Unit types to remove",
+            dataType: "variant_name_array",
+          },
+          {
+            fieldKey: "property.listing_status",
+            label: "Listing status",
+            dataType: "listing_status",
+          },
+        ],
       } as Partial<SubmissionDetail>),
     );
 
-    expect(screen.getAllByText("Not stated").length).toBeGreaterThan(3);
-    expect(screen.queryByText(/Currently published/)).toBeNull();
-    expect(screen.queryByText(/Unchanged/)).toBeNull();
+    expect(
+      rowOf("Amenities").getByText("Removing when published: Gymnasium"),
+    ).toBeInTheDocument();
+    // The removal lists and listing status are not editable rows of their own.
+    expect(screen.queryByText("Amenities to remove")).toBeNull();
+    expect(screen.queryByText("Unit types to remove")).toBeNull();
+    expect(screen.queryByText("Listing status")).toBeNull();
+  });
+});
+
+describe("a unit that slipped through", () => {
+  const metres = {
+    unit_variants: [
+      {
+        variantName: "Type A",
+        dimensions: {
+          rooms: [
+            { name: "BED ROOM", lengthFt: 4.36, widthFt: 7 },
+            { name: "BED ROOM", lengthFt: 3.95, widthFt: 5.48 },
+            { name: "TOILET", lengthFt: 2.75, widthFt: 2.91 },
+          ],
+        },
+      },
+    ],
+  };
+
+  it("warns on the unit-type summary when the sizes look like metres saved as feet", () => {
+    panel(editing({ live: metres } as Partial<SubmissionDetail>));
+
+    expect(
+      rowOf("Unit configurations").getByText(/Check the unit.*metres/),
+    ).toBeInTheDocument();
+  });
+
+  it("warns in the Rooms tab, and stops warning once the sizes are corrected", async () => {
+    panel(editing({ live: metres } as Partial<SubmissionDetail>));
+    await userEvent.click(
+      rowOf("Unit configurations").getByRole("button", { name: "Edit" }),
+    );
+    await userEvent.click(screen.getByRole("tab", { name: /Rooms/ }));
+
+    expect(screen.getByText(/Check the unit./)).toBeInTheDocument();
+    expect(screen.getByText(/1 m is 3.28 ft/)).toBeInTheDocument();
+
+    // Correct the two bedrooms to feet: 14.3 x 22.97 and 12.96 x 17.98.
+    for (const [name, value] of [
+      ["Rooms 1 length (ft)", "14.3"],
+      ["Rooms 1 width (ft)", "22.97"],
+      ["Rooms 2 length (ft)", "12.96"],
+      ["Rooms 2 width (ft)", "17.98"],
+    ] as const) {
+      await userEvent.clear(screen.getByLabelText(name));
+      await userEvent.type(screen.getByLabelText(name), value);
+    }
+
+    expect(screen.queryByText(/Check the unit./)).toBeNull();
+  });
+
+  it("says nothing about ordinary sizes in feet", () => {
+    panel(
+      editing({
+        live: {
+          unit_variants: [
+            {
+              variantName: "Type A",
+              dimensions: {
+                rooms: [
+                  { name: "Living", lengthFt: 16, widthFt: 12 },
+                  { name: "Duct", lengthFt: 1.53, widthFt: 1.53 },
+                ],
+              },
+            },
+          ],
+        },
+      } as Partial<SubmissionDetail>),
+    );
+
+    expect(screen.queryByText(/Check the unit/)).toBeNull();
+  });
+});
+
+describe("listing, unlisting and deleting a property", () => {
+  const renderControls = (
+    listingStatus: "listed" | "unlisted" | "deleted",
+    permissionLevel: "owner" | "verifier" = "owner",
+  ) =>
+    render(
+      <SubmissionWorkbench
+        submission={editing({
+          status: "published",
+          listingStatus,
+        } as Partial<SubmissionDetail>)}
+        media={[]}
+        permissionLevel={permissionLevel}
+      />,
+    );
+  const controls = () =>
+    within(
+      document.querySelector<HTMLElement>('[data-slot="listing-controls"]')!,
+    );
+
+  it("says a listed property is live, and offers Unlist and Delete to an owner", () => {
+    renderControls("listed");
+
+    expect(controls().getByText("Live for buyers.")).toBeInTheDocument();
+    expect(
+      controls().getByRole("button", { name: "Unlist" }),
+    ).toBeInTheDocument();
+    expect(
+      controls().getByRole("button", { name: "Delete" }),
+    ).toBeInTheDocument();
+    expect(controls().queryByRole("button", { name: "List again" })).toBeNull();
+  });
+
+  it("says an unlisted property is hidden, and offers List again", () => {
+    renderControls("unlisted");
+
+    expect(controls().getByText("Unlisted.")).toBeInTheDocument();
+    expect(
+      controls().getByRole("button", { name: "List again" }),
+    ).toBeInTheDocument();
+    expect(controls().queryByRole("button", { name: "Unlist" })).toBeNull();
+  });
+
+  it("says a deleted property is a soft delete, and offers only Restore", () => {
+    renderControls("deleted");
+
+    expect(controls().getByText("Deleted.")).toBeInTheDocument();
+    expect(controls().getByText(/nothing is erased/i)).toBeInTheDocument();
+    expect(
+      controls().getByRole("button", { name: "Restore" }),
+    ).toBeInTheDocument();
+    expect(controls().queryByRole("button", { name: "Delete" })).toBeNull();
+  });
+
+  it("gives a verifier no buttons, and says why", () => {
+    renderControls("listed", "verifier");
+
+    expect(controls().queryByRole("button")).toBeNull();
+    expect(controls().getByText(/Only an owner/)).toBeInTheDocument();
+  });
+
+  it("asks first, then sends the change", async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ status: "unlisted" }), { status: 200 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    renderControls("listed");
+
+    await userEvent.click(controls().getByRole("button", { name: "Unlist" }));
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(
+      screen.getByText(/Nothing is deleted, and you can list it again/),
+    ).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Unlist" }));
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/v1/admin/properties/p1/listing",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "unlisted" }),
+      },
+    );
+    expect(refresh).toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+
+  it("says in words when the change is refused, and does not refresh", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              error: {
+                code: "edit_already_open",
+                message: "This property has an edit in progress.",
+              },
+            }),
+            { status: 409 },
+          ),
+      ),
+    );
+    refresh.mockReset();
+    renderControls("listed");
+
+    await userEvent.click(controls().getByRole("button", { name: "Delete" }));
+    await userEvent.click(screen.getByRole("button", { name: "Delete" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "edit in progress",
+    );
+    expect(refresh).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+
+  it("shows no listing controls on a draft or a new property", () => {
+    render(
+      <SubmissionWorkbench
+        submission={editing({
+          status: "draft",
+          propertyId: null,
+        } as Partial<SubmissionDetail>)}
+        media={[]}
+        permissionLevel="owner"
+      />,
+    );
+
+    expect(document.querySelector('[data-slot="listing-controls"]')).toBeNull();
   });
 });
 

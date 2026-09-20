@@ -177,6 +177,17 @@ export default async function SubmissionQueuePage({
                   </td>
                   <td className="px-6 py-5">
                     <StatusPill status={submission.status} />
+                    {submission.listingStatus === "unlisted" ||
+                    submission.listingStatus === "deleted" ? (
+                      <p
+                        data-slot="listing-note"
+                        className="text-destructive mt-1.5 text-xs font-medium"
+                      >
+                        {submission.listingStatus === "deleted"
+                          ? "Deleted: hidden from buyers"
+                          : "Unlisted: hidden from buyers"}
+                      </p>
+                    ) : null}
                     {submission.isEdit && submission.status !== "published" ? (
                       <p
                         data-slot="live-note"

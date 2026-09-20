@@ -9,6 +9,7 @@ import {
 import type { ReraComparisonItem } from "@/lib/rera/mapping";
 import type { SubmissionDetail } from "@/lib/submissions/queue";
 import { cn } from "@/lib/utils";
+import { isAdminOnlyField } from "@/lib/submissions/admin-only-fields";
 import { ConfirmAction } from "./confirm-action";
 import { FieldEditor } from "./field-editor";
 import { FieldValue } from "./field-value";
@@ -17,9 +18,15 @@ import { displayReraValue } from "./rera-panel";
 /** What an edit of a live property can and cannot do with a whole-set field. */
 const EDIT_NOTES: Record<string, string> = {
   unit_variants:
-    "Starts from the published unit types. Change a type's details, areas and room dimensions in its tabs. Published types keep their names and cannot be removed yet; you can add new types.",
+    "Starts from the published unit types. Change a type's details, areas and room dimensions in its tabs. A published type keeps its name; removing one hides it from buyers when this is published, and adding it again with the same name brings it back.",
   "property.amenities":
-    "Starts from the published amenities. You can add amenities. Removing a published one is not supported yet, so unticking it has no effect.",
+    "Starts from the published amenities. Untick one to take it off the listing when this is published (it then reads as not stated).",
+};
+
+/** The admin-only field that carries what an edit takes off each whole-set field. */
+const REMOVAL_FIELD: Record<string, string> = {
+  "property.amenities": "property.amenities_removed",
+  unit_variants: "unit_variants_removed",
 };
 
 const STATUS_TONE: Record<string, string> = {
@@ -103,10 +110,16 @@ export function FieldsPanel({
 }) {
   const [editing, setEditing] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
-  const groups = groupFields(
-    submission.availableFields,
-    submission.fields,
-  ).filter(({ group }) => only === undefined || group.key === only);
+  const groups = groupFields(submission.availableFields, submission.fields)
+    .map(({ group, rows }) => ({
+      group,
+      // Removal lists and listing status are shown as notes and buttons, not rows.
+      rows: rows.filter(({ field }) => !isAdminOnlyField(field.fieldKey)),
+    }))
+    .filter(
+      ({ group, rows }) =>
+        rows.length > 0 && (only === undefined || group.key === only),
+    );
 
   /** Unit types already published, whose names are fixed in an edit. */
   const publishedVariantNames = submission.propertyId
@@ -119,21 +132,51 @@ export function FieldsPanel({
     : [];
 
   const save = async (fieldKey: string, value: unknown) => {
-    // An edit only adds amenities (see the note on the field), so what is already
-    // published is always kept: unticking one would otherwise look saved but do
-    // nothing.
-    const published = submission.propertyId
-      ? submission.live["property.amenities"]
-      : undefined;
-    const next =
-      fieldKey === "property.amenities" &&
-      Array.isArray(published) &&
-      Array.isArray(value)
-        ? [...new Set([...published, ...value])]
-        : value;
-    const message = await onSave(fieldKey, next);
-    setError(message);
-    if (!message) setEditing(null);
+    const message = await onSave(fieldKey, value);
+    if (message) {
+      setError(message);
+      return;
+    }
+    // Taking something off a live listing is its own recorded change: what was
+    // published and is no longer in the list is sent as a removal, so unticking
+    // an amenity or removing a unit type really applies when this is published.
+    if (submission.propertyId) {
+      let removalMessage: string | null = null;
+      const published = submission.live[fieldKey];
+      if (
+        fieldKey === "property.amenities" &&
+        Array.isArray(published) &&
+        Array.isArray(value)
+      ) {
+        removalMessage = await onSave(
+          "property.amenities_removed",
+          published.filter((key) => !value.includes(key)),
+        );
+      }
+      if (
+        fieldKey === "unit_variants" &&
+        Array.isArray(published) &&
+        Array.isArray(value)
+      ) {
+        const kept = new Set(
+          (value as { variantName?: string }[]).map((variant) =>
+            String(variant.variantName ?? "").toLowerCase(),
+          ),
+        );
+        removalMessage = await onSave(
+          "unit_variants_removed",
+          (published as { variantName: string }[])
+            .map((variant) => variant.variantName)
+            .filter((name) => !kept.has(name.toLowerCase())),
+        );
+      }
+      if (removalMessage) {
+        setError(removalMessage);
+        return;
+      }
+    }
+    setError(null);
+    setEditing(null);
   };
 
   const waiting = submission.fields.filter(
@@ -210,6 +253,31 @@ export function FieldsPanel({
                             {displayReraValue(field.fieldKey, live)}
                           </p>
                         ) : null}
+                        {(() => {
+                          const removalKey = REMOVAL_FIELD[field.fieldKey];
+                          const removed = removalKey
+                            ? submission.fields.find(
+                                (f) => f.fieldKey === removalKey,
+                              )?.value
+                            : undefined;
+                          if (!Array.isArray(removed) || removed.length === 0) {
+                            return null;
+                          }
+                          const names = (removed as string[]).map(
+                            (key) =>
+                              submission.lookups.amenities.find(
+                                (amenity) => amenity.key === key,
+                              )?.label ?? key,
+                          );
+                          return (
+                            <p
+                              data-slot="removal-note"
+                              className="text-destructive mt-2 text-xs font-medium"
+                            >
+                              Removing when published: {names.join(", ")}
+                            </p>
+                          );
+                        })()}
                         {reraDifferences[field.fieldKey] ? (
                           <p
                             data-slot="rera-difference"

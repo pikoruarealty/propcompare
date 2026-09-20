@@ -16,7 +16,8 @@
  * in `./queries`: `@/db` throws at import time without `DATABASE_URL`.
  */
 
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
+import { isListed, variantIsLive } from "./visibility";
 import {
   amenityCatalog,
   bhkTypes,
@@ -60,11 +61,13 @@ export const listFilterOptions = async (db: ReadDb): Promise<FilterOptions> => {
       db
         .selectDistinct({ city: properties.city })
         .from(properties)
+        .where(isListed)
         .orderBy(asc(properties.city)),
 
       db
         .selectDistinct({ locality: properties.locality })
         .from(properties)
+        .where(isListed)
         .orderBy(asc(properties.locality)),
 
       db
@@ -74,12 +77,15 @@ export const listFilterOptions = async (db: ReadDb): Promise<FilterOptions> => {
           propertyTypes,
           eq(propertyTypes.id, properties.propertyTypeId),
         )
+        .where(isListed)
         .orderBy(asc(propertyTypes.label)),
 
       db
         .selectDistinct({ key: bhkTypes.key, label: bhkTypes.label })
         .from(unitVariants)
         .innerJoin(bhkTypes, eq(bhkTypes.id, unitVariants.bhkTypeId))
+        .innerJoin(properties, eq(properties.id, unitVariants.propertyId))
+        .where(and(isListed, variantIsLive))
         .orderBy(asc(bhkTypes.key)),
 
       // Only `available` amenities, matching how the filter itself matches:
@@ -96,7 +102,8 @@ export const listFilterOptions = async (db: ReadDb): Promise<FilterOptions> => {
           amenityCatalog,
           eq(amenityCatalog.id, propertyAmenities.amenityCatalogId),
         )
-        .where(eq(propertyAmenities.status, "available"))
+        .innerJoin(properties, eq(properties.id, propertyAmenities.propertyId))
+        .where(and(eq(propertyAmenities.status, "available"), isListed))
         .orderBy(asc(amenityCatalog.label)),
     ]);
 

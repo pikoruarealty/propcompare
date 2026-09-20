@@ -1,3 +1,5 @@
+import { LISTING_STATUSES } from "./admin-only-fields";
+
 export class SubmissionPayloadError extends Error {
   constructor(message: string) {
     super(message);
@@ -332,6 +334,40 @@ const validateFieldValue = (
   }
   if (dataType === "unit_variant_array") {
     return readUnitVariants(value, path, lookups);
+  }
+  if (dataType === "variant_name_array") {
+    if (
+      !Array.isArray(value) ||
+      value.some(
+        (item) =>
+          typeof item !== "string" ||
+          item.trim() === "" ||
+          item.trim().length > 200,
+      )
+    ) {
+      throw new SubmissionPayloadError(
+        `${path} must be a list of unit type names`,
+      );
+    }
+    const names = value.map((item) => (item as string).trim());
+    if (
+      new Set(names.map((name) => name.toLocaleLowerCase())).size !==
+      names.length
+    ) {
+      throw new SubmissionPayloadError(`${path} names a unit type twice`);
+    }
+    return names;
+  }
+  if (dataType === "listing_status") {
+    if (
+      typeof value !== "string" ||
+      !(LISTING_STATUSES as readonly string[]).includes(value)
+    ) {
+      throw new SubmissionPayloadError(
+        `${path} must be listed, unlisted or deleted`,
+      );
+    }
+    return value;
   }
   throw new SubmissionPayloadError(
     `unsupported active field data type for ${fieldKey}: ${dataType}`,

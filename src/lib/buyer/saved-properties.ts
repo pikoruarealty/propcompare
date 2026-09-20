@@ -1,4 +1,5 @@
 import { and, desc, eq, sql } from "drizzle-orm";
+import { isListed } from "@/lib/properties/visibility";
 import { properties, savedProperties } from "@/db/schema/catalog";
 import { loadPropertySummariesByIds } from "@/lib/properties/queries";
 import type {
@@ -69,7 +70,7 @@ export const saveProperty = async (
   const [property] = await db
     .select({ id: properties.id })
     .from(properties)
-    .where(eq(properties.id, propertyId));
+    .where(and(eq(properties.id, propertyId), isListed));
   if (!property) return null;
 
   const [existing] = await db

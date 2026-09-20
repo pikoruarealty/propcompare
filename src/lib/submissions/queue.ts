@@ -60,6 +60,8 @@ export interface SubmissionQueueItem {
   /** The published property this submission created or changes; null until a new
    * property is first published. */
   propertyId: string | null;
+  /** Whether buyers can see the property this submission belongs to; null until it exists. */
+  listingStatus: "listed" | "unlisted" | "deleted" | null;
   /** True for a change to a property that already existed: created bound to it,
    * or published after the property's first publication. */
   isEdit: boolean;
@@ -88,6 +90,7 @@ export const listSubmissionQueue = async (
     .select({
       id: propertySubmissions.id,
       propertyId: propertySubmissions.propertyId,
+      listingStatus: properties.listingStatus,
       isEdit: sql<boolean>`(${propertySubmissions.propertyId} is not null and (${propertySubmissions.status} <> 'published' or exists (select 1 from ${propertyRevisions} r where r.property_id = ${propertySubmissions.propertyId} and r.submission_id <> ${propertySubmissions.id} and r.published_at < (select r2.published_at from ${propertyRevisions} r2 where r2.submission_id = ${propertySubmissions.id} limit 1))))`,
       status: propertySubmissions.status,
       source: propertySubmissions.source,

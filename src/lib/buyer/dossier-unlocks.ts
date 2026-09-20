@@ -1,4 +1,5 @@
 import { and, eq } from "drizzle-orm";
+import { isListed } from "@/lib/properties/visibility";
 import { dossierUnlocks, properties } from "@/db/schema/catalog";
 import type { AppDb, DossierUnlockResult } from "./types";
 
@@ -17,7 +18,8 @@ export const unlockDossier = async (
   const [property] = await db
     .select({ id: properties.id })
     .from(properties)
-    .where(eq(properties.id, propertyId));
+    // An unlisted or deleted property cannot be unlocked: to a buyer it is gone.
+    .where(and(eq(properties.id, propertyId), isListed));
   if (!property) return null;
 
   const [existing] = await db

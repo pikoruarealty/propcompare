@@ -1,4 +1,4 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   amenityCatalog,
@@ -295,6 +295,17 @@ const runPublish = async (
     // new property the field is a proposal (a brochure prints a legal name, not
     // necessarily the brand) and the canonical developer already chosen stands.
     const developerName = getStringField("developer.name")?.trim();
+    // Admin changes to a live listing (schema v8); never present on a new property.
+    const listingStatusValue = getStringField("property.listing_status") as
+      PropertyInsert["listingStatus"] | undefined;
+    const removedAmenityKeys = Array.isArray(
+      payload["property.amenities_removed"],
+    )
+      ? (payload["property.amenities_removed"] as string[])
+      : [];
+    const removedVariantNames = Array.isArray(payload["unit_variants_removed"])
+      ? (payload["unit_variants_removed"] as string[])
+      : [];
     const reraRegistrationNumber = getStringField(
       "property.rera_registration_number",
     );
@@ -305,6 +316,17 @@ const runPublish = async (
 
     const isNewProperty = submission.propertyId === null;
     let propertyId: string;
+
+    if (
+      isNewProperty &&
+      (removedAmenityKeys.length > 0 ||
+        removedVariantNames.length > 0 ||
+        (listingStatusValue !== undefined && listingStatusValue !== "listed"))
+    ) {
+      throw new SubmissionPublishError(
+        "removals and listing status apply to an existing property only",
+      );
+    }
 
     if (isNewProperty) {
       if (!name || !propertyTypeKey || !city || !locality) {
@@ -368,6 +390,10 @@ const runPublish = async (
       if (totalFloors !== undefined) updateColumns.totalFloors = totalFloors;
       if (totalUnits !== undefined) updateColumns.totalUnits = totalUnits;
       if (plotArea !== undefined) updateColumns.plotAreaSqft = String(plotArea);
+      if (listingStatusValue !== undefined) {
+        updateColumns.listingStatus = listingStatusValue;
+        updateColumns.listingStatusChangedAt = new Date();
+      }
       if (legalEntityId !== undefined) {
         const [owner] = await tx
           .select({ developerId: properties.developerId })
@@ -473,6 +499,8 @@ const runPublish = async (
                   ? unitVariants.unitsPerFloor
                   : variantValues.unitsPerFloor,
               dimensions: variantValues.dimensions,
+              // Listing a type again brings back one that was removed.
+              removedAt: null,
             },
           })
           .returning({ id: unitVariants.id });
@@ -492,6 +520,37 @@ const runPublish = async (
                 set: { areaSqft: areaValues.areaSqft },
               });
           }
+        }
+      }
+    }
+
+    if (removedVariantNames.length > 0) {
+      const kept = new Set(
+        (submittedVariants ?? []).map((variant) =>
+          variant.variantName.toLocaleLowerCase(),
+        ),
+      );
+      for (const name of removedVariantNames) {
+        if (kept.has(name.toLocaleLowerCase())) {
+          throw new SubmissionPublishError(
+            `unit type "${name}" is both kept and removed`,
+          );
+        }
+        const removed = await tx
+          .update(unitVariants)
+          .set({ removedAt: new Date() })
+          .where(
+            and(
+              eq(unitVariants.propertyId, propertyId),
+              sql`lower(${unitVariants.variantName}) = ${name.toLocaleLowerCase()}`,
+              isNull(unitVariants.removedAt),
+            ),
+          )
+          .returning({ id: unitVariants.id });
+        if (removed.length === 0) {
+          throw new SubmissionPublishError(
+            `unit type "${name}" is not a live unit type of this property`,
+          );
         }
       }
     }
@@ -579,6 +638,33 @@ const runPublish = async (
             ],
             set: { status: "available" },
           });
+      }
+    }
+
+    if (removedAmenityKeys.length > 0) {
+      const clash = removedAmenityKeys.find((key) =>
+        selectedAmenityKeys.has(key),
+      );
+      if (clash !== undefined) {
+        throw new SubmissionPublishError(
+          `amenity "${clash}" is both kept and removed`,
+        );
+      }
+      const ids = lookups.amenityCatalogRows
+        .filter((row) => removedAmenityKeys.includes(row.key))
+        .map((row) => row.id);
+      if (ids.length > 0) {
+        // Back to not stated; one marked "not offered" stays as it is.
+        await tx
+          .update(propertyAmenities)
+          .set({ status: "not_stated" })
+          .where(
+            and(
+              eq(propertyAmenities.propertyId, propertyId),
+              eq(propertyAmenities.status, "available"),
+              inArray(propertyAmenities.amenityCatalogId, ids),
+            ),
+          );
       }
     }
 

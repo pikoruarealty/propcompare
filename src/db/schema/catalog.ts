@@ -99,6 +99,12 @@ export const reraFetchJobStatus = pgEnum("rera_fetch_job_status", [
   "succeeded",
   "failed",
 ]);
+/** Whether buyers can see a property (schema v8). Soft only: nothing is deleted. */
+export const listingStatus = pgEnum("listing_status", [
+  "listed",
+  "unlisted",
+  "deleted",
+]);
 export const developerUserStatus = pgEnum("developer_user_status", [
   "active",
   "invited",
@@ -318,6 +324,13 @@ export const properties = pgTable(
       "rera_construction_progress_percent",
     ),
     description: text("description"),
+    /** Buyers see only `listed` properties. `unlisted` is reversible and hidden;
+     * `deleted` is a soft delete (also hidden, restorable by an owner). Changed
+     * only by the publish transaction (schema v8). */
+    listingStatus: listingStatus("listing_status").default("listed").notNull(),
+    listingStatusChangedAt: timestamp("listing_status_changed_at", {
+      withTimezone: true,
+    }),
     ...timestamps(),
   },
   (table) => [
@@ -343,6 +356,10 @@ export const unitVariants = pgTable(
     totalUnitsOfVariant: integer("total_units_of_variant"),
     unitsPerFloor: integer("units_per_floor"),
     dimensions: jsonb("dimensions"),
+    /** Set when an admin removes the unit type. It is hidden from buyers but the
+     * row stays (price history and saved comparisons point at it); a later edit
+     * that lists the type again clears it (schema v8). */
+    removedAt: timestamp("removed_at", { withTimezone: true }),
     ...timestamps(),
   },
   (table) => [

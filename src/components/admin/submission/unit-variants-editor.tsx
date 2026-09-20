@@ -11,6 +11,7 @@ import {
   type RoomForm,
   type VariantForm,
 } from "@/lib/submissions/variant-form";
+import { dimensionsWarning } from "@/lib/units/measurements";
 import { inputClass, labelClass } from "./form-classes";
 
 const BASES = [
@@ -29,9 +30,10 @@ const roomCount = (variant: VariantForm): number =>
  * blank is simply not stated.
  *
  * A unit type that is already published is identified by its name, so its name is
- * locked (renaming would add a second type) and it cannot be removed here: the
- * publisher updates types and never deletes them. A type added in this edit can be
- * renamed and removed freely.
+ * locked (renaming would add a second type). Removing one is allowed: it is sent
+ * as a removal and hidden from buyers when published (never deleted, so its price
+ * history and saved comparisons stay intact), and adding a type with the same name
+ * later brings it back. A type added in this edit can be renamed and removed freely.
  */
 export function UnitVariantsEditor({
   value,
@@ -122,7 +124,7 @@ export function UnitVariantsEditor({
                 </TabsContent>
               </Tabs>
 
-              {locked ? null : (
+              {
                 <div className="mt-6">
                   <Button
                     type="button"
@@ -135,8 +137,15 @@ export function UnitVariantsEditor({
                   >
                     <Trash2 /> Remove this unit type
                   </Button>
+                  {locked ? (
+                    <p className="text-muted-foreground mt-1 text-xs">
+                      Already published: it is hidden from buyers when this is
+                      published, and can be brought back by adding a type with
+                      the same name.
+                    </p>
+                  ) : null}
                 </div>
-              )}
+              }
             </TabsContent>
           );
         })}
@@ -182,7 +191,7 @@ function DetailsTab({
         {locked ? (
           <span className="text-muted-foreground text-xs">
             Already published, so its name is fixed. Everything else can be
-            changed.
+            changed, or the whole type removed.
           </span>
         ) : null}
       </label>
@@ -329,8 +338,31 @@ function RoomsTab({
   variant: VariantForm;
   update: Update;
 }) {
+  // Judged on what is in the form now, so it updates as a person corrects it.
+  const number = (text: string) => {
+    const n = Number(text);
+    return text.trim() !== "" && Number.isFinite(n) && n > 0 ? n : undefined;
+  };
+  const warning = dimensionsWarning(
+    [...variant.rooms, ...variant.balconies].map((room) => ({
+      name: room.name || "A room",
+      lengthFt: number(room.lengthFt),
+      widthFt: number(room.widthFt),
+      areaSqft: number(room.areaSqft),
+    })),
+  );
   return (
     <div className="flex flex-col gap-6" data-slot="rooms-tab">
+      {warning ? (
+        <p
+          role="note"
+          data-slot="unit-warning"
+          className="border-destructive/40 text-destructive rounded-md border p-3 text-sm"
+        >
+          Check the unit. {warning} Sizes here are in feet and square feet;
+          convert from metres (1 m is 3.28 ft) before saving.
+        </p>
+      ) : null}
       <RoomRows
         title="Rooms"
         addLabel="Add a room"

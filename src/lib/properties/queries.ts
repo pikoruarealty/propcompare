@@ -1,4 +1,5 @@
 import { and, asc, desc, eq, inArray, sql, type SQL } from "drizzle-orm";
+import { isListed, mediaIsLive, variantIsLive } from "./visibility";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import {
   amenityCatalog,
@@ -60,6 +61,7 @@ export const bhkFilter = (key: string): SQL =>
     join ${bhkTypes} on ${bhkTypes.id} = ${unitVariants.bhkTypeId}
     where ${unitVariants.propertyId} = ${properties.id}
       and ${bhkTypes.key} = ${key}
+      and ${unitVariants.removedAt} is null
   )`;
 
 /**
@@ -78,7 +80,7 @@ const amenityFilter = (key: string): SQL =>
   )`;
 
 const buildListConditions = (params: ListPropertiesParams): SQL[] => {
-  const conditions: SQL[] = [];
+  const conditions: SQL[] = [isListed];
 
   if (params.city !== undefined) {
     conditions.push(eq(properties.city, params.city));
@@ -122,7 +124,7 @@ export const loadBhkTypesByProperty = async (
     })
     .from(unitVariants)
     .innerJoin(bhkTypes, eq(bhkTypes.id, unitVariants.bhkTypeId))
-    .where(inArray(unitVariants.propertyId, propertyIds))
+    .where(and(inArray(unitVariants.propertyId, propertyIds), variantIsLive))
     .orderBy(asc(bhkTypes.key));
 
   for (const row of rows) {
@@ -164,6 +166,7 @@ export const loadPrimaryMediaByProperty = async (
       and(
         inArray(propertyMedia.propertyId, propertyIds),
         inArray(propertyMedia.mediaType, ["photo", "floor_plan"]),
+        mediaIsLive,
       ),
     )
     .orderBy(
@@ -219,7 +222,7 @@ export const loadPropertySummariesByIds = async (
     .from(properties)
     .innerJoin(propertyTypes, eq(propertyTypes.id, properties.propertyTypeId))
     .innerJoin(developers, eq(developers.id, properties.developerId))
-    .where(inArray(properties.id, propertyIds));
+    .where(and(inArray(properties.id, propertyIds), isListed));
 
   const [bhkByProperty, primaryMediaByProperty] = await Promise.all([
     loadBhkTypesByProperty(db, propertyIds),
@@ -332,8 +335,31 @@ export const getPublishedMediaObjectPath = async (
   const [row] = await db
     .select({ gcsPath: propertyMedia.gcsPath })
     .from(propertyMedia)
-    .where(eq(propertyMedia.id, id));
+    .innerJoin(properties, eq(properties.id, propertyMedia.propertyId))
+    .where(and(eq(propertyMedia.id, id), isListed, mediaIsLive));
   return row?.gcsPath ?? null;
+};
+
+/**
+ * The published media row's object path and kind, for serving a picture or a
+ * thumbnail of it; `null` when no such row exists.
+ */
+export const getPublishedMediaForServing = async (
+  db: ReadDb,
+  id: string,
+): Promise<{
+  gcsPath: string;
+  mediaType: "photo" | "floor_plan" | "video" | "brochure_pdf";
+} | null> => {
+  const [row] = await db
+    .select({
+      gcsPath: propertyMedia.gcsPath,
+      mediaType: propertyMedia.mediaType,
+    })
+    .from(propertyMedia)
+    .innerJoin(properties, eq(properties.id, propertyMedia.propertyId))
+    .where(and(eq(propertyMedia.id, id), isListed, mediaIsLive));
+  return row ?? null;
 };
 
 /**
@@ -379,7 +405,7 @@ export const getPublishedPropertyBySlug = async (
     .from(properties)
     .innerJoin(propertyTypes, eq(propertyTypes.id, properties.propertyTypeId))
     .innerJoin(developers, eq(developers.id, properties.developerId))
-    .where(eq(properties.slug, slug));
+    .where(and(eq(properties.slug, slug), isListed));
 
   if (!row) return null;
 
@@ -397,7 +423,7 @@ export const getPublishedPropertyBySlug = async (
     .from(unitVariants)
     .leftJoin(bhkTypes, eq(bhkTypes.id, unitVariants.bhkTypeId))
     .leftJoin(layoutTypes, eq(layoutTypes.id, unitVariants.layoutTypeId))
-    .where(eq(unitVariants.propertyId, row.id))
+    .where(and(eq(unitVariants.propertyId, row.id), variantIsLive))
     .orderBy(asc(unitVariants.createdAt), asc(unitVariants.variantName));
 
   const variantIds = variantRows.map((variant) => variant.id);
@@ -474,7 +500,7 @@ export const getPublishedPropertyBySlug = async (
       attribution: propertyMedia.attribution,
     })
     .from(propertyMedia)
-    .where(eq(propertyMedia.propertyId, row.id))
+    .where(and(eq(propertyMedia.propertyId, row.id), mediaIsLive))
     .orderBy(asc(propertyMedia.displayOrder));
 
   const unitVariantList: DossierUnitVariant[] = variantRows.map((variant) => ({

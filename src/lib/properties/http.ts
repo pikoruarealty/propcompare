@@ -66,6 +66,7 @@ export type ApiErrorCode =
   | "member_not_found"
   | "cannot_publish"
   | "edit_already_open"
+  | "no_change"
   | "job_not_found"
   | "nothing_to_apply"
   | "duplicate_number"

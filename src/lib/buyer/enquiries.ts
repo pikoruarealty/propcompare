@@ -1,4 +1,5 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
+import { isListed, variantIsLive } from "@/lib/properties/visibility";
 import { enquiries, properties, unitVariants } from "@/db/schema/catalog";
 import type { AppDb, EnquiryResult } from "./types";
 
@@ -23,14 +24,14 @@ export const createEnquiry = async (
   const [property] = await db
     .select({ id: properties.id })
     .from(properties)
-    .where(eq(properties.id, input.propertyId));
+    .where(and(eq(properties.id, input.propertyId), isListed));
   if (!property) return { reason: "property_not_found" };
 
   if (input.unitVariantId !== undefined) {
     const [variant] = await db
       .select({ id: unitVariants.id, propertyId: unitVariants.propertyId })
       .from(unitVariants)
-      .where(eq(unitVariants.id, input.unitVariantId));
+      .where(and(eq(unitVariants.id, input.unitVariantId), variantIsLive));
     if (!variant || variant.propertyId !== input.propertyId) {
       return { reason: "unit_variant_not_found" };
     }

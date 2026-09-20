@@ -1,4 +1,5 @@
 import { and, asc, desc, eq, inArray, sql, type SQL } from "drizzle-orm";
+import { isListed } from "@/lib/properties/visibility";
 import { developers, properties, propertyTypes } from "@/db/schema/catalog";
 import {
   bhkFilter,
@@ -72,7 +73,10 @@ export const matchPublishedProperties = async (
     return emptyResult(params.page, params.pageSize);
   }
 
-  const conditions: SQL[] = [inArray(properties.id, matchedPropertyIds)];
+  const conditions: SQL[] = [
+    inArray(properties.id, matchedPropertyIds),
+    isListed,
+  ];
   if (params.city !== undefined) {
     conditions.push(eq(properties.city, params.city));
   }

@@ -402,6 +402,27 @@ const initialPropertySchemaFields = [
     "Matches only approved amenity keys and synonyms; unmatched text requires catalog review.",
   ],
   [
+    "property.amenities_removed",
+    "Amenities to remove",
+    "amenity_key_array",
+    "$.admin.amenities_removed",
+    "Amenities an admin is taking off a live listing; applied to an existing property only and never read from a brochure.",
+  ],
+  [
+    "unit_variants_removed",
+    "Unit types to remove",
+    "variant_name_array",
+    "$.admin.unit_variants_removed",
+    "Names of unit types an admin is taking off a live listing (hidden, not deleted); existing property only, never read from a brochure.",
+  ],
+  [
+    "property.listing_status",
+    "Listing status",
+    "listing_status",
+    "$.admin.listing_status",
+    "Whether buyers can see the property: listed, unlisted or deleted (soft). Existing property only, never read from a brochure.",
+  ],
+  [
     "property.specifications.construction_quality",
     "Construction quality",
     "specification_text",
@@ -614,7 +635,13 @@ async function seed() {
             ? "v5"
             : fieldKey === "property.legal_entity_id"
               ? "v6"
-              : "v1",
+              : [
+                    "property.amenities_removed",
+                    "unit_variants_removed",
+                    "property.listing_status",
+                  ].includes(fieldKey)
+                ? "v8"
+                : "v1",
           isActive: true,
           description,
         }),

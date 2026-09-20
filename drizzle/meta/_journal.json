@@ -85,6 +85,13 @@
       "when": 1790035200000,
       "tag": "0011_rera_fetch_jobs_regulator",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1790121600000,
+      "tag": "0012_listing_status_and_unit_removal",
+      "breakpoints": true
     }
   ]
 }

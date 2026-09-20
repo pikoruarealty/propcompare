@@ -1,4 +1,5 @@
-import { asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
+import { isListed, variantIsLive } from "@/lib/properties/visibility";
 import {
   comparisonItems,
   comparisons,
@@ -102,7 +103,7 @@ export const createComparison = async (
   const foundProperties = await db
     .select({ id: properties.id })
     .from(properties)
-    .where(inArray(properties.id, propertyIds));
+    .where(and(inArray(properties.id, propertyIds), isListed));
   const foundPropertyIds = new Set(foundProperties.map((row) => row.id));
   for (const item of items) {
     if (!foundPropertyIds.has(item.propertyId)) {
@@ -123,7 +124,7 @@ export const createComparison = async (
       : await db
           .select({ id: unitVariants.id, propertyId: unitVariants.propertyId })
           .from(unitVariants)
-          .where(inArray(unitVariants.id, unitVariantIds));
+          .where(and(inArray(unitVariants.id, unitVariantIds), variantIsLive));
   const variantPropertyById = new Map(
     foundVariants.map((row) => [row.id, row.propertyId]),
   );
