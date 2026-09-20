@@ -1,4 +1,4 @@
-import { ADMIN_ONLY_FIELD_KEYS } from "@/lib/submissions/admin-only-fields";
+import { EDIT_ONLY_FIELD_KEYS } from "@/lib/submissions/edit-only-fields";
 import { and, eq, ne, notInArray } from "drizzle-orm";
 import { db } from "@/db";
 import {
@@ -277,7 +277,7 @@ export const executeOcrExtractionJob = async (params: {
       and(
         eq(propertySchemaFields.isActive, true),
         ne(propertySchemaFields.dataType, "legal_entity_id"),
-        notInArray(propertySchemaFields.fieldKey, [...ADMIN_ONLY_FIELD_KEYS]),
+        notInArray(propertySchemaFields.fieldKey, [...EDIT_ONLY_FIELD_KEYS]),
       ),
     );
   const propertyTypeRows = await db

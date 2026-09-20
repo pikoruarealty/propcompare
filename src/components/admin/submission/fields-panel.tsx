@@ -9,7 +9,7 @@ import {
 import type { ReraComparisonItem } from "@/lib/rera/mapping";
 import type { SubmissionDetail } from "@/lib/submissions/queue";
 import { cn } from "@/lib/utils";
-import { isAdminOnlyField } from "@/lib/submissions/admin-only-fields";
+import { isEditOnlyField } from "@/lib/submissions/edit-only-fields";
 import { ConfirmAction } from "./confirm-action";
 import { FieldEditor } from "./field-editor";
 import { FieldValue } from "./field-value";
@@ -23,7 +23,7 @@ const EDIT_NOTES: Record<string, string> = {
     "Starts from the published amenities. Untick one to take it off the listing when this is published (it then reads as not stated).",
 };
 
-/** The admin-only field that carries what an edit takes off each whole-set field. */
+/** The edit-only field that carries what an edit takes off each whole-set field. */
 const REMOVAL_FIELD: Record<string, string> = {
   "property.amenities": "property.amenities_removed",
   unit_variants: "unit_variants_removed",
@@ -114,7 +114,7 @@ export function FieldsPanel({
     .map(({ group, rows }) => ({
       group,
       // Removal lists and listing status are shown as notes and buttons, not rows.
-      rows: rows.filter(({ field }) => !isAdminOnlyField(field.fieldKey)),
+      rows: rows.filter(({ field }) => !isEditOnlyField(field.fieldKey)),
     }))
     .filter(
       ({ group, rows }) =>

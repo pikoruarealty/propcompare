@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { properties, propertySubmissions } from "@/db/schema/catalog";
-import { LISTING_STATUSES, type ListingStatusValue } from "./admin-only-fields";
+import { LISTING_STATUSES, type ListingStatusValue } from "./edit-only-fields";
 import { createEditSubmission, EditPropertyError } from "./edit-property";
 import { publishSubmission } from "./publisher";
 import { editSubmissionField, transitionSubmission } from "./reconciliation";
@@ -112,4 +112,69 @@ export const changeListingStatus = async (
       .where(eq(propertySubmissions.id, submissionId));
     throw cause;
   }
+};
+
+/**
+ * A developer asking for their own property to be listed, unlisted or deleted. It
+ * makes the same edit as `changeListingStatus` but stops at "submitted": it is an
+ * admin who reviews, approves and publishes it, so nothing changes for buyers until
+ * they do. A property that is not this developer's reads as not found.
+ */
+export const requestListingChange = async (
+  database: PostgresJsDatabase,
+  input: {
+    propertyId: string;
+    status: string;
+    actorUserId: string;
+    developerId: string;
+  },
+): Promise<{ submissionId: string; status: ListingStatusValue }> => {
+  if (!(LISTING_STATUSES as readonly string[]).includes(input.status)) {
+    throw new ListingChangeError(
+      "invalid_status",
+      "Status must be listed, unlisted or deleted.",
+    );
+  }
+  const status = input.status as ListingStatusValue;
+
+  let submissionId: string;
+  try {
+    ({ submissionId } = await createEditSubmission(database, {
+      propertyId: input.propertyId,
+      submittedBy: input.actorUserId,
+      onBehalfOfDeveloperId: input.developerId,
+    }));
+  } catch (cause) {
+    if (cause instanceof EditPropertyError) {
+      throw new ListingChangeError(
+        cause.code === "edit_already_open"
+          ? "edit_already_open"
+          : "property_not_found",
+        cause.message,
+        cause.submissionId,
+      );
+    }
+    throw cause;
+  }
+
+  try {
+    await editSubmissionField(database, {
+      submissionId,
+      fieldKey: "property.listing_status",
+      value: status,
+    });
+    await transitionSubmission(database, {
+      submissionId,
+      action: "submit",
+      actorUserId: input.actorUserId,
+      actorRole: "submitter",
+    });
+  } catch (cause) {
+    await database
+      .update(propertySubmissions)
+      .set({ status: "rejected" })
+      .where(eq(propertySubmissions.id, submissionId));
+    throw cause;
+  }
+  return { submissionId, status };
 };

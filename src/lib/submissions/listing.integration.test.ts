@@ -16,9 +16,14 @@ import {
   listPublishedProperties,
 } from "@/lib/properties/queries";
 import { createEditSubmission } from "./edit-property";
-import { changeListingStatus, ListingChangeError } from "./listing";
+import {
+  changeListingStatus,
+  ListingChangeError,
+  requestListingChange,
+} from "./listing";
 import { publishSubmission } from "./publisher";
 import { getSubmissionDetail } from "./queue";
+import { transitionSubmission } from "./reconciliation";
 
 const suffix = randomUUID();
 const adminId = `listing-admin-${suffix}`;
@@ -109,6 +114,7 @@ afterAll(async () => {
   await db.delete(properties).where(eq(properties.id, propertyId));
   await db.delete(developers).where(eq(developers.id, developerId));
   await db.delete(users).where(eq(users.id, adminId));
+  await db.delete(users).where(eq(users.id, `listing-dev-${suffix}`));
 });
 
 describe("changeListingStatus", () => {
@@ -232,5 +238,97 @@ describe("changeListingStatus", () => {
         actorUserId: adminId,
       }),
     ).rejects.toMatchObject({ code: "property_not_found" });
+  });
+});
+
+describe("a developer asking for a listing change on their own property", () => {
+  const developerUserId = `listing-dev-${suffix}`;
+  let otherDeveloperId: string;
+
+  beforeAll(async () => {
+    await db.insert(users).values({
+      id: developerUserId,
+      name: developerUserId,
+      email: `${developerUserId}@example.test`,
+    });
+    const [other] = await db
+      .insert(developers)
+      .values({ name: `Other Listing Developer ${suffix}` })
+      .returning({ id: developers.id });
+    otherDeveloperId = other.id;
+  });
+
+  afterAll(async () => {
+    // The requests made here are removed with the property's other versions by
+    // the outer cleanup; only what this block created is removed here.
+    await db.delete(developers).where(eq(developers.id, otherDeveloperId));
+  });
+
+  it("creates a submitted edit and changes nothing for buyers until an admin approves and publishes it", async () => {
+    const asked = await requestListingChange(db, {
+      propertyId,
+      status: "unlisted",
+      actorUserId: developerUserId,
+      developerId,
+    });
+
+    const [edit] = await db
+      .select()
+      .from(propertySubmissions)
+      .where(eq(propertySubmissions.id, asked.submissionId));
+    expect(edit).toMatchObject({
+      status: "submitted",
+      submittedBy: developerUserId,
+      propertyId,
+    });
+    expect(await isListed()).toBe(true);
+
+    // A developer cannot review or publish their own request.
+    for (const action of ["start_review", "approve"] as const) {
+      await expect(
+        transitionSubmission(db, {
+          submissionId: asked.submissionId,
+          action,
+          actorUserId: developerUserId,
+          actorRole: "submitter",
+        }),
+      ).rejects.toThrow(/not permitted/);
+    }
+    expect(await isListed()).toBe(true);
+
+    // The admin does, and only then does it take effect.
+    for (const action of ["start_review", "approve"] as const) {
+      await transitionSubmission(db, {
+        submissionId: asked.submissionId,
+        action,
+        actorUserId: adminId,
+        actorRole: "owner",
+      });
+    }
+    await publishSubmission({
+      submissionId: asked.submissionId,
+      actorUserId: adminId,
+      actorRole: "owner",
+    });
+    expect(await isListed()).toBe(false);
+
+    await changeListingStatus(db, {
+      propertyId,
+      status: "listed",
+      actorUserId: adminId,
+    });
+  });
+
+  it("treats another developer's property as not found, and creates nothing", async () => {
+    const before = (await allSubmissionIds()).length;
+    await expect(
+      requestListingChange(db, {
+        propertyId,
+        status: "unlisted",
+        actorUserId: developerUserId,
+        developerId: otherDeveloperId,
+      }),
+    ).rejects.toMatchObject({ code: "property_not_found" });
+    expect((await allSubmissionIds()).length).toBe(before);
   });
 });

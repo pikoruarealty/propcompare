@@ -88,8 +88,8 @@ _(fill in at completion)_
 
 **Still to do**
 
-- [x] Seed and edit whole-set fields of a live property (amenities, specifications, unit types); removal is explicit and soft (`DECISIONS.md` 2026-09-20). **Pictures are the exception:** publishing an edit only adds pictures; a published picture cannot be removed or replaced, and the edit screen does not show the published ones. Removing one needs a soft-removal column on `property_media` (a schema change, so the owner's approval first).
-- [x] Publisher applies `developer.name`. **The duplicate-name guard was not built:** renaming a developer to another developer's name is allowed (no unique constraint on the name either). Say if you want it; it changes publish logic.
+- [x] Seed and edit whole-set fields of a live property (amenities, specifications, unit types); removal is explicit and soft (`DECISIONS.md` 2026-09-20). Pictures too (schema v9, owner-approved 2026-09-20): the edit's Images tab lists the pictures live now and can take any off the listing (soft, hidden everywhere buyers look); a replacement is a removal plus a new picture in the same edit.
+- [x] Publisher applies `developer.name`. **No duplicate-name guard, on purpose:** developer names are not unique (several developers share a name; a developer profile, with its projects, is what tells them apart), so renaming to a name another developer has is allowed (`DECISIONS.md` 2026-09-20).
 - [x] Revision history: the versions list on a property's submission screen now shows when each edit went live and what it changed (was → now for single values; "changed" for amenity, specification and unit-type sets). Read from `property_revisions`. (A standalone property page in the admin is still not built.)
 - [ ] A property page in the admin (today an edit starts from the property's published submission).
 - [ ] The edit path for developers, when the developer portal exists.

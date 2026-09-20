@@ -405,21 +405,28 @@ const initialPropertySchemaFields = [
     "property.amenities_removed",
     "Amenities to remove",
     "amenity_key_array",
-    "$.admin.amenities_removed",
-    "Amenities an admin is taking off a live listing; applied to an existing property only and never read from a brochure.",
+    "$.edit.amenities_removed",
+    "Amenities an edit takes off a live listing; applied to an existing property only and never read from a brochure.",
   ],
   [
     "unit_variants_removed",
     "Unit types to remove",
     "variant_name_array",
-    "$.admin.unit_variants_removed",
-    "Names of unit types an admin is taking off a live listing (hidden, not deleted); existing property only, never read from a brochure.",
+    "$.edit.unit_variants_removed",
+    "Names of unit types an edit takes off a live listing (hidden, not deleted); existing property only, never read from a brochure.",
+  ],
+  [
+    "property.media_removed",
+    "Pictures to remove",
+    "media_id_array",
+    "$.edit.media_removed",
+    "Ids of published pictures an edit takes off a live listing (hidden, not deleted); existing property only, never read from a brochure.",
   ],
   [
     "property.listing_status",
     "Listing status",
     "listing_status",
-    "$.admin.listing_status",
+    "$.edit.listing_status",
     "Whether buyers can see the property: listed, unlisted or deleted (soft). Existing property only, never read from a brochure.",
   ],
   [
@@ -641,7 +648,9 @@ async function seed() {
                     "property.listing_status",
                   ].includes(fieldKey)
                 ? "v8"
-                : "v1",
+                : fieldKey === "property.media_removed"
+                  ? "v9"
+                  : "v1",
           isActive: true,
           description,
         }),

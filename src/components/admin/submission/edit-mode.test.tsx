@@ -88,6 +88,7 @@ const base = {
   media: [],
   rera: { registrationNumber: null, lastFetch: null, comparison: [] },
   versions: [],
+  publishedMedia: [],
 };
 
 const editing = (overrides: Partial<SubmissionDetail> = {}) =>

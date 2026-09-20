@@ -41,6 +41,9 @@ export const createEditSubmission = async (
     /** Null for an edit the system proposes itself (a scheduled RERA check). */
     submittedBy: string | null;
     source?: "manual_form" | "rera_scrape";
+    /** Set when a developer is asking: the property must belong to this developer,
+     * and a property of anyone else reads as not found. An admin leaves it unset. */
+    onBehalfOfDeveloperId?: string;
   },
 ): Promise<{ submissionId: string }> => {
   if (!UUID.test(input.propertyId)) {
@@ -50,7 +53,11 @@ export const createEditSubmission = async (
     .select({ id: properties.id, developerId: properties.developerId })
     .from(properties)
     .where(eq(properties.id, input.propertyId));
-  if (!property) {
+  if (
+    !property ||
+    (input.onBehalfOfDeveloperId !== undefined &&
+      property.developerId !== input.onBehalfOfDeveloperId)
+  ) {
     throw new EditPropertyError("property_not_found", "Property not found.");
   }
 

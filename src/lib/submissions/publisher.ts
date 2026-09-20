@@ -303,6 +303,9 @@ const runPublish = async (
     )
       ? (payload["property.amenities_removed"] as string[])
       : [];
+    const removedMediaIds = Array.isArray(payload["property.media_removed"])
+      ? (payload["property.media_removed"] as string[])
+      : [];
     const removedVariantNames = Array.isArray(payload["unit_variants_removed"])
       ? (payload["unit_variants_removed"] as string[])
       : [];
@@ -321,6 +324,7 @@ const runPublish = async (
       isNewProperty &&
       (removedAmenityKeys.length > 0 ||
         removedVariantNames.length > 0 ||
+        removedMediaIds.length > 0 ||
         (listingStatusValue !== undefined && listingStatusValue !== "listed"))
     ) {
       throw new SubmissionPublishError(
@@ -552,6 +556,28 @@ const runPublish = async (
             `unit type "${name}" is not a live unit type of this property`,
           );
         }
+      }
+    }
+
+    // Pictures an edit takes off the listing (schema v9): soft, and only pictures
+    // that are live pictures of this property. A replacement is a removal plus a
+    // new picture in the same edit.
+    if (removedMediaIds.length > 0) {
+      const removedPictures = await tx
+        .update(propertyMedia)
+        .set({ removedAt: new Date() })
+        .where(
+          and(
+            eq(propertyMedia.propertyId, propertyId),
+            inArray(propertyMedia.id, removedMediaIds),
+            isNull(propertyMedia.removedAt),
+          ),
+        )
+        .returning({ id: propertyMedia.id });
+      if (removedPictures.length !== removedMediaIds.length) {
+        throw new SubmissionPublishError(
+          "a picture to remove is not a live picture of this property",
+        );
       }
     }
 

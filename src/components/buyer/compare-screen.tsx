@@ -268,7 +268,6 @@ export function CompareScreen({
     () => buildComparison(dossiers, requested),
     [dossiers, requested],
   );
-  const [onlyDifferences, setOnlyDifferences] = React.useState(true);
   const [pair, setPair] = React.useState<[number, number]>([0, 1]);
   const [copied, setCopied] = React.useState(false);
   // A section's open state is the person's own choice if they made one, else the
@@ -339,14 +338,7 @@ export function CompareScreen({
   };
 
   const visible = count <= 2 ? [...slugs.keys()] : pair;
-  const shownGroups = model.groups
-    .map((group) => ({
-      ...group,
-      rows: onlyDifferences
-        ? group.rows.filter((row) => row.status !== "same")
-        : group.rows,
-    }))
-    .filter((group) => group.rows.length > 0);
+  const shownGroups = model.groups;
 
   const allOpen = shownGroups.every((group) => isOpen(group.key));
 
@@ -407,16 +399,7 @@ export function CompareScreen({
         )}
       </section>
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={onlyDifferences}
-            onChange={(event) => setOnlyDifferences(event.target.checked)}
-            className="size-4"
-          />
-          Show only differences
-        </label>
+      <div className="flex justify-end">
         <button
           type="button"
           onClick={() =>
@@ -430,16 +413,6 @@ export function CompareScreen({
         >
           {allOpen ? "Collapse all sections" : "Expand all sections"}
         </button>
-        <p
-          className="text-muted-foreground text-sm"
-          data-slot="compare-identical"
-        >
-          {model.identicalRows === 0
-            ? "Nothing is identical across these properties."
-            : onlyDifferences
-              ? `${model.identicalRows} identical ${model.identicalRows === 1 ? "fact is" : "facts are"} hidden.`
-              : `${model.identicalRows} identical ${model.identicalRows === 1 ? "fact is" : "facts are"} shown with the rest.`}
-        </p>
       </div>
 
       {count > 2 ? (
@@ -498,7 +471,7 @@ export function CompareScreen({
 
         {shownGroups.length === 0 ? (
           <p className="text-muted-foreground p-6 text-sm">
-            Everything stated is identical across these properties.
+            Nothing is stated for these properties yet.
           </p>
         ) : (
           shownGroups.map((group) => {

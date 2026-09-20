@@ -141,8 +141,7 @@ describe("the Compare toggle and the tray", () => {
 });
 
 describe("the comparison screen", () => {
-  it("says what changes first, then only the rows that differ, and how many identical facts are hidden", async () => {
-    const user = userEvent.setup();
+  it("says what changes first, then shows every row, shading the ones that differ", () => {
     const model = buildComparison(two());
     render(<CompareScreen dossiers={two()} requested={{}} />);
 
@@ -150,22 +149,20 @@ describe("the comparison screen", () => {
       name: "What changes between these choices",
     });
     expect(within(summary).getAllByRole("listitem").length).toBeGreaterThan(0);
+
+    // No switch hides anything: every row of the model is on the page.
+    expect(screen.queryByLabelText("Show only differences")).toBeNull();
+    const rows = document.querySelectorAll('[data-slot="compare-row"]');
+    expect(rows).toHaveLength(model.groups.flatMap((g) => g.rows).length);
     expect(
-      screen.getByText(/identical facts? (is|are) hidden/),
-    ).toBeInTheDocument();
-    const before = document.querySelectorAll(
-      '[data-slot="compare-row"]',
-    ).length;
+      document.querySelectorAll('[data-slot="compare-row"][data-status="same"]')
+        .length,
+    ).toBeGreaterThan(0);
     expect(
       document.querySelectorAll(
-        '[data-slot="compare-row"][data-status="same"]',
-      ),
-    ).toHaveLength(0);
-
-    await user.click(screen.getByLabelText("Show only differences"));
-    expect(document.querySelectorAll('[data-slot="compare-row"]').length).toBe(
-      before + model.identicalRows,
-    );
+        '[data-slot="compare-row"][data-status="differs"]',
+      ).length,
+    ).toBeGreaterThan(0);
   });
 
   it("says plainly when a fact is not stated", () => {

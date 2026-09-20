@@ -1,0 +1,1 @@
+ALTER TABLE "property_media" ADD COLUMN "removed_at" timestamp with time zone;

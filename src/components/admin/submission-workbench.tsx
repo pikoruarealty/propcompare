@@ -14,7 +14,7 @@ import type { SubmissionDetail } from "@/lib/submissions/queue";
 import { ExtractionStatus } from "./extraction-status";
 import { ConfirmAction } from "./submission/confirm-action";
 import { ConfirmAllBar, FieldsPanel } from "./submission/fields-panel";
-import { isAdminOnlyField } from "@/lib/submissions/admin-only-fields";
+import { isEditOnlyField } from "@/lib/submissions/edit-only-fields";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { MediaPanel, type MediaItem } from "./submission/media-panel";
 import { ReraPanel } from "./submission/rera-panel";
@@ -104,6 +104,16 @@ export function SubmissionWorkbench({
       body: JSON.stringify(body ?? {}),
     },
   ];
+
+  // The published pictures this edit takes off the listing.
+  const removedMediaIds = React.useMemo(() => {
+    const value = submission.fields.find(
+      (field) => field.fieldKey === "property.media_removed",
+    )?.value;
+    return Array.isArray(value)
+      ? value.filter((id): id is string => typeof id === "string")
+      : [];
+  }, [submission.fields]);
 
   const saveField = async (fieldKey: string, value: unknown) => {
     const message = await call(
@@ -411,9 +421,7 @@ export function SubmissionWorkbench({
         status={submission.status}
         permissionLevel={permissionLevel}
         needsReview={countNeedingReview(
-          submission.fields.filter(
-            (field) => !isAdminOnlyField(field.fieldKey),
-          ),
+          submission.fields.filter((field) => !isEditOnlyField(field.fieldKey)),
         )}
         pending={pending}
         onAction={(action) => run(...post("/review", { action }))}
@@ -514,6 +522,9 @@ export function SubmissionWorkbench({
         <TabsContent value="images" forceMount hidden={tab !== "images"}>
           <MediaPanel
             submissionId={submission.id}
+            published={submission.publishedMedia}
+            removedIds={removedMediaIds}
+            onSetRemoved={(ids) => saveField("property.media_removed", ids)}
             media={media}
             variantNames={variantNames}
             editable={editable}

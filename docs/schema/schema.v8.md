@@ -42,7 +42,7 @@ unit_variants (
 | `unit_variants_removed`      | `variant_name_array` | Unit types taken off a live listing (soft, see 2).                                 |
 | `property.listing_status`    | `listing_status`     | Listed, unlisted or deleted (see 1).                                               |
 
-They apply to an **existing property only** and are **never read from a brochure and never asked of the extraction model** (`ADMIN_ONLY_FIELD_KEYS`, excluded in `src/lib/ocr/ingestion.ts`).
+They apply to an **existing property only** and are **never read from a brochure and never asked of the extraction model** (`EDIT_ONLY_FIELD_KEYS`, renamed from `ADMIN_ONLY_FIELD_KEYS` in v9, excluded in `src/lib/ocr/ingestion.ts`).
 
 ## 4. Where buyer visibility is enforced
 

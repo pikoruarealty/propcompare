@@ -450,6 +450,9 @@ export const propertyMedia = pgTable(
     sourceKind: mediaSourceKind("source_kind"),
     displayOrder: integer("display_order").notNull(),
     isPrimary: boolean("is_primary").default(false).notNull(),
+    /** Set when an edit takes the picture off the listing (schema v9). Soft: the row
+     * stays, buyers no longer see it. */
+    removedAt: timestamp("removed_at", { withTimezone: true }),
     ...timestamps(),
   },
   (table) => [

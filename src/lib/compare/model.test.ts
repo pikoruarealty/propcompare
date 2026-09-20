@@ -215,13 +215,12 @@ describe("the rows", () => {
     ]);
   });
 
-  it("counts identical rows so the screen can say how many it is hiding", () => {
+  it("marks rows that are the same, so the screen can show them plainly", () => {
     const model = buildComparison([a, b]);
-    const identical = model.groups
+    const same = model.groups
       .flatMap((g) => g.rows)
       .filter((r) => r.status === "same");
-    expect(model.identicalRows).toBe(identical.length);
-    expect(identical.map((row) => row.key)).toContain("configuration");
+    expect(same.map((row) => row.key)).toContain("configuration");
   });
 
   it("compares amenities over what any property has a recorded status for, keeping 'not offered' apart from 'not stated'", () => {

@@ -19,7 +19,7 @@ Everything below applies those, then goes further where our data lets us.
 ## Principles
 
 1. **Like for like.** A property has many unit types; comparing a project's whole range to another's is meaningless. The unit of comparison is **a unit type of a property**, matched by BHK by default (a 3 BHK against a 3 BHK), changeable per column. Areas are only ever compared on the same basis (carpet with carpet); a basis is never derived from another.
-2. **Differences first.** The default view shows only what differs; what is the same is one line, "12 facts are identical", that opens on demand. A buyer should see the decision, not the data.
+2. **Differences stand out, nothing is hidden.** Every stated row is shown; rows that differ are shaded and rows stated for some and not others are marked, and the summary above the table leads with what changes. (A "show only differences" switch was built and removed at the owner's direction: with real properties nearly every row differs, so it hid nothing worth hiding.)
 3. **Say what changes.** Above the table, a short plain-language block, "If you choose A over B", built by rule from the verified facts (never generated text, never a score): each line names the difference and both values ("A has 8% more carpet area: 3,978 vs 3,684 sq ft"). At most five lines, ordered by what the buyer said matters. It never claims anything from a missing fact.
 4. **Honest gaps.** "Not stated" and "not offered" are different facts and look different. A fact missing on one side is shown as missing, never counted as a difference of value, and never used in the summary.
 5. **Trust is visible where the fact is.** RERA status is a header row. A value the regulator's record confirms carries the quiet "Source: GujRERA, checked on …" line (`DECISIONS.md` 2026-09-20); a brochure-sourced value does not pretend to.
@@ -34,7 +34,7 @@ Everything below applies those, then goes further where our data lets us.
 ## Interaction
 
 - **Adding.** A "Compare" toggle on every property card and on the dossier. A small tray docks at the bottom of the page: the chosen properties (name, a thumbnail), remove buttons, and "Compare (n)" once there are two. It survives navigation and reloads.
-- **The page.** `/compare?p=slug-a,slug-b[,…]` with an optional per-property unit type (`&v=slug~unitTypeId`). A sticky header row with each property's picture, name, locality, developer and RERA status. Below it: the summary block, the controls ("Show only differences" on by default; unit type pickers per column), then grouped sections.
+- **The page.** `/compare?p=slug-a,slug-b[,…]` with an optional per-property unit type (`&v=slug~unitTypeId`). A sticky header row with each property's picture, name, locality, developer and RERA status. Below it: the summary block, the controls (a collapse-all control; unit type pickers per column), then grouped sections.
 - **Switching unit types in the table.** Each column header carries its own unit type control (chips for up to three types, a menu for more) and the table redraws at once, without a reload, with the address updated so the link still reproduces it. Changing the first property's type re-matches the others to the same configuration.
 - **Groups** (in this order; each collapsible, with a count of how many rows differ; on a phone the long lists, amenities and specifications, start closed, and there is an expand and collapse all control): Possession and timeline · Unit type (configuration, areas by basis) · Amenities · Specifications · RERA and developer.
 - **Amenities** are compared as a matrix over the union of what either offers, only rows that differ by default.
@@ -51,7 +51,7 @@ Everything below applies those, then goes further where our data lets us.
 
 ## Slices
 
-1. **Core** (this slice): selection tray, `/compare`, like-for-like unit type matching, differences-only default, grouped rows, summary block, size bars, provenance, sticky header, phone two-up.
+1. **Core** (this slice): selection tray, `/compare`, like-for-like unit type matching, grouped rows, summary block, size bars, provenance, sticky header, phone two-up.
 2. **Depth:** room-by-room comparison, floor plans side by side.
 3. **Personal:** focus chips from intake priorities, saved comparisons and the shortlist page (uses the existing routes, needs sign-in), shareable and printable brief.
 4. **Insight:** comparison behaviour as a developer-analytics signal, aggregated and price-free (see the developer analytics decision, 2026-09-19).

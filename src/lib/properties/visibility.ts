@@ -19,8 +19,11 @@ export const variantIsLive = isNull(unitVariants.removedAt);
 
 /** A picture that belongs to a removed unit type is not shown; one tied to no
  * unit type, or to a live one, is. */
-export const mediaIsLive = sql`not exists (
-  select 1 from unit_variants uv
-  where uv.id = ${sql.identifier("property_media")}.${sql.identifier("unit_variant_id")}
-    and uv.removed_at is not null
+export const mediaIsLive = sql`(
+  ${sql.identifier("property_media")}.${sql.identifier("removed_at")} is null
+  and not exists (
+    select 1 from unit_variants uv
+    where uv.id = ${sql.identifier("property_media")}.${sql.identifier("unit_variant_id")}
+      and uv.removed_at is not null
+  )
 )`;

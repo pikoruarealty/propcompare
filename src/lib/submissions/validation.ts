@@ -1,4 +1,4 @@
-import { LISTING_STATUSES } from "./admin-only-fields";
+import { LISTING_STATUSES } from "./edit-only-fields";
 
 export class SubmissionPayloadError extends Error {
   constructor(message: string) {
@@ -357,6 +357,28 @@ const validateFieldValue = (
       throw new SubmissionPayloadError(`${path} names a unit type twice`);
     }
     return names;
+  }
+  if (dataType === "media_id_array") {
+    const ids = Array.isArray(value)
+      ? value.map((item) =>
+          typeof item === "string" ? item.trim().toLowerCase() : "",
+        )
+      : [];
+    if (
+      !Array.isArray(value) ||
+      ids.some(
+        (id) =>
+          !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(
+            id,
+          ),
+      )
+    ) {
+      throw new SubmissionPayloadError(`${path} must be a list of picture ids`);
+    }
+    if (new Set(ids).size !== ids.length) {
+      throw new SubmissionPayloadError(`${path} names a picture twice`);
+    }
+    return ids;
   }
   if (dataType === "listing_status") {
     if (

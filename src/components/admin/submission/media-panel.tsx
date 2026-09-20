@@ -26,6 +26,9 @@ const SOURCE_LABEL: Record<string, string> = {
  */
 export function MediaPanel({
   submissionId,
+  published,
+  removedIds,
+  onSetRemoved,
   media,
   variantNames,
   editable,
@@ -35,6 +38,12 @@ export function MediaPanel({
   onUploaded,
 }: {
   submissionId: string;
+  /** Pictures live for buyers now (an edit of a published property only). */
+  published: SubmissionDetail["publishedMedia"];
+  /** The live pictures this edit takes off the listing. */
+  removedIds: string[];
+  /** Saves the new list of pictures to take off; resolves to an error message. */
+  onSetRemoved: (ids: string[]) => Promise<string | null>;
   media: MediaItem[];
   variantNames: string[];
   editable: boolean;
@@ -60,6 +69,14 @@ export function MediaPanel({
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const fileInput = React.useRef<HTMLInputElement>(null);
+  const [removeError, setRemoveError] = React.useState<string | null>(null);
+  const setRemoved = async (id: string, remove: boolean) => {
+    setRemoveError(null);
+    const next = remove
+      ? [...removedIds, id]
+      : removedIds.filter((existing) => existing !== id);
+    setRemoveError(await onSetRemoved(next));
+  };
 
   const upload = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -113,6 +130,95 @@ export function MediaPanel({
         go live, and shows its attribution.
       </p>
 
+      {published.length > 0 ? (
+        <div data-slot="published-pictures" className="mb-8">
+          <h3 className="font-display text-xl">Pictures on the listing now</h3>
+          <p className="text-muted-foreground mt-1 mb-3 text-sm">
+            {editable
+              ? "Taking one off hides it from buyers when this edit is published; nothing is deleted. To replace a picture, take it off and add the new one below."
+              : "These are live for buyers now."}
+          </p>
+          {removeError ? (
+            <p role="alert" className="text-destructive mb-3 text-sm">
+              {removeError}
+            </p>
+          ) : null}
+          <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {published.map((item) => {
+              const removed = removedIds.includes(item.id);
+              const isImage =
+                item.mediaType === "photo" || item.mediaType === "floor_plan";
+              return (
+                <li
+                  key={item.id}
+                  data-slot="published-picture"
+                  data-removed={removed}
+                  className="border-border bg-card overflow-hidden rounded-lg border"
+                >
+                  {isImage ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- a served thumbnail, not a static asset
+                    <img
+                      src={`/api/v1/media/${item.id}?size=thumb`}
+                      alt={item.caption ?? "A picture on the listing"}
+                      className={
+                        removed
+                          ? "bg-muted aspect-[3/2] w-full object-cover opacity-40 grayscale"
+                          : "bg-muted aspect-[3/2] w-full object-cover"
+                      }
+                    />
+                  ) : (
+                    <div className="bg-muted text-muted-foreground flex aspect-[3/2] items-center justify-center text-sm">
+                      {item.mediaType === "video" ? "Video" : "Document"}
+                    </div>
+                  )}
+                  <div className="flex flex-col gap-2 p-4">
+                    <p className="font-medium">
+                      {item.mediaType === "floor_plan"
+                        ? "Floor plan"
+                        : item.mediaType === "photo"
+                          ? "Photo"
+                          : item.mediaType === "video"
+                            ? "Video"
+                            : "Brochure"}
+                      {item.unitVariantName ? ` · ${item.unitVariantName}` : ""}
+                    </p>
+                    {item.caption ? (
+                      <p className="text-sm">{item.caption}</p>
+                    ) : null}
+                    {item.attribution ? (
+                      <p className="text-muted-foreground text-xs">
+                        Credit: {item.attribution}
+                      </p>
+                    ) : null}
+                    {removed ? (
+                      <p className="text-destructive text-sm font-medium">
+                        Comes off the listing when this is published.
+                      </p>
+                    ) : null}
+                    {editable ? (
+                      <div className="pt-1">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={pending}
+                          onClick={() => void setRemoved(item.id, !removed)}
+                        >
+                          {removed
+                            ? "Keep this picture"
+                            : "Take off the listing"}
+                        </Button>
+                      </div>
+                    ) : null}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      ) : null}
+
+      <h3 className="font-display text-xl">Pictures proposed in this edit</h3>
       {media.length === 0 ? (
         <p className="border-border bg-card text-muted-foreground rounded-lg border p-6 text-sm">
           No images yet.

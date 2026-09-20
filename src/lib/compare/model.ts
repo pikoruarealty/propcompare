@@ -116,8 +116,6 @@ export interface CompareModel {
   columns: CompareColumn[];
   groups: CompareGroup[];
   summary: SummaryLine[];
-  /** Rows shown even when identical, and how many were identical. */
-  identicalRows: number;
 }
 
 /* ------------------------------------------------------------------ */
@@ -384,7 +382,7 @@ export const buildComparison = (
   requested: Record<string, string | undefined> = {},
 ): CompareModel => {
   if (dossiers.length === 0) {
-    return { columns: [], groups: [], summary: [], identicalRows: 0 };
+    return { columns: [], groups: [], summary: [] };
   }
   const chosen = chooseUnitTypes(dossiers, requested);
 
@@ -596,15 +594,10 @@ export const buildComparison = (
     }))
     .filter((group) => group.rows.length > 0);
 
-  const identicalRows = shown
-    .flatMap((group) => group.rows)
-    .filter((candidate) => candidate.status === "same").length;
-
   return {
     columns,
     groups: shown,
     summary: buildSummary(dossiers, columns, shown),
-    identicalRows,
   };
 };
 

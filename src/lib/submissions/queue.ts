@@ -5,7 +5,7 @@ import {
   SUBMISSION_STATUS_LABEL,
   type SubmissionStatus,
 } from "./status-labels";
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, sql } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import {
   amenityCatalog,
@@ -15,7 +15,9 @@ import {
   layoutTypes,
   ocrExtractionJobs,
   properties,
+  propertyMedia,
   propertyRevisions,
+  unitVariants,
   propertySchemaFields,
   propertySubmissionFieldEvidence,
   propertySubmissionFields,
@@ -25,6 +27,7 @@ import {
   type submissionStatus,
 } from "@/db/schema/catalog";
 import { describeExtractionFailure } from "@/lib/ingestion/extraction-status";
+import { mediaIsLive } from "@/lib/properties/visibility";
 
 /**
  * Read model for the admin submission queue and detail screens. Read-only: it
@@ -198,6 +201,17 @@ export interface SubmissionDetail extends SubmissionQueueItem {
   /** The latest RERA fetch for this submission or its property, and how it
    * compares with what the submission holds now. */
   rera: ReraState;
+  /** For an edit of a published property: its pictures that are live for buyers
+   * now, so an edit can take one off (a replacement is a removal plus a new
+   * picture). Empty for a new property. */
+  publishedMedia: {
+    id: string;
+    mediaType: "photo" | "floor_plan" | "video" | "brochure_pdf";
+    caption: string | null;
+    attribution: string | null;
+    unitVariantName: string | null;
+    isPrimary: boolean;
+  }[];
   /** Every submission of the same property, oldest first: the one that created it
    * and each edit since. Empty until the property exists. */
   versions: {
@@ -392,6 +406,26 @@ export const getSubmissionDetail = async (
     })),
     availableFields,
     rera: await getReraState(database, id),
+    publishedMedia: owner?.propertyId
+      ? await database
+          .select({
+            id: propertyMedia.id,
+            mediaType: propertyMedia.mediaType,
+            caption: propertyMedia.caption,
+            attribution: propertyMedia.attribution,
+            unitVariantName: unitVariants.variantName,
+            isPrimary: propertyMedia.isPrimary,
+          })
+          .from(propertyMedia)
+          .leftJoin(
+            unitVariants,
+            eq(unitVariants.id, propertyMedia.unitVariantId),
+          )
+          .where(
+            and(eq(propertyMedia.propertyId, owner.propertyId), mediaIsLive),
+          )
+          .orderBy(asc(propertyMedia.displayOrder))
+      : [],
     versions: owner?.propertyId
       ? await loadVersions(database, owner.propertyId, availableFields)
       : [],
