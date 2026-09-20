@@ -10,6 +10,7 @@ import type { SubmissionDetail } from "@/lib/submissions/queue";
 import { ExtractionStatus } from "./extraction-status";
 import { FieldsPanel } from "./submission/fields-panel";
 import { MediaPanel, type MediaItem } from "./submission/media-panel";
+import { ReraPanel } from "./submission/rera-panel";
 import { WorkflowPanel } from "./submission/workflow-panel";
 
 /**
@@ -84,6 +85,56 @@ export function SubmissionWorkbench({
     return message;
   };
 
+  const postJson = async (path: string, body: unknown) => {
+    const message = await call(`${base}${path}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!message) router.refresh();
+    return message;
+  };
+
+  /** Fields whose value differs from what RERA states, for the note on each row. */
+  const reraDifferences = React.useMemo(
+    () =>
+      Object.fromEntries(
+        submission.rera.comparison
+          .filter((item) => item.status === "differs")
+          .map((item) => [item.fieldKey, item]),
+      ),
+    [submission.rera.comparison],
+  );
+
+  const [starting, setStarting] = React.useState(false);
+  /** Starts a correction to this published property and goes to it. */
+  const startEdit = async () => {
+    if (!submission.propertyId) return;
+    setStarting(true);
+    setError(null);
+    try {
+      const response = await fetch(
+        `/api/v1/admin/properties/${submission.propertyId}/edits`,
+        { method: "POST" },
+      );
+      const payload = (await response.json().catch(() => null)) as {
+        submissionId?: string;
+        error?: { message?: string };
+      } | null;
+      if (payload?.submissionId) {
+        // Created now, or already open: either way this is the edit to work on.
+        router.push(`/admin/submissions/${payload.submissionId}`);
+        return;
+      }
+      setError(payload?.error?.message ?? "Could not start an edit.");
+    } catch {
+      setError(
+        "Could not reach the server. Check your connection and try again.",
+      );
+    }
+    setStarting(false);
+  };
+
   const variantNames = React.useMemo(() => {
     const variants = submission.fields.find(
       (f) => f.fieldKey === "unit_variants",
@@ -103,6 +154,33 @@ export function SubmissionWorkbench({
           className="border-destructive/40 text-destructive rounded-md border p-3 text-sm"
         >
           {error}
+        </p>
+      ) : null}
+
+      {submission.status === "published" && submission.propertyId ? (
+        <div
+          data-slot="edit-property"
+          className="border-border bg-card flex flex-wrap items-center justify-between gap-4 rounded-lg border p-5"
+        >
+          <p className="text-muted-foreground max-w-prose text-sm">
+            This property is live. To correct or add anything, including its
+            RERA details, start an edit. The live page stays as it is until the
+            edit is reviewed and published.
+          </p>
+          <Button type="button" disabled={starting} onClick={startEdit}>
+            {starting ? "Starting…" : "Edit this property"}
+          </Button>
+        </div>
+      ) : null}
+
+      {submission.propertyId && submission.status !== "published" ? (
+        <p
+          data-slot="edit-banner"
+          className="border-border bg-card text-muted-foreground rounded-lg border p-4 text-sm"
+        >
+          You are editing a property that is live. Fields you do not change keep
+          their published values, and nothing goes live until this edit is
+          reviewed and published.
         </p>
       ) : null}
 
@@ -136,8 +214,19 @@ export function SubmissionWorkbench({
         />
       ) : null}
 
+      <ReraPanel
+        rera={submission.rera}
+        editable={editable}
+        pending={pending}
+        onFetch={(registrationNumber) =>
+          postJson("/rera/fetch", { registrationNumber })
+        }
+        onApply={(jobId) => postJson("/rera/apply", { jobId })}
+      />
+
       <FieldsPanel
         submission={submission}
+        reraDifferences={reraDifferences}
         editable={editable}
         inReview={inReview}
         pending={pending}

@@ -666,12 +666,33 @@ export const reraFetchJobs = pgTable(
     }),
     reraRegistrationNumber: text("rera_registration_number").notNull(),
     status: reraFetchJobStatus("status").default("queued").notNull(),
+    /** The normalized regulator record plus which pieces were missing. Never a raw
+     * response: those carry prices, which must not enter this database. */
     fetchedPayload: jsonb("fetched_payload"),
     matchedFields: jsonb("matched_fields"),
     runAt: timestamp("run_at", { withTimezone: true }),
+    /** Which regulator adapter answered (schema v7). */
+    regulatorCode: text("regulator_code").default("gujrera").notNull(),
+    /** The regulator's own id for the project, opaque to us (schema v7). */
+    externalProjectId: text("external_project_id"),
+    /** The submission a fetch was run for, when it was run during review. */
+    submissionId: uuid("submission_id").references(
+      () => propertySubmissions.id,
+      {
+        onDelete: "set null",
+      },
+    ),
+    requestedBy: text("requested_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    /** A plain-words reason a fetch failed. */
+    error: text("error"),
     ...timestamps(),
   },
-  (table) => [index("rera_fetch_jobs_property_id_idx").on(table.propertyId)],
+  (table) => [
+    index("rera_fetch_jobs_property_id_idx").on(table.propertyId),
+    index("rera_fetch_jobs_submission_id_idx").on(table.submissionId),
+  ],
 );
 
 export const buyerProfiles = pgTable(

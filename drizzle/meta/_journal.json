@@ -78,6 +78,13 @@
       "when": 1789948800000,
       "tag": "0010_legal_entities",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1790035200000,
+      "tag": "0011_rera_fetch_jobs_regulator",
+      "breakpoints": true
     }
   ]
 }

@@ -42,7 +42,7 @@ Last updated: 2026-09-21 (first property live, legal entities)
 - [ ] **CI runs green on GitHub** with the new Postgres service (added 2026-09-19; not yet observed passing).
 - [ ] **Content security policy and security headers.**
 - [ ] **OCR cost controls:** the page-routing confirmation gates paid runs; also decide per-developer or per-day limits and who sees the spend.
-- [ ] **GujRERA fetch job:** confirm the source's terms of use and set a polite fetch rate before scheduling it.
+- [ ] **GujRERA fetch (manual fetch built 2026-09-20; quarterly job not yet).** Before scheduling it: (1) the endpoints are the ones GujRERA's own public pages call, not a documented API, so expect them to change and watch for failures; (2) its TLS server needs legacy renegotiation, handled only in `src/lib/rera/legacy-tls-fetch.ts` for that one host, so check this still holds on the production runtime and that nothing else uses it; (3) the owner reports no terms-of-use blocker, but the site's terms were not independently reviewed; (4) keep the polite rate (one request at a time, a pause between, a plain user agent) and add a kill switch and alerting on repeated failures; (5) the site publishes prices, which the adapter never reads or stores, so keep the test that proves it.
 
 ## Known local-only shortcuts to remove or re-check
 

@@ -1,6 +1,6 @@
 # Tasklist — edit any detail of a published property, through approval
 
-**Status:** planned — **do not start coding until the owner finishes their own end-to-end test** (brochure upload → stored details → live) and reports any changes it needs.
+**Status:** partly built 2026-09-20 (start an edit, see live values, fetch RERA into an edit, publish only what changed); the rest is still planned. The owner answered the open decision: an admin may approve and publish their own edit.
 **Owner:** Bhavarth
 **Branch:** `task/phase-2a-completion` (or the next agreed phase branch)
 **Parent:** `docs/tasklists/2026-09-18-phase-2a-completion.md`; follows `2026-09-21-first-property-live.md`
@@ -74,3 +74,22 @@ An admin can change any published detail of Kimana Towers through screens, sees 
 ## Completion record
 
 _(fill in at completion)_
+
+## Progress 2026-09-20
+
+**Built and verified**
+
+- [x] `createEditSubmission` and `POST /api/v1/admin/properties/{id}/edits`: an empty draft bound to the property, one open edit per property (a second attempt leads to the open one).
+- [x] "Edit this property" on a published submission; an edit banner; each simple field shows its published value ("Currently published") and whole-set fields say "Unchanged. Keeps what is published."; a proposed value that differs shows the published one beside it.
+- [x] Integration test that publishes an edit and checks only the edited fields changed and everything else is identical.
+- [x] Real-browser check on Kimana (`scripts/verify-rera-fetch.mjs`): start edit, fetch RERA, use RERA's values, live property untouched.
+
+**Gaps and bugs found on the way** (full text in `DECISIONS.md` 2026-09-20): nothing could start an edit of an existing property (now built); `developer.name` is in the contract but never applied on publish (still open); the buyer email check rejected any address with an "s" (fixed); duplicate room names broke the dossier's React keys (fixed); the migration-timestamp trap; a leaked test run (cleaned).
+
+**Still to do**
+
+- [ ] Seed and edit whole-set fields of a live property (amenities, specifications, unit types) and its pictures; decide removal semantics.
+- [ ] Publisher applies `developer.name` (with a duplicate-name guard).
+- [ ] Revision history on the property view.
+- [ ] A property page in the admin (today an edit starts from the property's published submission).
+- [ ] The edit path for developers, when the developer portal exists.

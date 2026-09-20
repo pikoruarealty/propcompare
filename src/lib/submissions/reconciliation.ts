@@ -134,7 +134,14 @@ export const createManualSubmission = async (
  * candidate must never appear to support a human replacement. */
 export const editSubmissionField = async (
   database: PostgresJsDatabase,
-  input: { submissionId: string; fieldKey: string; value: unknown },
+  input: {
+    submissionId: string;
+    fieldKey: string;
+    value: unknown;
+    /** "confirmed" for a value taken from a regulator's record; a person's own
+     * replacement is "edited" (the default). */
+    reviewStatus?: "edited" | "confirmed";
+  },
 ): Promise<void> => {
   const submission = await requireEditableSubmission(
     database,
@@ -195,14 +202,18 @@ export const editSubmissionField = async (
       fieldKey: contract.fieldKey,
       value,
       confidence: null,
-      reviewStatus: "edited",
+      reviewStatus: input.reviewStatus ?? "edited",
     })
     .onConflictDoUpdate({
       target: [
         propertySubmissionFields.submissionId,
         propertySubmissionFields.fieldKey,
       ],
-      set: { value, confidence: null, reviewStatus: "edited" },
+      set: {
+        value,
+        confidence: null,
+        reviewStatus: input.reviewStatus ?? "edited",
+      },
     })
     .returning({ id: propertySubmissionFields.id });
   await database

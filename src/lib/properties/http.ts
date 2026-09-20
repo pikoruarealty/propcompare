@@ -65,6 +65,16 @@ export type ApiErrorCode =
   | "already_member"
   | "member_not_found"
   | "cannot_publish"
+  | "edit_already_open"
+  | "job_not_found"
+  | "nothing_to_apply"
+  | "duplicate_number"
+  | "no_regulator"
+  | "invalid_number"
+  | "not_found"
+  | "ambiguous"
+  | "unavailable"
+  | "unexpected_response"
   | "provider_error"
   | "internal_error";
 

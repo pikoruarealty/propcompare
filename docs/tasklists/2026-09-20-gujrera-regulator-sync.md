@@ -1,6 +1,6 @@
 # Tasklist — GujRERA fetch, cross-check and quarterly refresh (built to add other regulators)
 
-**Status:** planned — **do not start coding until the owner finishes their own end-to-end test** and reports any changes it needs. Depends on `2026-09-20-edit-published-properties.md` (edits and the live-value comparison reuse the same machinery).
+**Status:** in progress — manual fetch and cross-check built and verified 2026-09-20 (the owner asked for it before the next paid extraction run); schema v7 approved and applied. Not built: the quarterly due-check worker, the developer-facing entry, a second regulator. Depends on `2026-09-20-edit-published-properties.md` (built in part).
 **Owner:** Bhavarth
 **Parent:** `docs/tasklists/2026-09-18-phase-2a-completion.md` (the `rera_fetch_jobs` item)
 **References:** `docs/schema/schema.v1.md` (`rera_fetch_jobs`, section C), `docs/schema/schema.v6.md`, `docs/app-flows/admin.md`, `docs/api/api-spec.v1.md`, `ARCHITECTURE.md` (trust boundary), `docs/ocr-routing-contract.v2.md`, `DECISIONS.md` 2026-09-20 (three entries)
@@ -15,7 +15,7 @@
 
 ## Quarter timing (researched 2026-09-20)
 
-GujRERA requires every registered project to file its quarterly progress report in the same fixed windows for all projects: **1–7 January, 1–7 April, 1–7 July and 1–7 October** (calendar quarters, not per-project anniversaries) — [DeshGujarat, 20 Dec 2024](https://deshgujarat.com/2024/12/20/gujrera-introduces-daily-late-fee-for-delayed-quarterly-progress-reports-from-january-2025/). Since 1 January 2025 late filers are charged a daily fee instead of being locked out, so **some promoters file after the 7th**. GujRERA has also extended deadlines by order before (for example a 2019 notice moved 7 July to 21 August), so a window can move. I could not read an official GujRERA circular, so the windows are treated as a strong default, not a guarantee.
+GujRERA requires every registered project to file its quarterly progress report in the same fixed windows for all projects: **1–7 January, 1–7 April, 1–7 July and 1–7 October** (calendar quarters, not per-project anniversaries) — [DeshGujarat, 20 Dec 2024](https://deshgujarat.com/2024/12/20/gujrera-introduces-daily-late-fee-for-delayed-quarterly-progress-reports-from-january-2025/). Since 1 January 2025 late filers are charged a daily fee instead of being locked out, so **some promoters file after the 7th**. GujRERA has also extended deadlines by order before (for example a 2019 notice moved 7 July to 21 August), so a window can move. I could not read an official GujRERA circular, so the windows are treated as a strong default, not a guarantee. **Update, same day:** checked against live data (Kimana's Q-13 and Q-14 are calendar quarters due on the 7th after quarter end, and the site publishes each project's actual filing date), so current filings match the press reports; older rows were anchored to each project's registration date. Details in `DECISIONS.md`.
 
 **Design consequence:** do not fire on a fixed date and assume the data changed. A property is _due_ once the current quarter's window has closed and it has no successful check since; a due property that showed no change is re-checked weekly until the record shows a newer update or the quarter ends.
 
@@ -31,7 +31,7 @@ GujRERA requires every registered project to file its quarterly progress report 
 1. **Regulator adapter interface** in `src/lib/rera/`: `RegulatorAdapter { code, fetchProject(registrationNumber) → RegulatorRecord, normalize }`, and a registry keyed by regulator code (`gujrera` first). A `RegulatorRecord` is one normalized shape (project name, promoter, registration number, validity dates, location, land and carpet areas, unit and tower counts, declared completion date, construction progress, a source URL and the site's own "last updated" if shown), so nothing downstream knows which regulator produced it.
 2. **Everything GujRERA-specific lives in one adapter:** URLs, page parsing, the field mapping, its quarter windows. Adding Maharashtra later means one new adapter plus a registry entry.
 3. **City → regulator** is a small config map (Ahmedabad and Gandhinagar → `gujrera`) rather than a hard-coded assumption; a property or RERA number must resolve to exactly one regulator or the action refuses with a plain message.
-4. **Schema change (additive, its own `schema.v7.md`, needs owner approval before migration):** `rera_fetch_jobs` gains `regulator_code`, `error`, `attempts`, `source_url`, and lease columns matching the OCR worker; `fetched_payload` keeps the raw response (saved before parsing, per the paid-run hardening rule — the same discipline applies here even though it is free). No new entity table.
+4. **Schema change (additive, its own `schema.v7.md`, needs owner approval before migration):** `rera_fetch_jobs` gains `regulator_code`, `error`, `attempts`, `source_url`, and lease columns matching the OCR worker; `fetched_payload` keeps the **normalized record only, never the raw response**: the responses carry prices and contact details that must not enter this database (this changed from the original plan; see `DECISIONS.md` 2026-09-20). Only the columns that were actually needed were added (see `schema.v7.md`). No new entity table.
 5. **Where RERA wins.** A fixed, reviewed mapping says which contract fields RERA is authoritative for (initially: RERA number, promoter and legal entity, project name, location, land area, carpet range, unit and tower counts, completion date, construction progress). For those fields the `rera_scrape` submission proposes the RERA value.
 6. **Difference flag on the admin screen.** Computed at read time from the latest successful fetch against the value in the submission or property: if they differ, the field shows "differs from RERA — RERA says X". It never blocks approval; the admin may keep an edited value, and the flag stays visible.
 7. **"Last checked" is the latest successful fetch time**, read from the job, not written to `properties.rera_last_verified_at`. Reason: an unchanged check produces no submission, so nothing could legally update that column (one write path). The column stays as the last _published_ verification.
@@ -91,3 +91,27 @@ Given a real GujRERA number for Kimana Towers, an admin fetches the record, sees
 ## Completion record
 
 _(fill in at completion)_
+
+## Progress 2026-09-20 (owner asked for the fetch now)
+
+**Built and verified**
+
+- [x] Discovery in a real browser and against the endpoints; findings in `DECISIONS.md` 2026-09-20 ("What GujRERA actually exposes").
+- [x] `schema.v7.md` and migration `0011` (approved by the owner).
+- [x] `src/lib/rera/`: normalized `RegulatorRecord`, adapter interface, registry keyed by regulator code, the `gujrera` adapter, the field mapping and comparison, and the legacy-TLS transport.
+- [x] `fetchReraForSubmission`, `applyReraValues`, `getReraState`; routes `POST …/submissions/{id}/rera/fetch` and `…/rera/apply`.
+- [x] Admin screen: a RERA panel (number, fetch, record, comparison, "Use RERA values" behind a confirmation) and a "Differs from RERA" note on each field.
+- [x] Works while adding a property (any draft) and when editing a published one (through "Edit this property").
+- [x] Tests: adapter (poisoned fixtures prove no price or contact detail is kept), mapping, transport, database integration (real Postgres), routes, and components. Real-browser check against live GujRERA and Kimana, 16/16 (`scripts/verify-rera-fetch.mjs`).
+
+**Findings while building** (full text in `DECISIONS.md`): the endpoint list and response shapes; current quarters are calendar quarters, older rows were anchored to registration, and each project's actual filing dates are published; areas are square metres; progress is a percentage; prices and contact details are present in the responses and are never read; the site needs legacy TLS renegotiation; the migration-timestamp trap.
+
+**Not built yet**
+
+- [ ] Quarterly due-check worker (a property is due once its latest calendar quarter has closed and the record shows no filing; re-check weekly until it does). The record already carries `latestQuarter.submittedOn` for this.
+- [ ] A `rera_scrape` submission created automatically from a differing record (today an admin fetches and applies by hand).
+- [ ] Developer-facing entry for their own properties (waits for the developer portal).
+- [ ] Buyer-facing "last checked".
+- [ ] Areas (square metres to square feet) and property type, once the owner agrees the mapping.
+- [ ] A second regulator: add an adapter file and a registry entry.
+- [ ] Kill switch and failure alerting before scheduling (see `docs/production-readiness.md`).

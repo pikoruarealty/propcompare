@@ -1,5 +1,17 @@
 # Progress
 
+## 2026-09-20 (later) — RERA fetch built and checked against the real GujRERA; edit a live property
+
+**Done:** an admin can enter a RERA registration number on any draft, or on an edit of an already-published property, and fetch the record from GujRERA. The screen shows the record (promoter, registration and completion dates, latest quarterly filing, when it was checked) and each field beside what we hold, with "Differs from RERA" flagged and never blocking. "Use RERA values" (behind a confirmation) writes them as confirmed fields; the draft is still reviewed and published as usual. "Edit this property" on a published submission starts an edit that shows each published value and keeps everything not changed. Schema v7 (approved) added the regulator, project, submission, requester and error to `rera_fetch_jobs`. Regulators are adapters keyed by code, so another state is one new adapter.
+
+**Verified:** typecheck, lint, and the new unit, database, route and component tests (see the run at the end of this session); `scripts/verify-rera-fetch.mjs` in Chrome against live GujRERA and Kimana, 16/16, with the live property untouched.
+
+**Bugs fixed on the way:** the buyer email check rejected any address with an "s"; duplicate room names broke the dossier's keys; GujRERA needs legacy TLS renegotiation (allowed for that host only); a migration timestamp made drizzle skip 0011 silently; my first test run leaked test rows (cleaned).
+
+**Not done:** the quarterly refresh worker, automatic `rera_scrape` submissions, the developer-facing entry, buyer "last checked", area and type mapping, editing unit types and pictures of a live property, and applying `developer.name` on publish. Details in both 2026-09-20 tasklists and `DECISIONS.md`.
+
+**Note for your own test:** the dev server I used is stopped and the edit draft I made on Kimana is deleted; Kimana's live row is unchanged (no RERA number yet). The admin login is in the earlier chats: `admin@propcompare.test`, and the throwaway local password used by the verify scripts.
+
 ## 2026-09-20 — Work committed; edit-after-publish and GujRERA planned (no code yet)
 
 **Done:** the previous session's uncommitted work is now three commits on `task/phase-2a-completion` (extraction worker and hardening; developer legal entities and "confirm all remaining values"; the first live property with buyer images and docs). Typecheck passes on the tip; the three commits were not each built in isolation. `next-env.d.ts`, `drizzle.config.ts` and `.tmp-ocr-live-smoke.ts` (generated or line-ending noise) and the `drizzle/meta/0000–0003` snapshots were left uncommitted.

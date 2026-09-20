@@ -6,11 +6,14 @@ import {
   groupFields,
   REVIEW_STATUS_LABEL,
 } from "@/lib/submissions/field-display";
+import type { ReraComparisonItem } from "@/lib/rera/mapping";
+import { LIVE_FIELD_KEYS } from "@/lib/submissions/live-field-keys";
 import type { SubmissionDetail } from "@/lib/submissions/queue";
 import { cn } from "@/lib/utils";
 import { ConfirmAction } from "./confirm-action";
 import { FieldEditor } from "./field-editor";
 import { FieldValue } from "./field-value";
+import { displayReraValue } from "./rera-panel";
 
 const STATUS_TONE: Record<string, string> = {
   needs_review: "bg-accent text-accent-foreground",
@@ -31,6 +34,7 @@ const STATUS_TONE: Record<string, string> = {
  */
 export function FieldsPanel({
   submission,
+  reraDifferences = {},
   editable,
   inReview,
   pending,
@@ -39,6 +43,8 @@ export function FieldsPanel({
   onConfirmAll,
 }: {
   submission: SubmissionDetail;
+  /** Fields whose held value differs from RERA's, keyed by field key. */
+  reraDifferences?: Record<string, ReraComparisonItem>;
   editable: boolean;
   inReview: boolean;
   pending: boolean;
@@ -121,6 +127,41 @@ export function FieldsPanel({
                         value={candidate.value}
                         lookups={submission.lookups}
                       />
+                      {submission.propertyId &&
+                      field.fieldKey !== "property.legal_entity_id" &&
+                      submission.live[field.fieldKey] !== undefined &&
+                      JSON.stringify(submission.live[field.fieldKey]) !==
+                        JSON.stringify(candidate.value) ? (
+                        <p
+                          data-slot="live-value"
+                          className="text-muted-foreground mt-2 text-xs"
+                        >
+                          Currently published:{" "}
+                          {displayReraValue(
+                            field.fieldKey,
+                            typeof submission.live[field.fieldKey] ===
+                              "number" ||
+                              typeof submission.live[field.fieldKey] ===
+                                "string"
+                              ? (submission.live[field.fieldKey] as
+                                  string | number)
+                              : null,
+                          )}
+                        </p>
+                      ) : null}
+                      {reraDifferences[field.fieldKey] ? (
+                        <p
+                          data-slot="rera-difference"
+                          className="text-primary mt-2 text-xs font-medium"
+                        >
+                          Differs from RERA. RERA says{" "}
+                          {displayReraValue(
+                            field.fieldKey,
+                            reraDifferences[field.fieldKey].reraValue,
+                          )}
+                          .
+                        </p>
+                      ) : null}
                       {candidate.confidence !== null ? (
                         <p className="text-muted-foreground mt-2 text-xs">
                           Read with{" "}
@@ -138,6 +179,29 @@ export function FieldsPanel({
                         </p>
                       ))}
                     </>
+                  ) : submission.propertyId &&
+                    submission.live[field.fieldKey] !== undefined ? (
+                    <>
+                      <FieldValue
+                        dataType={field.dataType}
+                        value={submission.live[field.fieldKey]}
+                        lookups={submission.lookups}
+                      />
+                      <p
+                        data-slot="live-value"
+                        className="text-muted-foreground mt-2 text-xs"
+                      >
+                        Currently published. Unchanged unless you edit it.
+                      </p>
+                    </>
+                  ) : submission.propertyId &&
+                    !LIVE_FIELD_KEYS.has(field.fieldKey) ? (
+                    <span
+                      data-slot="live-value"
+                      className="text-muted-foreground italic"
+                    >
+                      Unchanged. Keeps what is published.
+                    </span>
                   ) : (
                     <span className="text-muted-foreground italic">
                       Not stated
@@ -171,7 +235,10 @@ export function FieldsPanel({
                             setEditing(field.fieldKey);
                           }}
                         >
-                          {candidate ? "Edit" : "Add"}
+                          {candidate ||
+                          submission.live[field.fieldKey] !== undefined
+                            ? "Edit"
+                            : "Add"}
                         </Button>
                       ) : null}
                       {inReview && candidate ? (

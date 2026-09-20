@@ -1,3 +1,5 @@
+import { getReraState, type ReraState } from "@/lib/rera/submission-fetch";
+import { loadLiveValues } from "./live-values";
 import { and, desc, eq, sql } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import {
@@ -166,6 +168,14 @@ export const getSubmissionLookups = async (
 };
 
 export interface SubmissionDetail extends SubmissionQueueItem {
+  /** The latest RERA fetch for this submission or its property, and how it
+   * compares with what the submission holds now. */
+  rera: ReraState;
+  /** The published property this submission changes; `null` for a new property. */
+  propertyId: string | null;
+  /** For an edit of a published property: the values currently live, by field
+   * key. Empty for a new property. Simple fields only. */
+  live: Record<string, unknown>;
   fields: {
     fieldKey: string;
     label: string;
@@ -207,7 +217,10 @@ export const getSubmissionDetail = async (
   const [item] = await listSubmissionQueue(database, { id });
   if (!item) return null;
   const [owner] = await database
-    .select({ developerId: propertySubmissions.developerId })
+    .select({
+      developerId: propertySubmissions.developerId,
+      propertyId: propertySubmissions.propertyId,
+    })
     .from(propertySubmissions)
     .where(eq(propertySubmissions.id, id));
   const fields = await database
@@ -301,6 +314,11 @@ export const getSubmissionDetail = async (
       evidence: evidenceByField.get(field.fieldKey) ?? [],
     })),
     availableFields,
+    rera: await getReraState(database, id),
+    propertyId: owner?.propertyId ?? null,
+    live: owner?.propertyId
+      ? await loadLiveValues(database, owner.propertyId)
+      : {},
     developerId: owner?.developerId ?? null,
     lookups: await getSubmissionLookups(database, owner?.developerId ?? null),
     media,
