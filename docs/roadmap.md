@@ -48,7 +48,7 @@ Phases 2A and 2B run in parallel once Phase 1 lands, so both developers are work
 1. Login/signup UI (buyer phone-OTP, staff email/password) — Better Auth already implements both; no screen exists for either.
 2. The developer portal's upload → page-routing confirmation → OCR-draft review → submit flow (`docs/app-flows/developer.md`), pulled forward from Phase 4.
 3. The admin submission-queue, field-by-field reconciliation, approve, and publish UI (`docs/app-flows/admin.md`), wiring the already-implemented `publishSubmission`/`applySubmissionTransition` library functions to real routes and screens.
-4. `rera_fetch_jobs` scrape job and cross-check logic — schema exists, no implementation, no tasklist yet.
+4. `rera_fetch_jobs` scrape job and cross-check logic — planned in `docs/tasklists/2026-09-20-gujrera-regulator-sync.md`; not built.
 
 **Explicitly deferred, the one item staying out of scope:** the human field-level OCR accuracy spot-check on the Adani Amaris and Kimana Towers brochures (`docs/tasklists/2026-09-02-ocr-provider-integration.md`'s sole unchecked line). It becomes easier once the reconciliation UI above exists, so it's left for after rather than blocking this work.
 

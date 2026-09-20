@@ -1,5 +1,15 @@
 # Progress
 
+## 2026-09-20 — Work committed; edit-after-publish and GujRERA planned (no code yet)
+
+**Done:** the previous session's uncommitted work is now three commits on `task/phase-2a-completion` (extraction worker and hardening; developer legal entities and "confirm all remaining values"; the first live property with buyer images and docs). Typecheck passes on the tip; the three commits were not each built in isolation. `next-env.d.ts`, `drizzle.config.ts` and `.tmp-ocr-live-smoke.ts` (generated or line-ending noise) and the `drizzle/meta/0000–0003` snapshots were left uncommitted.
+
+**Planned, not built:** the owner is running their own brochure → database → live test first, so coding waits. Two tasklists were written from the owner's answers: `docs/tasklists/2026-09-20-edit-published-properties.md` (every detail editable after publish, through approval again; found that nothing creates an edit of an existing property and that `developer.name` is never applied by the publisher) and `docs/tasklists/2026-09-20-gujrera-regulator-sync.md` (admin-supplied RERA numbers, RERA wins with a visible "differs from RERA" flag, quarterly due-based refresh, regulator adapters so other cities can be added). Three decisions are logged in `DECISIONS.md` 2026-09-20; `ARCHITECTURE.md` has a short regulator-sync note.
+
+**Researched:** GujRERA promoters file quarterly reports in fixed windows for all projects (1–7 Jan/Apr/Jul/Oct), with daily late fees since Jan 2025 and past extensions by order. Press sources only; the site's structure and terms were not inspected.
+
+**Waiting on the owner:** the result of their end-to-end test; whether an admin may approve their own edit; approval of an additive `schema.v7` for `rera_fetch_jobs` when that work starts. After that, the earlier queue: buyer retention, enquiries and inbox, claim / report / last checked, intake cookie.
+
 ## 2026-09-19 (later) — The first real property is live, end to end through the UI
 
 **Done:** The Kimana Towers (Sun VN Developers LLP) went from brochure upload to live on the buyer website entirely through the admin screens: upload, categorize, confirm pages, Claude extraction, review, approve, publish. Verified in a browser: it is in the browse list with its exterior picture, its dossier opens, all nine images (exterior render and eight floor plans, each tied to its unit type) load with their credit, and no price appears (`scripts/verify-property-live.mjs`, 7/7). Kimana's extraction found 6 unit types with full room lists; the brochure gave no property type, possession, RERA number, amenities or BHK types, so those are honestly "not stated" except property type (Apartment) and the legal entity, which were set by hand.

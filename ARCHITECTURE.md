@@ -85,3 +85,7 @@ trigger and admin page-routing UI remain separate planned work.
 ## Multi-agent development
 
 This codebase is written by a human plus two AI coding agents (Claude Code, Codex) working in parallel. `AGENTS.md` is the shared contract both agents follow — schema changes, conventions, and the one-write-path rule are documented there so no agent silently diverges into a second version of any entity, which is exactly how the prior attempt's second contributor problem happened.
+
+## Regulator sync (planned)
+
+RERA data is fetched through one adapter per regulator (`src/lib/rera/`, keyed by regulator code, GujRERA first), each returning a single normalized record; the fetch job, the submission builder and the admin difference flag never name a regulator. A fetch never writes live tables: a difference becomes a `rera_scrape` submission that goes through the same review and the sole publish transaction. See `docs/tasklists/2026-09-20-gujrera-regulator-sync.md` and `DECISIONS.md` 2026-09-20.
