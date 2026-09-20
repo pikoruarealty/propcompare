@@ -108,10 +108,10 @@ _(fill in at completion)_
 
 **Not built yet**
 
-- [ ] Quarterly due-check worker (a property is due once its latest calendar quarter has closed and the record shows no filing; re-check weekly until it does). The record already carries `latestQuarter.submittedOn` for this.
-- [ ] A `rera_scrape` submission created automatically from a differing record (today an admin fetches and applies by hand).
+- [x] Quarterly due-check worker (`src/lib/rera/refresh.ts`): due once the latest closed quarter's window has passed and the last good record shows no filing for it; weekly re-check, daily-then-doubling after failures (capped at a week). Off unless `RERA_WORKER_ENABLED=true`; `bun run rera:worker` to run alone.
+- [x] A `rera_scrape` draft edit created automatically from a differing record, values as `needs_review`; none when nothing differs, when an edit is open, or when the same proposal was already rejected. Tested on real Postgres (`refresh.integration.test.ts`); not run against the live site (kill switch off).
 - [ ] Developer-facing entry for their own properties (waits for the developer portal).
 - [ ] Buyer-facing "last checked".
 - [ ] Areas (square metres to square feet) and property type, once the owner agrees the mapping.
 - [ ] A second regulator: add an adapter file and a registry entry.
-- [ ] Kill switch and failure alerting before scheduling (see `docs/production-readiness.md`).
+- [x] Kill switch (`RERA_WORKER_ENABLED`, off by default) and request spacing. [ ] Failure alerting stays open (`docs/production-readiness.md`).

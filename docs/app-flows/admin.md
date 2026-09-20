@@ -45,8 +45,8 @@ submission shape.
 
 ## RERA cross-check journey
 
-1. A fetch job retrieves a RERA record for a known registration number and records fetched payload/matches.
-2. A mismatch or new fact becomes a new `rera_scrape` submission.
+1. A fetch job retrieves a RERA record for a known registration number and records the normalized record and matches. An admin can run one by hand while adding or editing a property; a scheduled worker (off until `RERA_WORKER_ENABLED=true`) runs one for every published property once a quarter's filing window has closed and the record does not yet show that quarter's filing, weekly until it does.
+2. A difference becomes a new `rera_scrape` draft edit of the property, holding RERA's values as "needs review". No draft is opened when nothing differs, while an edit is already open, or when an admin already rejected the same proposal. A failed check is recorded with its reason and retried with a growing delay; it never reads as "no change".
 3. The admin reviews it through the same field/review/publish workflow. The fetch job never updates live data directly.
 
 ## Permissions and boundaries

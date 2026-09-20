@@ -1,6 +1,6 @@
 # Tasklist — finish Phase 2A: login, developer submission flow, admin review/publish, GujRERA
 
-**Status:** in progress — decisions resolved 2026-09-19; step 1 tasklist: `2026-09-19-login-ui.md`
+**Status:** built 2026-09-20; closing needs the owner's review, the field-by-field spot-check and the merge (see `2026-09-20-close-phase-2a.md`). Reconciled against what shipped on 2026-09-20; the developer-facing screens in step 2 are deliberately on hold, not forgotten.
 **Owner:** Bhavarth (implementation); reviewed decisions require explicit sign-off per `AGENTS.md` (auth, schema, publish transaction)
 **Branch:** task/phase-2a-completion
 **Depends on:** `publishSubmission`/`applySubmissionTransition` (done, `src/lib/submissions/`), the OCR adapter and ingestion pipeline (done, `src/lib/ocr/`), Better Auth (`src/lib/auth.ts`, plumbing done, no UI)
@@ -39,9 +39,9 @@ In flow order — each step unblocks the next:
 
 ### 1. Login/signup UI
 
-- [ ] Buyer phone-OTP screen(s): phone entry → OTP entry → session established. Reuses Better Auth's `phoneNumber` plugin, already wired.
-- [ ] Staff email/password screen(s) for developer and admin accounts. Reuses Better Auth's `emailAndPassword`, already wired.
-- [ ] Session-aware header/nav state (a signed-in buyer sees saved/comparisons entry points; this may overlap with Deep's Phase 3 UI work — coordinate, don't duplicate).
+- [x] Buyer phone-OTP screen(s): phone entry → OTP entry → session established (`/login`; `2026-09-19-login-ui.md`). Production delivery still needs an SMS provider (`docs/production-readiness.md`).
+- [x] Email/password screens for developer and admin accounts (`/developers/login`, `/admin/login`).
+- [x] Session-aware header state (signed-in indicator, sign-out), done 2026-09-19. The saved and comparisons entry points belong to Phase 3.
 
 ### 2. Developer portal — submission-creating half
 
@@ -58,36 +58,36 @@ In flow order — each step unblocks the next:
 
 ### 3. Admin portal
 
-- [ ] Canonical `developers` profile creation + staff invitation flow (the "controlled admin builder-profile flow" `admin.md` references but doesn't scope).
-- [ ] Submission queue (`GET /api/v1/admin/submissions`, filtered by status).
-- [ ] Field-by-field reconciliation screen (`GET /api/v1/admin/submissions/{id}`, `PATCH .../fields/{fieldId}`): every candidate field alongside its evidence pages/snippets and confidence, confirm/edit/reject per field.
-- [ ] Review action (`POST /api/v1/admin/submissions/{id}/review`): request changes, reject, or approve — no direct catalog mutation, per the existing contract.
-- [ ] Publish action (`POST /api/v1/admin/submissions/{id}/publish`): wires to the already-implemented `publishSubmission`; owner-only per the permission model.
-- [ ] Verifier vs. owner permission split, per `admin.md`'s permissions section ("Owners administer higher-risk approval/publish operations").
+- [x] Canonical `developers` profile creation + invitation flow (`2026-09-19-admin-portal.md`), with legal entities (schema v6).
+- [x] Submission queue (one row per property, a Change column, status filters).
+- [x] Field-by-field reconciliation screen: every candidate beside its evidence and confidence, confirm, edit or reject per field, published values shown beside proposals for an edit.
+- [x] Review action: request changes, reject, or approve — no direct catalog mutation.
+- [x] Publish action, wired to `publishSubmission`; owner-only.
+- [x] Verifier vs. owner permission split, enforced server-side.
 
 ### 4. GujRERA fetch/cross-check job
 
-- [ ] Needs its own scoping pass and likely its own sub-tasklist per `docs/tasklists/README.md`, given it's a distinct integration (an external fetch job) rather than UI — flag when reached rather than scoping fully here.
-- [ ] Fetch job retrieves a RERA record for a known registration number, records fetched payload/matches (`rera_fetch_jobs`).
-- [ ] A mismatch or new fact becomes a new `property_submissions` row with `source: "rera_scrape"`, reviewed through the same admin flow as any other submission — never a direct live-data write.
+- [x] Scoped in its own tasklist: `2026-09-20-gujrera-regulator-sync.md`.
+- [x] Fetch retrieves a RERA record for a registration number and records the normalized record and matches on `rera_fetch_jobs` (never raw responses: they carry prices). Manual fetch, and the scheduled quarterly refresh (`2026-09-20-close-phase-2a.md`).
+- [x] A difference found by the scheduled refresh becomes a `rera_scrape` draft edit (values `needs_review`), reviewed through the same admin flow; the job never writes a live table.
 
 ### 5. Property media, end to end (buyer photos/floor plans)
 
 Background: `GET /api/v1/media/{id}` (signed-URL redirect) and `StorageAdapter.getSignedReadUrl` exist and are tested, but nothing can produce a `property_media` row and nothing renders an image. Recorded here so the last piece isn't lost (`docs/tasklists/2026-09-18-media-redirect-route.md`, 2026-09-18 `DECISIONS.md`).
 
-- [ ] **Decided 2026-09-19: dedicated `submission_media` table + `schema.v6.md`; surface for review before migrating.** Field-contract gap (schema/contract change, needs sign-off per `AGENTS.md`):** the submission/OCR field contract (`property_schema_fields`) has no media field, so `publishSubmission` cannot create `property_media` rows — and `property_media` is a live catalog table bound by the one-write-path rule (no direct inserts, including tests and seed scripts). Decide and record the media field shape (dated `DECISIONS.md` entry; new `schema.v6.md` if structural), then extend `publishSubmission` to write `property_media` in the same publish transaction.
-- [ ] Media upload step in the developer/admin submission flow (photos, floor plans), via `StorageAdapter.upload()`, attached to a submission and published only through the approval path.
+- [x] **Decided 2026-09-19; built (`submission_media`, schema v6).** Field-contract gap (schema/contract change, needs sign-off per `AGENTS.md`):** the submission/OCR field contract (`property_schema_fields`) has no media field, so `publishSubmission` cannot create `property_media` rows — and `property_media` is a live catalog table bound by the one-write-path rule (no direct inserts, including tests and seed scripts). Decide and record the media field shape (dated `DECISIONS.md` entry; new `schema.v6.md` if structural), then extend `publishSubmission` to write `property_media` in the same publish transaction.
+- [x] Media upload in the admin submission flow (photos, floor plans, brochure pages as images), via `StorageAdapter.upload()`, published only through the approval path. The developer-facing upload waits for the developer portal.
 - [x] Resolved 2026-09-19: `brochure_pdf` is buyer-facing only if the developer marks it public (private by default); source documents and buyer media stay in separate storage paths.
-- [ ] Wire `PropertyCard` and the dossier to render `<img src="/api/v1/media/{id}">` from `primaryMedia`/`media`, replacing the deliberate placeholder frame from the 2026-09-07 entry; update the tests that assert the placeholder on purpose. Buyer-UI work — likely Deep's, coordinate.
-- [ ] Once a real fixture can be published through the sanctioned path: add the "found" test for `getPublishedMediaObjectPath` and an integration test for `GET /api/v1/media/{id}` (today only the not-found path and a mocked-dependency route test exist).
+- [x] `PropertyCard` and the dossier render real pictures (thumbnails on cards, a zoomable pop-up carousel).
+- [x] The "found" test for `getPublishedMediaObjectPath` exists (`src/lib/properties/queries.integration.test.ts`). Still open: an integration test for `GET /api/v1/media/{id}` (only a mocked-dependency route test exists); the picture flow is covered by browser checks.
 
 ## Tests
 
-- [ ] Auth UI: sign-up/sign-in flows for both buyer (phone-OTP) and staff (email/password), covering failure/retry paths per `buyer.md`'s exception paths ("OTP failure/expiry: preserve return destination and allow retry without recording an unlock").
+- [x] Auth UI: sign-up/sign-in flows for both buyer (phone-OTP) and staff (email/password), covering failure/retry paths per `buyer.md`'s exception paths ("OTP failure/expiry: preserve return destination and allow retry without recording an unlock").
 - [ ] Developer flow: upload → routing → OCR review → submit, end to end against a real (non-production) brochure or a synthetic/redacted fixture, matching the existing OCR integration tests' convention of never committing real brochure content.
-- [ ] Admin flow: queue → reconciliation → approve → publish, end to end, asserting the live catalog only ever changes through `publishSubmission` and that a rejected/changes-requested submission never reaches it.
-- [ ] Permission boundaries: developer staff cannot approve/publish/set review results (403, not just a hidden UI control); admin verifier vs. owner split enforced server-side, not only in the UI.
-- [ ] GujRERA: fetch job never writes live data directly; a mismatch produces a reviewable submission, not an automatic change.
+- [x] Admin flow: queue → reconciliation → approve → publish, end to end, asserting the live catalog only ever changes through `publishSubmission` and that a rejected/changes-requested submission never reaches it.
+- [x] Permission boundaries: developer staff cannot approve/publish/set review results (403, not just a hidden UI control); admin verifier vs. owner split enforced server-side, not only in the UI.
+- [x] GujRERA: the fetch and the scheduled refresh never write live data; a mismatch produces a reviewable draft (`refresh.integration.test.ts`).
 
 ## Documentation
 

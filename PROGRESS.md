@@ -1,5 +1,13 @@
 # Progress
 
+## 2026-09-20 (end of day) — Phase 2A is built; closing needs your review
+
+**Done:** the quarterly RERA refresh. A worker finds each published property whose RERA record does not yet show the latest closed quarter's filing, checks GujRERA (weekly until it shows, with a growing delay after failures), and, if RERA differs from what is live, opens one draft edit "From RERA" with RERA's values marked "needs review". It never writes a live table, opens no draft when nothing differs or an edit is already open, and does not raise a change you already rejected. It is **off** until you set `RERA_WORKER_ENABLED=true` (or run `bun run rera:worker`). The versions list on a property's submission screen now shows what each published edit changed, was → now. The stale parent tasklist is reconciled and a closing tasklist written (`docs/tasklists/2026-09-20-close-phase-2a.md`). `bun run lint` now ignores `.local/` scratch files.
+
+**Verified:** see the run at the end of this entry. Not run: the scheduler against the live GujRERA site (it is off), and a browser look at a scheduled draft.
+
+**Needs you before the phase closes:** review of the publish-logic changes (removal, unlist and delete, `developer.name`, and the scheduler creating drafts); the field-by-field spot-check; your go-ahead for a paid brochure re-run to test the unit-aware prompt; a yes or no on RERA per-flat carpet area; then the merge to `main`. I have not merged or pushed.
+
 ## 2026-09-20 (late night) — Zoomable pop-up pictures; carpet area finding
 
 **Done:** the buyer pop-up carousel zooms and pans each picture (buttons, wheel or trackpad pinch, double-click or double-tap, +, - and 0 keys, drag, two-finger pinch); checked in a real browser on Kimana's floor plans and at phone width; committed. **Carpet area:** it cannot be calculated from room dimensions. Against Kimana's real RERA figures the summed room sizes are off by -15% to +18% per unit type, and two flats with the same RERA carpet area sum differently, so a calculated value would be a guess dressed as a legal figure. **Proposed instead, waiting for your yes:** take carpet area per flat from RERA (exact, free) and show an admin-only "rooms add up to X, RERA says Y" cross-check that would have caught the metres bug. Details in `DECISIONS.md` and `docs/tasklists/2026-09-20-zoom-and-carpet-area.md`.

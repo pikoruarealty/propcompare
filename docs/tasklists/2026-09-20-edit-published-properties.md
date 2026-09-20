@@ -90,6 +90,6 @@ _(fill in at completion)_
 
 - [ ] Seed and edit whole-set fields of a live property (amenities, specifications, unit types) and its pictures; decide removal semantics.
 - [ ] Publisher applies `developer.name` (with a duplicate-name guard).
-- [ ] Revision history on the property view.
+- [x] Revision history: the versions list on a property's submission screen now shows when each edit went live and what it changed (was → now for single values; "changed" for amenity, specification and unit-type sets). Read from `property_revisions`. (A standalone property page in the admin is still not built.)
 - [ ] A property page in the admin (today an edit starts from the property's published submission).
 - [ ] The edit path for developers, when the developer portal exists.
