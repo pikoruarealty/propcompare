@@ -1,5 +1,15 @@
 # Progress
 
+## 2026-09-20 (night) — RERA carpet area per unit type, buyer configurations as tabs, GujRERA terms reviewed
+
+**Terms:** I read GujRERA's Terms & Conditions, Copyright Policy, Disclaimer, Privacy and Hyperlinking pages in a real browser (the site is a JavaScript app) and its robots.txt (none). **Nothing forbids periodic reading**, and nothing mentions automated access. Reuse is allowed if the data is accurate, not misleading, and the source is acknowledged; the Copyright page says "after due approval" while the Disclaimer says no permission is needed. Two soft items: show "Source: GujRERA, checked on …" wherever RERA facts reach buyers, and email `inforera@gujarat.gov.in` for written confirmation. Details in `DECISIONS.md`; this is a reading of the pages, not legal advice.
+
+**Carpet area (yes, built):** the RERA panel now offers each unit type RERA's carpet area, from the site's per-flat list (only flat number, carpet area and usage are read; prices, buyers' names and phone numbers are never kept). On Kimana, live: 3,977.70, 3,977.70, 6,163.31, 2,984.40, 2,984.40 and 4,986.27 sq ft for the six types, each shown with "rooms add up to X" against it (flagged only beyond 30%; never stored). It goes through "Use RERA values", and the scheduler proposes it as a draft. **Found and fixed:** removed unit types were still listed to edits.
+
+**Buyer page:** the configurations are one card with a tab per unit type (checked at desktop and phone width on Kimana).
+
+**Verified:** typecheck, lint and prettier clean; the full suite passes (107 files, 1338 tests). Checked by hand: the live adapter and the admin panel in a real browser on a throwaway draft (deleted; Kimana's live listing unchanged). **Not verified:** Amaris live (its registration number is not in the repo).
+
 ## 2026-09-20 (end of day) — Phase 2A is built; closing needs your review
 
 **Done:** the quarterly RERA refresh. A worker finds each published property whose RERA record does not yet show the latest closed quarter's filing, checks GujRERA (weekly until it shows, with a growing delay after failures), and, if RERA differs from what is live, opens one draft edit "From RERA" with RERA's values marked "needs review". It never writes a live table, opens no draft when nothing differs or an edit is already open, and does not raise a change you already rejected. It is **off** until you set `RERA_WORKER_ENABLED=true` (or run `bun run rera:worker`). The versions list on a property's submission screen now shows what each published edit changed, was → now. The stale parent tasklist is reconciled and a closing tasklist written (`docs/tasklists/2026-09-20-close-phase-2a.md`). `bun run lint` now ignores `.local/` scratch files.

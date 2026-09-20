@@ -1,6 +1,6 @@
 # Tasklist — pop-up zoom, and where carpet area should come from
 
-**Status:** zoom built and verified 2026-09-20; carpet-area work proposed, not started
+**Status:** zoom built and verified 2026-09-20; carpet-area work approved and built (see `2026-09-20-rera-carpet-area.md`)
 **Owner:** Bhavarth
 **Branch:** `task/phase-2a-completion`
 **Parent:** `2026-09-20-units-thumbnails-removal-listing.md`
@@ -27,11 +27,11 @@
 
 ### 3. Carpet area: proposed, needs the owner's yes
 
-- [ ] Read per-flat `carpetArea` from GujRERA form-three (flat, block, carpet area only; never prices or booked status), convert once from square metres, group into unit types.
-- [ ] Offer the RERA carpet area on each unit type in the RERA panel, applied as the `carpet` basis for the admin to confirm; mismatch with an existing value shows "differs from RERA".
-- [ ] Admin-only cross-check: "rooms add up to X sq ft; RERA says Y", warning on a large gap; computed and never stored.
-- [ ] Tests against the saved Kimana response; real-browser check.
+- [x] Read per-flat `carpetArea` from GujRERA form-three (flat, block, carpet area only; never prices or booked status), convert once from square metres, group into unit types.
+- [x] Offer the RERA carpet area on each unit type in the RERA panel, applied as the `carpet` basis for the admin to confirm; mismatch with an existing value shows "differs from RERA".
+- [x] Admin-only cross-check: "rooms add up to X sq ft; RERA says Y", warning on a large gap; computed and never stored.
+- [x] Tests against the saved Kimana response; real-browser check.
 
 ## Not done
 
-- Everything in section 3.
+- Nothing: section 3 is built in `2026-09-20-rera-carpet-area.md`.
