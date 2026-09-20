@@ -319,6 +319,17 @@ const validateFieldValue = (
     }
     return normalized;
   }
+  if (dataType === "legal_entity_id") {
+    const id = readNonEmptyString(value, path);
+    if (
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        id,
+      )
+    ) {
+      throw new SubmissionPayloadError(`${path} must be a legal entity id`);
+    }
+    return id.toLowerCase();
+  }
   if (dataType === "unit_variant_array") {
     return readUnitVariants(value, path, lookups);
   }

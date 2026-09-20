@@ -1,13 +1,13 @@
 # PropCompare canonical data schema — v6 (PROPOSED)
 
-**Status:** active for implemented sections. Section 1 (`ai_usage_events`) was approved and implemented 2026-09-20 (migration `0008`). Section 2 (`submission_media`) was approved 2026-09-19 and is implemented by migration `0009`. The developer legal-entity link remains proposed and unimplemented.
+**Status:** active for implemented sections. Section 1 (`ai_usage_events`) was approved and implemented 2026-09-20 (migration `0008`). Section 2 (`submission_media`) was approved 2026-09-19 and is implemented by migration `0009`. Section 3 (developer legal entities) was approved by the owner on 2026-09-21 and is implemented by migration `0010`.
 **Supersedes:** [schema v5](schema.v5.md) for new implementation work; v5's content is not edited.
 
 v6 is a bundle of additive changes agreed in principle on 2026-09-19/20 (see the `DECISIONS.md` entries of those dates). Each is reviewed and approved separately; this file grows as they are drafted. Currently drafted:
 
 1. `ai_usage_events` — the admin-only usage and cost ledger. **Approved and implemented 2026-09-20.**
 2. `submission_media` — reviewed media proposed by a submission and copied to the live catalog only during publication. **Approved and implemented 2026-09-19.**
-3. _Still to draft:_ the developer legal-entity link (brand profile with attached RERA legal entities).
+3. `developer_legal_entities` — the legal promoter entities attached to a developer profile, and the property's link to one. **Approved and implemented 2026-09-21.**
 
 ## 1. `ai_usage_events` — AI usage and cost ledger
 
@@ -98,3 +98,33 @@ upserted. An absent target aborts the transaction rather than guessing. A
 private brochure stays out of `property_media` unless its reviewed submission
 row is deliberately public. Existing `property_media` rows retain nullable
 origin metadata for migration compatibility; every newly published row has it.
+
+## 3. `developer_legal_entities` — the legal promoter entity of a project
+
+**Why:** a developer profile is the buyer-facing brand ("Adani"); RERA registers a project under a legal entity ("Adani Realty Ltd", or a project company). `DECISIONS.md` 2026-09-19 said such entities would be recorded as attached aliases once the GujRERA job needed them. Owner answers (2026-09-21): record name, type and RERA promoter number; admin-only for now (not shown to buyers); chosen per property during reconciliation.
+
+```text
+legal_entity_type = enum('company', 'llp', 'partnership', 'proprietorship', 'trust', 'other')
+
+developer_legal_entities (
+  id                                  uuid pk default gen_random_uuid(),
+  developer_id                        uuid not null references developers(id) on delete cascade,
+  legal_name                          text not null,
+  entity_type                         legal_entity_type not null,
+  rera_promoter_registration_number   text null,      -- the GujRERA promoter number, when known
+  created_at, updated_at              timestamptz
+)
+unique: (developer_id, lower(legal_name))
+unique: (rera_promoter_registration_number) where not null   -- one company, one registration
+index:  (developer_id)
+
+properties.legal_entity_id  uuid null references developer_legal_entities(id) on delete restrict
+```
+
+Design notes:
+
+- **One entity per property**, chosen through a new contract field `property.legal_entity_id` (`data_type = legal_entity_id`, schema version v6). It travels with the submission and is copied to `properties.legal_entity_id` only by `publishSubmission`, which also refuses an entity that does not belong to the property's own developer. Reconciliation refuses the same at edit time.
+- **OCR never fills it.** A brochure can name a company but cannot know which record it is, so the field is excluded from the fields the extraction model is asked for.
+- **Not one of the live catalog tables**, except the new `properties` column, which only the publish transaction writes. Entities are administered directly by an admin, like developer profiles.
+- **`developers.rera_developer_id` is kept** as the profile's own optional recognition key (unchanged). Entities carry the per-company registrations. Folding the two into one representation is an open follow-up, to be decided when the GujRERA job is scoped.
+- **Privileges:** `propcompare_app` gets `SELECT, INSERT, UPDATE, DELETE`. Nothing in `private` is involved.

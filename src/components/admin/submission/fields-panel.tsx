@@ -8,6 +8,7 @@ import {
 } from "@/lib/submissions/field-display";
 import type { SubmissionDetail } from "@/lib/submissions/queue";
 import { cn } from "@/lib/utils";
+import { ConfirmAction } from "./confirm-action";
 import { FieldEditor } from "./field-editor";
 import { FieldValue } from "./field-value";
 
@@ -35,6 +36,7 @@ export function FieldsPanel({
   pending,
   onSave,
   onReview,
+  onConfirmAll,
 }: {
   submission: SubmissionDetail;
   editable: boolean;
@@ -43,6 +45,8 @@ export function FieldsPanel({
   /** Resolves to an error message, or null when saved. */
   onSave: (fieldKey: string, value: unknown) => Promise<string | null>;
   onReview: (fieldKey: string, status: "confirmed" | "rejected") => void;
+  /** Confirms every value still waiting for review. */
+  onConfirmAll?: () => void;
 }) {
   const [editing, setEditing] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
@@ -54,8 +58,30 @@ export function FieldsPanel({
     if (!message) setEditing(null);
   };
 
+  const waiting = submission.fields.filter(
+    (field) => field.reviewStatus === "needs_review",
+  ).length;
+
   return (
     <div className="flex flex-col gap-8">
+      {inReview && onConfirmAll && waiting > 0 ? (
+        <div className="border-border bg-card flex flex-wrap items-center justify-between gap-4 rounded-lg border p-5">
+          <p className="text-muted-foreground max-w-prose text-sm">
+            {waiting} {waiting === 1 ? "value is" : "values are"} still waiting
+            for your check. Confirm them one by one below, or all at once when
+            you have checked them against the brochure.
+          </p>
+          <ConfirmAction
+            label={`Confirm all ${waiting} remaining`}
+            title="Confirm every remaining value?"
+            description="Use this once you have checked the values against the brochure pages shown beside them. Values you edited or rejected stay as they are."
+            confirmLabel="Confirm all"
+            variant="outline"
+            disabled={pending}
+            onConfirm={onConfirmAll}
+          />
+        </div>
+      ) : null}
       {groups.map(({ group, rows }) => (
         <section key={group.key} aria-labelledby={`group-${group.key}`}>
           <h2 id={`group-${group.key}`} className="font-display text-2xl">

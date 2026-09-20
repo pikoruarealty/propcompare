@@ -195,6 +195,30 @@ export function FieldEditor({
         ))}
       </select>
     );
+  } else if (type === "legal_entity_id") {
+    control =
+      lookups.legalEntities.length === 0 ? (
+        <p className="text-muted-foreground text-sm">
+          No legal entities are recorded for this developer yet. Add one on the
+          developer profile, then come back.
+        </p>
+      ) : (
+        <select
+          id={id}
+          className={inputClass}
+          value={text}
+          onChange={(e) => setDraft(e.target.value)}
+        >
+          <option value="" disabled>
+            Choose…
+          </option>
+          {lookups.legalEntities.map((entity) => (
+            <option key={entity.id} value={entity.id}>
+              {entity.label}
+            </option>
+          ))}
+        </select>
+      );
   } else if (type === "date") {
     control = (
       <input

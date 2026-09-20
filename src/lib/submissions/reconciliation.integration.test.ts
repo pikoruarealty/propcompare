@@ -12,6 +12,7 @@ import {
   sourceDocuments,
 } from "@/db/schema/catalog";
 import {
+  confirmPendingFields,
   createManualSubmission,
   editSubmissionField,
   ReconciliationError,
@@ -340,5 +341,47 @@ describe("transitionSubmission", () => {
     ]);
     expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
     expect(await statusOf(id)).toBe("submitted");
+  });
+});
+
+describe("confirmPendingFields", () => {
+  it("confirms only the values still waiting, and only in review", async () => {
+    const id = await newDraft();
+    await editSubmissionField(db, {
+      submissionId: id,
+      fieldKey: "property.name",
+      value: "Bulk Tower",
+    });
+    await editSubmissionField(db, {
+      submissionId: id,
+      fieldKey: "property.city",
+      value: "Ahmedabad",
+    });
+    await expect(confirmPendingFields(db, id)).rejects.toMatchObject({
+      code: "invalid_state",
+    });
+
+    // Extracted values arrive as needs_review (a manual edit records "edited").
+    await db
+      .update(propertySubmissionFields)
+      .set({ reviewStatus: "needs_review" })
+      .where(eq(propertySubmissionFields.submissionId, id));
+    await db
+      .update(propertySubmissions)
+      .set({ status: "in_review" })
+      .where(eq(propertySubmissions.id, id));
+    await reviewSubmissionField(db, {
+      submissionId: id,
+      fieldKey: "property.city",
+      reviewStatus: "rejected",
+    });
+
+    expect(await confirmPendingFields(db, id)).toBe(1);
+    const byKey = new Map(
+      (await fieldsOf(id)).map((f) => [f.fieldKey, f.reviewStatus]),
+    );
+    expect(byKey.get("property.name")).toBe("confirmed");
+    expect(byKey.get("property.city")).toBe("rejected");
+    expect(await confirmPendingFields(db, id)).toBe(0);
   });
 });

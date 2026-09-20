@@ -11,6 +11,7 @@ import {
   propertyTypes,
 } from "@/db/schema/catalog";
 import { developers } from "@/db/schema/catalog";
+import { legalEntityBelongsToDeveloper } from "@/lib/developers/legal-entities";
 import {
   applySubmissionTransition,
   SubmissionTransitionError,
@@ -70,7 +71,11 @@ const requireEditableSubmission = async (
     );
   }
   const [submission] = await database
-    .select({ id: propertySubmissions.id, status: propertySubmissions.status })
+    .select({
+      id: propertySubmissions.id,
+      status: propertySubmissions.status,
+      developerId: propertySubmissions.developerId,
+    })
     .from(propertySubmissions)
     .where(eq(propertySubmissions.id, submissionId));
   if (!submission) {
@@ -131,7 +136,10 @@ export const editSubmissionField = async (
   database: PostgresJsDatabase,
   input: { submissionId: string; fieldKey: string; value: unknown },
 ): Promise<void> => {
-  await requireEditableSubmission(database, input.submissionId);
+  const submission = await requireEditableSubmission(
+    database,
+    input.submissionId,
+  );
   const [contract] = await database
     .select({
       fieldKey: propertySchemaFields.fieldKey,
@@ -164,6 +172,20 @@ export const editSubmissionField = async (
         ? cause.message
         : "Invalid field value.";
     throw new ReconciliationError("invalid_value", message);
+  }
+
+  if (
+    contract.dataType === "legal_entity_id" &&
+    !(await legalEntityBelongsToDeveloper(
+      database,
+      value as string,
+      submission.developerId,
+    ))
+  ) {
+    throw new ReconciliationError(
+      "invalid_value",
+      "Choose one of this developer's recorded legal entities.",
+    );
   }
 
   const [field] = await database
@@ -234,6 +256,54 @@ export const reviewSubmissionField = async (
       "Field candidate not found.",
     );
   }
+};
+
+/**
+ * Confirms every value still waiting for review, in one step, for a submission in
+ * review. For the admin who has checked the values against the brochure and
+ * would otherwise press "Confirm" dozens of times; values already confirmed,
+ * edited or rejected are left as they are. Returns how many it confirmed.
+ */
+export const confirmPendingFields = async (
+  database: PostgresJsDatabase,
+  submissionId: string,
+): Promise<number> => {
+  if (!UUID.test(submissionId)) {
+    throw new ReconciliationError(
+      "submission_not_found",
+      "Submission not found.",
+    );
+  }
+  return database.transaction(async (tx) => {
+    const [submission] = await tx
+      .select({ status: propertySubmissions.status })
+      .from(propertySubmissions)
+      .where(eq(propertySubmissions.id, submissionId))
+      .for("update");
+    if (!submission) {
+      throw new ReconciliationError(
+        "submission_not_found",
+        "Submission not found.",
+      );
+    }
+    if (submission.status !== "in_review") {
+      throw new ReconciliationError(
+        "invalid_state",
+        "Fields can only be reviewed while the submission is in review.",
+      );
+    }
+    const updated = await tx
+      .update(propertySubmissionFields)
+      .set({ reviewStatus: "confirmed" })
+      .where(
+        and(
+          eq(propertySubmissionFields.submissionId, submissionId),
+          eq(propertySubmissionFields.reviewStatus, "needs_review"),
+        ),
+      )
+      .returning({ id: propertySubmissionFields.id });
+    return updated.length;
+  });
 };
 
 /** Persists the existing state-machine transition under a row lock. */

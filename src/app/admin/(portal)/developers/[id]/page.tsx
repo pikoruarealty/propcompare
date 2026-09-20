@@ -7,6 +7,8 @@ import { requirePortalRole } from "@/lib/accounts/session";
 import { getDeveloper } from "@/lib/developers/profiles";
 import { listDeveloperTeam } from "@/lib/developers/invites";
 import { TeamPanel } from "@/components/admin/team-panel";
+import { LegalEntitiesPanel } from "@/components/admin/legal-entities-panel";
+import { listLegalEntities } from "@/lib/developers/legal-entities";
 
 export const metadata: Metadata = {
   title: "Developer — Admin console",
@@ -25,6 +27,7 @@ export default async function DeveloperDetailPage({
   const developer = await getDeveloper(db, id);
   if (!developer) notFound();
   const team = await listDeveloperTeam(db, developer.id);
+  const legalEntities = await listLegalEntities(db, developer.id);
 
   return (
     <AdminShell active="developers" email={session.email}>
@@ -65,6 +68,8 @@ export default async function DeveloperDetailPage({
           <dd className="data-tabular mt-2">{developer.propertyCount}</dd>
         </div>
       </dl>
+
+      <LegalEntitiesPanel developerId={developer.id} entities={legalEntities} />
 
       <TeamPanel
         developerId={developer.id}

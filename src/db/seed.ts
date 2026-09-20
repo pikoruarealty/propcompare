@@ -381,6 +381,13 @@ const initialPropertySchemaFields = [
     "RERA-declared progress after inclusive 0–100 validation.",
   ],
   [
+    "property.legal_entity_id",
+    "Promoter legal entity",
+    "legal_entity_id",
+    "$.rera.promoter_legal_entity",
+    "Chosen by an admin from the developer's recorded legal entities; never extracted by OCR and not shown to buyers yet.",
+  ],
+  [
     "unit_variants",
     "Unit configurations",
     "unit_variant_array",
@@ -605,7 +612,9 @@ async function seed() {
             "unit_variants",
           ].includes(fieldKey)
             ? "v5"
-            : "v1",
+            : fieldKey === "property.legal_entity_id"
+              ? "v6"
+              : "v1",
           isActive: true,
           description,
         }),

@@ -25,7 +25,8 @@ export const FIELD_GROUPS: {
   {
     key: "developer",
     title: "Developer",
-    description: "How the developer is described.",
+    description:
+      "How the developer is described, and the legal entity that registered the project.",
   },
   {
     key: "amenities",
@@ -49,6 +50,7 @@ export const groupOfField = (fieldKey: string): FieldGroupKey => {
   if (fieldKey === "property.amenities") return "amenities";
   if (fieldKey.startsWith("property.specifications.")) return "specifications";
   if (fieldKey.startsWith("developer.")) return "developer";
+  if (fieldKey === "property.legal_entity_id") return "developer";
   return "project";
 };
 

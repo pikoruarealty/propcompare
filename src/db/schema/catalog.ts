@@ -239,6 +239,45 @@ export const developers = pgTable(
   ],
 );
 
+export const legalEntityType = pgEnum("legal_entity_type", [
+  "company",
+  "llp",
+  "partnership",
+  "proprietorship",
+  "trust",
+  "other",
+]);
+
+/**
+ * The legal promoter entities RERA registers projects under, attached to the
+ * buyer-facing developer profile (schema v6, section 3). A profile is the brand
+ * ("Adani"); an entity is the company on the registration ("Adani Realty Ltd").
+ */
+export const developerLegalEntities = pgTable(
+  "developer_legal_entities",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    developerId: uuid("developer_id")
+      .notNull()
+      .references(() => developers.id, { onDelete: "cascade" }),
+    legalName: text("legal_name").notNull(),
+    entityType: legalEntityType("entity_type").notNull(),
+    /** The GujRERA promoter registration number, when known. */
+    reraPromoterRegistrationNumber: text("rera_promoter_registration_number"),
+    ...timestamps(),
+  },
+  (table) => [
+    uniqueIndex("developer_legal_entities_developer_name_unique").on(
+      table.developerId,
+      sql`lower(${table.legalName})`,
+    ),
+    uniqueIndex("developer_legal_entities_rera_promoter_unique")
+      .on(table.reraPromoterRegistrationNumber)
+      .where(sql`${table.reraPromoterRegistrationNumber} is not null`),
+    index("developer_legal_entities_developer_id_idx").on(table.developerId),
+  ],
+);
+
 export const properties = pgTable(
   "properties",
   {
@@ -251,6 +290,10 @@ export const properties = pgTable(
     developerId: uuid("developer_id")
       .notNull()
       .references(() => developers.id),
+    legalEntityId: uuid("legal_entity_id").references(
+      () => developerLegalEntities.id,
+      { onDelete: "restrict" },
+    ),
     reraRegistrationNumber: text("rera_registration_number"),
     reraRegistered: boolean("rera_registered").default(false).notNull(),
     reraLastVerifiedAt: timestamp("rera_last_verified_at", {

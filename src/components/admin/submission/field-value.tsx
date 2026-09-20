@@ -41,6 +41,13 @@ export function FieldValue({
     );
   }
 
+  if (dataType === "legal_entity_id") {
+    const entity = lookups.legalEntities.find((item) => item.id === value);
+    return (
+      <p>{entity ? entity.label : "An entity that is no longer recorded"}</p>
+    );
+  }
+
   if (dataType === "unit_variant_array" && Array.isArray(value)) {
     return (
       <ul className="flex flex-col gap-2">

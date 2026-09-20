@@ -19,6 +19,7 @@ import {
   unitAreas,
   unitVariants,
 } from "@/db/schema/catalog";
+import { legalEntityBelongsToDeveloper } from "@/lib/developers/legal-entities";
 import {
   applySubmissionTransition,
   type SubmissionActorRole,
@@ -50,6 +51,12 @@ export interface PublishSubmissionParams {
   submissionId: string;
   actorUserId: string;
   actorRole: SubmissionActorRole;
+  /**
+   * Run every step, including the validation and the writes, then roll the whole
+   * transaction back so nothing is kept. Answers "would this publish?" with the
+   * real code path and no side effect. Used by the pre-publish rehearsal script.
+   */
+  dryRun?: boolean;
 }
 
 export interface PublishSubmissionResult {
@@ -137,6 +144,20 @@ const resolveNewPropertySlug = async (
   );
 };
 
+/** A property may only name a legal entity that belongs to its own developer. */
+const assertLegalEntityBelongs = async (
+  tx: Tx,
+  legalEntityId: string | undefined,
+  developerId: string | null,
+): Promise<void> => {
+  if (legalEntityId === undefined) return;
+  if (!(await legalEntityBelongsToDeveloper(tx, legalEntityId, developerId))) {
+    throw new SubmissionPublishError(
+      "property.legal_entity_id must be a legal entity of the property's developer",
+    );
+  }
+};
+
 /**
  * The one write path into the live catalog tables (`properties`, `developers`,
  * `unit_variants`, `unit_areas`, `property_amenities`,
@@ -144,7 +165,32 @@ const resolveNewPropertySlug = async (
  * approved submission's reviewed field values and writes a matching
  * `property_revisions` snapshot, all inside one transaction.
  */
+class DryRunRollback extends Error {
+  constructor(
+    public readonly outcome: { propertyId: string; isNewProperty: boolean },
+  ) {
+    super("dry run: rolled back");
+  }
+}
+
 export const publishSubmission = async (
+  params: PublishSubmissionParams,
+): Promise<PublishSubmissionResult> => {
+  try {
+    return await runPublish(params);
+  } catch (error) {
+    if (error instanceof DryRunRollback) {
+      return {
+        propertyId: error.outcome.propertyId,
+        revisionId: "dry-run",
+        isNewProperty: error.outcome.isNewProperty,
+      };
+    }
+    throw error;
+  }
+};
+
+const runPublish = async (
   params: PublishSubmissionParams,
 ): Promise<PublishSubmissionResult> => {
   return db.transaction(async (tx) => {
@@ -248,6 +294,7 @@ export const publishSubmission = async (
     const reraRegistrationNumber = getStringField(
       "property.rera_registration_number",
     );
+    const legalEntityId = getStringField("property.legal_entity_id");
     const reraConstructionProgressPercent = readPercentField(
       "property.rera_construction_progress_percent",
     );
@@ -271,6 +318,7 @@ export const publishSubmission = async (
         `unknown property type key: ${propertyTypeKey}`,
       );
       const slug = await resolveNewPropertySlug(tx, submission.id, name);
+      await assertLegalEntityBelongs(tx, legalEntityId, submission.developerId);
 
       const [inserted] = await tx
         .insert(properties)
@@ -287,6 +335,7 @@ export const publishSubmission = async (
           totalFloors,
           totalUnits,
           plotAreaSqft: plotArea === undefined ? undefined : String(plotArea),
+          legalEntityId,
           reraRegistrationNumber,
           reraConstructionProgressPercent,
         })
@@ -315,6 +364,18 @@ export const publishSubmission = async (
       if (totalFloors !== undefined) updateColumns.totalFloors = totalFloors;
       if (totalUnits !== undefined) updateColumns.totalUnits = totalUnits;
       if (plotArea !== undefined) updateColumns.plotAreaSqft = String(plotArea);
+      if (legalEntityId !== undefined) {
+        const [owner] = await tx
+          .select({ developerId: properties.developerId })
+          .from(properties)
+          .where(eq(properties.id, propertyId));
+        await assertLegalEntityBelongs(
+          tx,
+          legalEntityId,
+          owner?.developerId ?? null,
+        );
+        updateColumns.legalEntityId = legalEntityId;
+      }
       if (reraRegistrationNumber !== undefined) {
         updateColumns.reraRegistrationNumber = reraRegistrationNumber;
       }
@@ -597,6 +658,7 @@ export const publishSubmission = async (
       );
     }
 
+    if (params.dryRun) throw new DryRunRollback({ propertyId, isNewProperty });
     return { propertyId, revisionId: revision.id, isNewProperty };
   });
 };

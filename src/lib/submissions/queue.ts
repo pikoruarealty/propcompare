@@ -3,8 +3,10 @@ import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import {
   amenityCatalog,
   bhkTypes,
+  developerLegalEntities,
   developers,
   layoutTypes,
+  ocrExtractionJobs,
   properties,
   propertySchemaFields,
   propertySubmissionFieldEvidence,
@@ -14,6 +16,7 @@ import {
   propertyTypes,
   type submissionStatus,
 } from "@/db/schema/catalog";
+import { describeExtractionFailure } from "@/lib/ingestion/extraction-status";
 
 /**
  * Read model for the admin submission queue and detail screens. Read-only: it
@@ -107,12 +110,15 @@ export interface SubmissionLookups {
   amenities: { key: string; label: string; category: string }[];
   bhkTypes: { key: string; label: string }[];
   layoutTypes: { key: string; label: string }[];
+  /** The submission's developer's recorded legal entities. */
+  legalEntities: { id: string; label: string }[];
 }
 
 export const getSubmissionLookups = async (
   database: PostgresJsDatabase,
+  developerId: string | null = null,
 ): Promise<SubmissionLookups> => {
-  const [types, amenities, bhk, layouts] = await Promise.all([
+  const [types, amenities, bhk, layouts, entities] = await Promise.all([
     database
       .select({ key: propertyTypes.key, label: propertyTypes.label })
       .from(propertyTypes)
@@ -133,6 +139,16 @@ export const getSubmissionLookups = async (
       .select({ key: layoutTypes.key, label: layoutTypes.label })
       .from(layoutTypes)
       .orderBy(layoutTypes.label),
+    developerId === null
+      ? Promise.resolve([])
+      : database
+          .select({
+            id: developerLegalEntities.id,
+            legalName: developerLegalEntities.legalName,
+          })
+          .from(developerLegalEntities)
+          .where(eq(developerLegalEntities.developerId, developerId))
+          .orderBy(developerLegalEntities.legalName),
   ]);
   return {
     propertyTypes: types,
@@ -142,6 +158,10 @@ export const getSubmissionLookups = async (
     })),
     bhkTypes: bhk,
     layoutTypes: layouts,
+    legalEntities: entities.map((entity) => ({
+      id: entity.id,
+      label: entity.legalName,
+    })),
   };
 };
 
@@ -155,6 +175,13 @@ export interface SubmissionDetail extends SubmissionQueueItem {
     reviewStatus: string;
     evidence: { sourcePage: number; sourceSnippet: string | null }[];
   }[];
+  developerId: string | null;
+  /** The latest brochure extraction attempt; `null` for a submission with no brochure. */
+  extraction: {
+    jobId: string;
+    status: string;
+    failureMessage: string | null;
+  } | null;
   availableFields: { fieldKey: string; label: string; dataType: string }[];
   lookups: SubmissionLookups;
   media: {
@@ -179,6 +206,10 @@ export const getSubmissionDetail = async (
   if (!/^[0-9a-f-]{36}$/i.test(id)) return null;
   const [item] = await listSubmissionQueue(database, { id });
   if (!item) return null;
+  const [owner] = await database
+    .select({ developerId: propertySubmissions.developerId })
+    .from(propertySubmissions)
+    .where(eq(propertySubmissions.id, id));
   const fields = await database
     .select({
       fieldKey: propertySubmissionFields.fieldKey,
@@ -242,14 +273,36 @@ export const getSubmissionDetail = async (
     .from(propertySubmissionMedia)
     .where(eq(propertySubmissionMedia.submissionId, id))
     .orderBy(propertySubmissionMedia.displayOrder);
+  const [job] = await database
+    .select({
+      id: ocrExtractionJobs.id,
+      status: ocrExtractionJobs.status,
+      errorCode: ocrExtractionJobs.errorCode,
+      errorMessage: ocrExtractionJobs.errorMessage,
+    })
+    .from(ocrExtractionJobs)
+    .where(eq(ocrExtractionJobs.submissionId, id))
+    .orderBy(desc(ocrExtractionJobs.createdAt))
+    .limit(1);
   return {
     ...item,
+    extraction: job
+      ? {
+          jobId: job.id,
+          status: job.status,
+          failureMessage:
+            job.status === "failed"
+              ? describeExtractionFailure(job.errorCode, job.errorMessage)
+              : null,
+        }
+      : null,
     fields: fields.map((field) => ({
       ...field,
       evidence: evidenceByField.get(field.fieldKey) ?? [],
     })),
     availableFields,
-    lookups: await getSubmissionLookups(database),
+    developerId: owner?.developerId ?? null,
+    lookups: await getSubmissionLookups(database, owner?.developerId ?? null),
     media,
   };
 };

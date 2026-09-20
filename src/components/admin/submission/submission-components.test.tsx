@@ -17,6 +17,9 @@ const lookups: SubmissionLookups = {
   ],
   bhkTypes: [{ key: "3bhk", label: "3 BHK" }],
   layoutTypes: [{ key: "duplex", label: "Duplex" }],
+  legalEntities: [
+    { id: "11111111-1111-4111-8111-111111111111", label: "Adani Realty Ltd" },
+  ],
 };
 
 const field = (
@@ -318,5 +321,37 @@ describe("WorkflowPanel", () => {
       screen.queryByRole("button", { name: "Publish to catalog" }),
     ).toBeNull();
     expect(screen.getByText("Only an owner can publish.")).toBeVisible();
+  });
+});
+
+describe("the legal entity field", () => {
+  it("shows the chosen entity by name, and offers only the developer's entities", () => {
+    const { container } = render(
+      <FieldValue
+        dataType="legal_entity_id"
+        value="11111111-1111-4111-8111-111111111111"
+        lookups={lookups}
+      />,
+    );
+    expect(container).toHaveTextContent("Adani Realty Ltd");
+
+    render(
+      <FieldEditor
+        field={{
+          fieldKey: "property.legal_entity_id",
+          label: "Promoter legal entity",
+          dataType: "legal_entity_id",
+        }}
+        initial={undefined}
+        lookups={lookups}
+        pending={false}
+        error={null}
+        onSave={() => undefined}
+        onCancel={() => undefined}
+      />,
+    );
+    expect(
+      screen.getByRole("option", { name: "Adani Realty Ltd" }),
+    ).toBeInTheDocument();
   });
 });

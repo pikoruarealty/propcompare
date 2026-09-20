@@ -7,6 +7,7 @@ import { FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { countNeedingReview } from "@/lib/submissions/field-display";
 import type { SubmissionDetail } from "@/lib/submissions/queue";
+import { ExtractionStatus } from "./extraction-status";
 import { FieldsPanel } from "./submission/fields-panel";
 import { MediaPanel, type MediaItem } from "./submission/media-panel";
 import { WorkflowPanel } from "./submission/workflow-panel";
@@ -127,12 +128,21 @@ export function SubmissionWorkbench({
         </div>
       ) : null}
 
+      {submission.extraction ? (
+        <ExtractionStatus
+          ocrJobId={submission.extraction.jobId}
+          status={submission.extraction.status}
+          failureMessage={submission.extraction.failureMessage}
+        />
+      ) : null}
+
       <FieldsPanel
         submission={submission}
         editable={editable}
         inReview={inReview}
         pending={pending}
         onSave={saveField}
+        onConfirmAll={() => run(...post("/fields/confirm-pending"))}
         onReview={(fieldKey, reviewStatus) =>
           run(
             ...post(`/fields/${encodeURIComponent(fieldKey)}/review`, {
