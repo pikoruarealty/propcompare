@@ -67,7 +67,7 @@ export function PropertyCard({ property }: PropertyCardProps) {
           // never by storage path.
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={`/api/v1/media/${property.primaryMedia.id}`}
+            src={`/api/v1/media/${property.primaryMedia.id}?size=thumb`}
             alt={`${property.name}, ${property.locality}`}
             loading="lazy"
             className={

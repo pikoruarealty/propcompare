@@ -156,7 +156,7 @@ describe("PropertyCard — the card image", () => {
     expect(image).not.toBeNull();
     expect(image).toHaveAttribute(
       "src",
-      `/api/v1/media/${richSummaryFixture.primaryMedia?.id}`,
+      `/api/v1/media/${richSummaryFixture.primaryMedia?.id}?size=thumb`,
     );
     expect(image).toHaveAttribute("alt", expect.stringContaining("Vastrapur"));
     expect(card.innerHTML).not.toContain(

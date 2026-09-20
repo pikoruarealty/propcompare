@@ -84,10 +84,11 @@ describe("MediaGallery — sections", () => {
 
     const photos = sectionEl("photos");
     const images = [...photos.querySelectorAll("img")];
+    // Cards load the small version; only the pop-up loads the full picture.
     expect(images.map((img) => img.getAttribute("src"))).toEqual([
-      "/api/v1/media/p1",
-      "/api/v1/media/p2",
-      "/api/v1/media/p3",
+      "/api/v1/media/p1?size=thumb",
+      "/api/v1/media/p2?size=thumb",
+      "/api/v1/media/p3?size=thumb",
     ]);
     // Cards are thumbnails, not full-width pictures.
     expect(images.every((img) => img.className.includes("size-full"))).toBe(

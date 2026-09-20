@@ -31,6 +31,8 @@ export interface GallerySection {
 }
 
 const srcOf = (item: GalleryItem) => `/api/v1/media/${item.id}`;
+/** The small version, for cards: a few hundred pixels, not the full picture. */
+const thumbOf = (item: GalleryItem) => `${srcOf(item)}?size=thumb`;
 
 const describe = (item: GalleryItem) =>
   item.caption ? `${item.label}: ${item.caption}` : item.label;
@@ -131,7 +133,7 @@ export function MediaGallery({ sections }: { sections: GallerySection[] }) {
                           >
                             {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img
-                              src={srcOf(item)}
+                              src={thumbOf(item)}
                               alt=""
                               loading="lazy"
                               className={

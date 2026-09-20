@@ -320,7 +320,9 @@ describe("DossierScreen — media, with delivery deferred", () => {
     const images = [...container.querySelectorAll("img")];
 
     expect(images.map((img) => img.getAttribute("src"))).toEqual(
-      richDossierFixture.media.map((item) => `/api/v1/media/${item.id}`),
+      richDossierFixture.media.map(
+        (item) => `/api/v1/media/${item.id}?size=thumb`,
+      ),
     );
     expect(container).toHaveTextContent(
       "Credit: Image from the Riverfront Developers brochure",
