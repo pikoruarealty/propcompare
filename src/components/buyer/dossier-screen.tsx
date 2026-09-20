@@ -1,5 +1,10 @@
 import Link from "next/link";
 import {
+  MediaGallery,
+  type GalleryItem,
+  type GallerySection,
+} from "./media-gallery";
+import {
   BROWSE_PATH,
   POSSESSION_STATUS_LABEL,
   formatPossessionDate,
@@ -165,14 +170,22 @@ function UnitVariant({ variant }: { variant: DossierUnitVariant }) {
 /**
  * The property's published pictures and documents.
  *
- * Photos and floor plans are shown, each fetched from `/api/v1/media/{id}` (a
- * fresh short-lived link per request; the storage path never reaches the page)
- * with its credit beneath it, because images taken from a developer's brochure
- * are published with attribution (DECISIONS.md, 2026-09-19). Other files, such as
- * a public brochure PDF, are offered as a download. A property with no media says
+ * Photos and floor plans are separate expandable sections of small cards (floor
+ * plans grouped by unit type); choosing one opens a pop-up carousel (see
+ * `MediaGallery`). Each picture is fetched from `/api/v1/media/{id}` (a fresh
+ * short-lived link per request; the storage path never reaches the page) and
+ * carries its credit, because images taken from a developer's brochure are
+ * published with attribution (DECISIONS.md, 2026-09-19). Other files, such as a
+ * public brochure PDF, are offered as a download. A property with no media says
  * so plainly.
  */
-function MediaSection({ media }: { media: readonly DossierMedia[] }) {
+function MediaSection({
+  media,
+  unitVariants,
+}: {
+  media: readonly DossierMedia[];
+  unitVariants: PropertyDossier["unitVariants"];
+}) {
   if (media.length === 0) {
     return (
       <Section title="Photos and plans" data-slot="dossier-media">
@@ -184,43 +197,77 @@ function MediaSection({ media }: { media: readonly DossierMedia[] }) {
     );
   }
 
-  const pictures = media.filter(
-    (item) => item.mediaType === "photo" || item.mediaType === "floor_plan",
-  );
+  const asItem = (item: DossierMedia, label: string): GalleryItem => ({
+    id: item.id,
+    label,
+    caption: item.caption,
+    attribution: item.attribution,
+  });
+
+  const photos = media.filter((item) => item.mediaType === "photo");
+  const plans = media.filter((item) => item.mediaType === "floor_plan");
   const documents = media.filter(
     (item) => item.mediaType !== "photo" && item.mediaType !== "floor_plan",
   );
 
+  // Floor plans under the unit type they belong to, in the order the unit types
+  // are listed; a plan tied to no unit type goes last.
+  const planGroups = [
+    ...unitVariants.map((variant) => ({
+      heading: variant.variantName as string | null,
+      items: plans
+        .filter((item) => item.unitVariantId === variant.id)
+        .map((item) => asItem(item, variant.variantName)),
+    })),
+    {
+      heading: "Other plans" as string | null,
+      items: plans
+        .filter(
+          (item) =>
+            item.unitVariantId === null ||
+            !unitVariants.some((variant) => variant.id === item.unitVariantId),
+        )
+        .map((item) => asItem(item, "Floor plan")),
+    },
+  ].filter((group) => group.items.length > 0);
+  // A single group needs no heading of its own.
+  const onlyGroup = planGroups.length === 1 ? planGroups[0] : null;
+
+  const sections: GallerySection[] = [
+    ...(photos.length > 0
+      ? [
+          {
+            key: "photos",
+            title: "Photos",
+            open: true,
+            fit: "cover" as const,
+            groups: [
+              {
+                heading: null,
+                items: photos.map((item) => asItem(item, "Photo")),
+              },
+            ],
+          },
+        ]
+      : []),
+    ...(plans.length > 0
+      ? [
+          {
+            key: "floor-plans",
+            title: "Floor plans",
+            open: false,
+            fit: "contain" as const,
+            groups: onlyGroup
+              ? [{ heading: null, items: onlyGroup.items }]
+              : planGroups,
+          },
+        ]
+      : []),
+  ];
+
   return (
     <Section title="Photos and plans" data-slot="dossier-media">
-      {pictures.length > 0 ? (
-        <ul className="grid gap-6 sm:grid-cols-2">
-          {pictures.map((item) => (
-            <li key={item.id} data-slot="media-item">
-              <figure className="flex flex-col gap-2">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={`/api/v1/media/${item.id}`}
-                  alt={item.caption ?? MEDIA_TYPE_LABEL[item.mediaType]}
-                  loading="lazy"
-                  className="border-border bg-muted w-full rounded-md border object-contain"
-                />
-                <figcaption className="text-muted-foreground text-sm">
-                  <span className="text-foreground font-medium">
-                    {MEDIA_TYPE_LABEL[item.mediaType]}
-                  </span>
-                  {item.caption ? ` · ${item.caption}` : ""}
-                  {item.attribution ? (
-                    <span className="block text-xs">
-                      Credit: {item.attribution}
-                    </span>
-                  ) : null}
-                </figcaption>
-              </figure>
-            </li>
-          ))}
-        </ul>
-      ) : null}
+      {sections.length > 0 ? <MediaGallery sections={sections} /> : null}
       {documents.length > 0 ? (
         <ul className="flex flex-col gap-2">
           {documents.map((item) => (
@@ -461,7 +508,10 @@ export function DossierScreen({ dossier }: DossierScreenProps) {
             emptyMessage="No specifications have been recorded for this property."
           />
 
-          <MediaSection media={dossier.media} />
+          <MediaSection
+            media={dossier.media}
+            unitVariants={dossier.unitVariants}
+          />
 
           <Section title="RERA" data-slot="dossier-rera">
             <dl className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
