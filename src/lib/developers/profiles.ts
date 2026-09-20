@@ -79,8 +79,11 @@ export const listDevelopers = async (
       id: developers.id,
       name: developers.name,
       reraDeveloperId: developers.reraDeveloperId,
-      linkedUsers: sql<number>`(select count(*)::int from ${developerUsers} where ${developerUsers.developerId} = ${developers.id})`,
-      properties: sql<number>`(select count(*)::int from ${properties} where ${properties.developerId} = ${developers.id})`,
+      // The outer developer id is written out with its table name: in a
+      // single-table select Drizzle drops table prefixes, and an unqualified
+      // `id` inside the subquery would be the subquery's own column (always 0).
+      linkedUsers: sql<number>`(select count(*)::int from ${developerUsers} where ${developerUsers.developerId} = "developers"."id")`,
+      properties: sql<number>`(select count(*)::int from ${properties} where ${properties.developerId} = "developers"."id")`,
     })
     .from(developers)
     .orderBy(developers.name);
