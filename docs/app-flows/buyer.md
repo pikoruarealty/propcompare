@@ -24,7 +24,7 @@ Landing / browse
 3. Matching returns suitable property/unit-variant choices using budget buckets. It returns no price.
 4. The buyer opens a dossier and reviews only published facts: configuration, areas, dimensions, amenities, specifications, media, possession timing, and available RERA facts.
 5. The buyer saves properties and/or adds a property or specific unit variant to a comparison.
-6. The comparison presents decision-relevant trade-offs side by side. It communicates missing facts explicitly rather than filling gaps.
+6. The comparison presents decision-relevant trade-offs side by side: like for like (unit type against unit type), differences first, an honest summary of what changes between the choices, and missing facts said plainly. It needs no sign-in and is a shareable address; only saving a comparison needs an account. See [the comparison specification](../design/comparison.v1.md).
 7. When a protected dossier action requires identity, the buyer completes phone OTP. This creates a verified unlock tied to the buyer and property.
 8. The buyer submits an enquiry for a property and optionally a particular unit variant.
 

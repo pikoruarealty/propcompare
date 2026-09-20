@@ -1,5 +1,9 @@
 # Progress
 
+## 2026-09-20 (late night, 4) — Comparison marked as the product; its UI did not exist
+
+**Finding:** the comparison feature has an API (sign-in required) and nothing else: no "Compare" button, no tray, no page. It had been left as a Phase 3 UI slice for Deep, and I listed Phase 3 as "next" without saying the product's core screen was missing. **Done now:** `AGENTS.md`, the PRD, the roadmap and `DECISIONS.md` state that comparison is the product and comes first; `docs/design/comparison.v1.md` specifies the experience (researched from Baymard and Nielsen Norman, and pushed beyond them: like-for-like unit types, differences first, an honest "what changes if you choose A over B", provenance, no price or score); a tasklist is written. Also this session: browser-style tabs with trimmed unit-type names, a real-database test of the media route (it found a 500 on a malformed id, fixed), RERA failure notice on the admin queue, and sign-in redirects.
+
 ## 2026-09-20 (late night, 3) — Media route tested for real; tasklists reconciled
 
 **Done:** a real-database test of `GET /api/v1/media/{id}` (a live picture redirects to a signed link for its own object; unknown, removed-unit-type, unlisted and deleted pictures are 404). **It found a bug:** a malformed id (for example `abc`) made Postgres refuse the comparison and the route answered 500; it is now a 404. The edit-published, RERA-sync and submission-media tasklists no longer show finished work as open. **Still open, and needing your call:** a published picture cannot be removed or replaced by an edit (a soft-removal column on `property_media` would be needed, so a schema change), and renaming a developer to another developer's name is allowed (the planned duplicate-name guard was never built).

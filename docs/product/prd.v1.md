@@ -6,6 +6,10 @@
 
 PropCompare helps buyers in Ahmedabad and Gujarat make a property decision using structured, comparable, evidence-backed data rather than unverified marketing claims. It covers Apartment, Bungalow, and Plot properties across regular through ultra-luxury segments.
 
+## The core: comparison
+
+**Comparison is the product.** PropCompare is not a listing site; Indian portals already list. What a buyer cannot get elsewhere is two properties laid side by side on consistent, verified facts, with the real differences surfaced, gaps shown honestly, and the trade-offs of each choice stated plainly. Browse, dossiers, intake and saves all exist to lead into that. The experience is specified in `docs/design/comparison.v1.md`, and it must be clearly better than what existing portals offer, not merely on par.
+
 ## Problem
 
 Property information is inconsistent across brochures, developer material, and RERA records. Buyers cannot easily compare exact unit variants, usable area, dimensions, amenities, specifications, RERA facts, developer context, and possession timing. The platform must make that comparison useful without exposing exact commercial prices.

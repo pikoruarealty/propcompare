@@ -2,6 +2,12 @@
 
 This file is the shared contract for everyone writing code in this repo — the human maintainer, Claude Code, and Codex. Read this before writing code, not after. Its purpose is to prevent the exact failure that ended the prior attempt at this product: a second contributor's work silently diverging into a second version of the same entity/schema. See [DECISIONS.md](DECISIONS.md) and [ARCHITECTURE.md](ARCHITECTURE.md) for the reasoning behind these rules.
 
+## The product is comparison
+
+**PropCompare is not a property listing site. Its reason to exist is helping a buyer compare properties, side by side, better than anything else available.** Every other buyer surface (browse, dossier, intake, saves) exists to get a buyer into a good comparison and out of it with a decision. The strict data rules below (one live representation of each entity, controlled vocabularies, exact units, explicit "not stated", RERA cross-checks, reviewed publishing) are there so that two properties can be compared row for row and every row means the same thing on both sides.
+
+When choosing what to build next, comparison comes first. A change that makes data less consistent, or that adds a buyer feature while comparison is missing or weak, is the wrong trade. The comparison experience is specified in [docs/design/comparison.v1.md](docs/design/comparison.v1.md): like for like (unit type against unit type), differences first, an honest "what changes if you choose A over B", visible gaps and provenance, no price, no score or winner, no sign-in to compare. Read it before touching the buyer surface.
+
 ## The one rule that overrides everything else
 
 **There is exactly one live representation of each entity.** Before adding a table, column, or parallel data path, check `docs/schema/schema.v1.md` (or its latest version) for whether it already exists in a different shape. If a change to the canonical schema is genuinely needed, it's a new dated entry in `DECISIONS.md` plus an update to the schema doc (bump to `schema.v2.md` if the change is structural — never silently edit `schema.v1.md`'s content after it's been implemented against) — not a second table, not a "temporary" bridge, not a mirror.
