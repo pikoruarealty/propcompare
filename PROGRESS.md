@@ -1,5 +1,9 @@
 # Progress
 
+## 2026-09-20 (late night) — Zoomable pop-up pictures; carpet area finding
+
+**Done:** the buyer pop-up carousel zooms and pans each picture (buttons, wheel or trackpad pinch, double-click or double-tap, +, - and 0 keys, drag, two-finger pinch); checked in a real browser on Kimana's floor plans and at phone width; committed. **Carpet area:** it cannot be calculated from room dimensions. Against Kimana's real RERA figures the summed room sizes are off by -15% to +18% per unit type, and two flats with the same RERA carpet area sum differently, so a calculated value would be a guess dressed as a legal figure. **Proposed instead, waiting for your yes:** take carpet area per flat from RERA (exact, free) and show an admin-only "rooms add up to X, RERA says Y" cross-check that would have caught the metres bug. Details in `DECISIONS.md` and `docs/tasklists/2026-09-20-zoom-and-carpet-area.md`.
+
 ## 2026-09-20 (night) — Exact units, thumbnails, removal, and unlisting
 
 **Done:** **Units are now exact.** Kimana's room sizes were metres saved as feet; the cause was structural (the extraction prompt named fields in feet, never asked for a unit, and nothing converted). Now the model reports what is printed plus its unit, one function converts to feet and square feet exactly, a number with no printed unit is left out (never assumed), and conversion happens once (proved by tests). Kimana's 171 rooms across 6 unit types were corrected through the publish path (the script refuses to run twice). The admin warns when sizes look like the wrong unit. Extraction also could never read plot area (a missing data type); fixed. The gallery cards use real thumbnails (88 KB instead of 1,551 KB on Kimana). An admin can remove amenities and unit types from a live listing, and an owner can unlist, soft-delete and restore a property: all soft, all through review and publish, and hidden from every buyer surface at once (schema v8).
