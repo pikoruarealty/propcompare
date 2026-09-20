@@ -5,6 +5,7 @@ import {
   propertyDossierHref,
 } from "@/lib/properties/browse";
 import type { PropertySummary } from "@/lib/properties/types";
+import { CompareToggle } from "./compare-toggle";
 import { FactValue } from "./fact-value";
 import { DisplayHeading, Eyebrow } from "./typography";
 
@@ -31,8 +32,9 @@ import { DisplayHeading, Eyebrow } from "./typography";
  *    contract to let a listing show a badge, the badge stays where its evidence
  *    is. See DECISIONS.md (2026-09-07).
  *
- * 2. **No save or compare action on the card itself.** Those live on the
- *    dossier and the saved and compare pages.
+ * 2. **Compare is on the card; save is not.** Comparison is the product, so the
+ *    card carries the Compare toggle, placed above the stretched link so it is
+ *    its own target. Saving lives on the dossier and the saved page.
  *
  * Everything absent in the data renders through `FactValue`, so a property with
  * no possession date says so instead of leaving a gap the reader has to
@@ -138,6 +140,14 @@ export function PropertyCard({ property }: PropertyCardProps) {
             </dd>
           </div>
         </dl>
+
+        <div className="relative z-10">
+          <CompareToggle
+            slug={property.slug}
+            name={property.name}
+            mediaId={property.primaryMedia?.id ?? null}
+          />
+        </div>
       </div>
     </article>
   );

@@ -29,16 +29,17 @@ Everything below applies those, then goes further where our data lets us.
 9. **Floor plans side by side** (slice 2). Each column's floor plan for the chosen unit type, openable in the zoomable viewer.
 10. **Focus lens** (slice 3). Chips (Space, Timeline, Amenities, Build, Trust) reorder groups and the summary; preselected from the buyer's intake priorities when they have them.
 11. **No sign-in to compare.** Selection lives in the browser and in a shareable address; only saving a comparison needs an account (the existing `POST /api/v1/comparisons`). Sharing a link is a feature: buyers compare with a partner and with family.
-12. **Small sets.** Up to four properties (two visible at a time on a phone with a picker for which two). More than four is a list, not a comparison.
+12. **Small sets.** Up to three properties (owner decision, 2026-09-20; two visible at a time on a phone with a picker for which two). More than three is a list, not a comparison.
 
 ## Interaction
 
 - **Adding.** A "Compare" toggle on every property card and on the dossier. A small tray docks at the bottom of the page: the chosen properties (name, a thumbnail), remove buttons, and "Compare (n)" once there are two. It survives navigation and reloads.
-- **The page.** `/compare?p=slug-a,slug-b[,…]` with an optional per-property unit type (`&v=slug:variantId`). A sticky header row with each property's picture, name, locality, developer and RERA status. Below it: the summary block, the controls ("Show only differences" on by default; unit type pickers per column), then grouped sections.
-- **Groups** (in this order; each collapsible): Possession and timeline · Unit type (configuration, areas by basis) · Amenities · Specifications · RERA and developer.
+- **The page.** `/compare?p=slug-a,slug-b[,…]` with an optional per-property unit type (`&v=slug~unitTypeId`). A sticky header row with each property's picture, name, locality, developer and RERA status. Below it: the summary block, the controls ("Show only differences" on by default; unit type pickers per column), then grouped sections.
+- **Switching unit types in the table.** Each column header carries its own unit type control (chips for up to three types, a menu for more) and the table redraws at once, without a reload, with the address updated so the link still reproduces it. Changing the first property's type re-matches the others to the same configuration.
+- **Groups** (in this order; each collapsible, with a count of how many rows differ; on a phone the long lists, amenities and specifications, start closed, and there is an expand and collapse all control): Possession and timeline · Unit type (configuration, areas by basis) · Amenities · Specifications · RERA and developer.
 - **Amenities** are compared as a matrix over the union of what either offers, only rows that differ by default.
 - **Removing** a property keeps the rest; the address updates.
-- **Phone.** Two properties visible at once with a picker for each, sticky row labels, no sideways table. Swiping between pairs is a later refinement.
+- **Phone.** Two properties visible at once (a picker chooses which two when three are compared), each row's label above its two values, no sideways table. Swiping between pairs is a later refinement.
 - **Empty and small states.** One property: "Add another to compare". Zero: a short explanation and a link to browse.
 
 ## Data rules (consistency is the point)

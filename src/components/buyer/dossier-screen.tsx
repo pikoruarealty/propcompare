@@ -32,6 +32,7 @@ import type {
   PropertyDossier,
 } from "@/lib/properties/types";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { CompareToggle } from "./compare-toggle";
 import { FactValue } from "./fact-value";
 import { GridRow, PageContainer, PageFrame, PageSection } from "./page-frame";
 import { BodyText, DisplayHeading, Eyebrow, TabularValue } from "./typography";
@@ -558,8 +559,19 @@ export function DossierScreen({ dossier }: DossierScreenProps) {
               </p>
             </div>
 
-            {/* Renders nothing without a registration number to assert. */}
-            <VerifiedBadge fact={verifiedFact} />
+            <div className="flex flex-wrap items-center gap-3">
+              {/* Renders nothing without a registration number to assert. */}
+              <VerifiedBadge fact={verifiedFact} />
+              <CompareToggle
+                slug={dossier.slug}
+                name={dossier.name}
+                mediaId={
+                  dossier.media.find((media) => media.isPrimary)?.id ??
+                  dossier.media[0]?.id ??
+                  null
+                }
+              />
+            </div>
 
             {dossier.description === null ? null : (
               <BodyText>{dossier.description}</BodyText>

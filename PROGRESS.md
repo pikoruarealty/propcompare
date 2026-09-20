@@ -1,5 +1,9 @@
 # Progress
 
+## 2026-09-20 (late night, 5) — The comparison exists (slice 1)
+
+**Done:** a buyer with no account can press **Compare** on any property card or dossier (up to **three**), see them in a tray at the bottom, and open `/compare`: a summary of what changes between the choices, only the rows that differ (with "N identical facts hidden" and a switch to show them), missing facts said plainly, size bars, a GujRERA-checked marker, a sticky header, **unit type switching inside the table** (instant, the link updates), **collapsible sections**, and a phone layout that shows two at a time with the label above each value. The link is shareable. **Verified:** typecheck, lint and prettier clean, the full suite (see below), and a real browser on Kimana plus throwaway properties (deleted) at desktop and phone width. **Not built yet:** room-by-room and floor plans side by side, focus chips from intake, saved comparisons and the shortlist page, analytics. See `docs/tasklists/2026-09-20-comparison-experience.md`.
+
 ## 2026-09-20 (late night, 4) — Comparison marked as the product; its UI did not exist
 
 **Finding:** the comparison feature has an API (sign-in required) and nothing else: no "Compare" button, no tray, no page. It had been left as a Phase 3 UI slice for Deep, and I listed Phase 3 as "next" without saying the product's core screen was missing. **Done now:** `AGENTS.md`, the PRD, the roadmap and `DECISIONS.md` state that comparison is the product and comes first; `docs/design/comparison.v1.md` specifies the experience (researched from Baymard and Nielsen Norman, and pushed beyond them: like-for-like unit types, differences first, an honest "what changes if you choose A over B", provenance, no price or score); a tasklist is written. Also this session: browser-style tabs with trimmed unit-type names, a real-database test of the media route (it found a 500 on a malformed id, fixed), RERA failure notice on the admin queue, and sign-in redirects.

@@ -136,13 +136,17 @@ describe("PropertyCard — the two trust rules", () => {
     expect(card).not.toHaveTextContent("Verified");
   });
 
-  it("shows no save or compare control, since neither exists yet", () => {
-    // Phase 3 owns both. A disabled button promising them would be decoration.
+  it("carries a Compare toggle for its own property, and no Save control", () => {
+    // Comparison is the product; saving is a later, account-bound feature.
     const { card } = renderCard(richSummaryFixture);
 
-    expect(within(card).queryAllByRole("button")).toHaveLength(0);
+    const buttons = within(card).getAllByRole("button");
+    expect(buttons).toHaveLength(1);
+    expect(buttons[0]).toHaveAccessibleName(
+      `Add ${richSummaryFixture.name} to the comparison`,
+    );
+    expect(buttons[0]).toHaveAttribute("aria-pressed", "false");
     expect(card).not.toHaveTextContent("Save");
-    expect(card).not.toHaveTextContent("Compare");
   });
 });
 

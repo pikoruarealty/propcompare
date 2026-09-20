@@ -1,5 +1,6 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
+import { CompareTray } from "./compare-tray";
 import { SiteFooter } from "./site-footer";
 import { SiteHeader } from "./site-header";
 
@@ -93,6 +94,7 @@ export function PageFrame({ children }: { children: React.ReactNode }) {
         {children}
       </main>
       <SiteFooter />
+      <CompareTray />
     </>
   );
 }

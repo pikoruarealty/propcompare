@@ -1,0 +1,719 @@
+import {
+  POSSESSION_STATUS_LABEL,
+  formatPossessionDate,
+} from "@/lib/properties/browse";
+import {
+  AREA_BASIS_LABEL,
+  AREA_BASIS_ORDER,
+  areasByBasis,
+  formatSqft,
+  shortUnitTypeName,
+} from "@/lib/properties/dossier";
+import type {
+  CatalogItemStatus,
+  DossierUnitVariant,
+  PropertyDossier,
+} from "@/lib/properties/types";
+import type { ReraSourcedFact } from "@/lib/properties/rera-source";
+
+/**
+ * The comparison of two or three published properties, as data (specification:
+ * `docs/design/comparison.v1.md`).
+ *
+ * Everything the screen shows is decided here, in pure code, so it is testable and
+ * so every comparison uses the same ordered rows: the same fact is in the same
+ * place every time.
+ *
+ * The rules that matter, kept in one file:
+ * - **Like for like.** The unit of comparison is a unit type of a property, chosen
+ *   by BHK and then by nearest carpet area; areas are compared only on the same
+ *   basis and one basis is never derived from another.
+ * - **Honest gaps.** A missing fact is `not_stated` (nobody recorded it) or
+ *   `not_offered` (the developer said no), never blank, never zero, and never a
+ *   difference of value. A row where some sides state a fact and others do not is
+ *   a `gap`, shown but not counted as a difference and never used in the summary.
+ * - **No price, no score, no winner.** The summary states differences and what each
+ *   side has more of, with both values, and nothing is ranked.
+ */
+
+export const MAX_COMPARED = 3;
+
+export type CellState = "value" | "not_stated" | "not_offered";
+
+export interface CompareCell {
+  state: CellState;
+  /** What is shown for a stated value. */
+  text: string | null;
+  /** For numeric rows: the number, and its size relative to the largest stated
+   * value in the row (0 to 1) so a bar can be drawn. */
+  number: number | null;
+  bar: number | null;
+  /** The largest of several different stated numbers in the row. */
+  largest: boolean;
+  /** The regulator's record stated exactly this value at its last check. */
+  regulatorChecked: boolean;
+}
+
+export type RowStatus =
+  /** Every side states it and the values are the same. */
+  | "same"
+  /** Every stated side differs from another, and all sides state it. */
+  | "differs"
+  /** Some sides state it and some do not: shown, never a difference of value. */
+  | "gap";
+
+export interface CompareRow {
+  key: string;
+  label: string;
+  cells: CompareCell[];
+  status: RowStatus;
+}
+
+export type GroupKey =
+  | "timeline"
+  | "unit_type"
+  | "project"
+  | "amenities"
+  | "specifications"
+  | "trust";
+
+export interface CompareGroup {
+  key: GroupKey;
+  title: string;
+  rows: CompareRow[];
+}
+
+export interface VariantOption {
+  id: string;
+  name: string;
+  shortName: string;
+  bhkLabel: string | null;
+}
+
+export interface CompareColumn {
+  slug: string;
+  name: string;
+  locality: string;
+  city: string;
+  developerName: string;
+  reraRegistered: boolean;
+  registrationNumber: string | null;
+  regulatorCheckedOn: string | null;
+  primaryMediaId: string | null;
+  /** The unit type this column compares, or null if the property has none. */
+  variant: VariantOption | null;
+  variants: VariantOption[];
+  /** How the unit type was chosen. */
+  variantChosenBy: "requested" | "bhk" | "area" | "first" | "none";
+}
+
+export interface SummaryLine {
+  rowKey: string;
+  text: string;
+}
+
+export interface CompareModel {
+  columns: CompareColumn[];
+  groups: CompareGroup[];
+  summary: SummaryLine[];
+  /** Rows shown even when identical, and how many were identical. */
+  identicalRows: number;
+}
+
+/* ------------------------------------------------------------------ */
+/* Choosing the unit type for each property                            */
+/* ------------------------------------------------------------------ */
+
+const carpetOf = (variant: DossierUnitVariant): number | null => {
+  const value = areasByBasis(variant.areas).carpet;
+  const number = value === null ? NaN : Number(value);
+  return Number.isFinite(number) ? number : null;
+};
+
+const optionOf = (variant: DossierUnitVariant): VariantOption => ({
+  id: variant.id,
+  name: variant.variantName,
+  shortName: shortUnitTypeName(variant.variantName),
+  bhkLabel: variant.bhkType?.label ?? null,
+});
+
+const nearestByCarpet = (
+  candidates: DossierUnitVariant[],
+  target: number | null,
+): DossierUnitVariant => {
+  if (target === null) return candidates[0];
+  let best = candidates[0];
+  let bestDistance = Infinity;
+  for (const candidate of candidates) {
+    const carpet = carpetOf(candidate);
+    if (carpet === null) continue;
+    const distance = Math.abs(carpet - target);
+    if (distance < bestDistance) {
+      best = candidate;
+      bestDistance = distance;
+    }
+  }
+  return best;
+};
+
+interface Chosen {
+  variant: DossierUnitVariant | null;
+  by: CompareColumn["variantChosenBy"];
+}
+
+/**
+ * The unit type each property is compared on. A requested one wins. Otherwise a
+ * BHK type every property offers is preferred (a 3 BHK against a 3 BHK), the type
+ * of that BHK nearest in carpet area to the first property's; with no shared BHK
+ * (or no BHK recorded) the nearest carpet area to the first property's type, and
+ * failing that the first type listed.
+ */
+export const chooseUnitTypes = (
+  dossiers: PropertyDossier[],
+  requested: Record<string, string | undefined> = {},
+): Chosen[] => {
+  const asked = dossiers.map((dossier) =>
+    dossier.unitVariants.find(
+      (variant) => variant.id === requested[dossier.slug],
+    ),
+  );
+
+  // A BHK type present on every property that has unit types.
+  const withTypes = dossiers.filter(
+    (dossier) => dossier.unitVariants.length > 0,
+  );
+  let sharedBhk: string | null = null;
+  if (withTypes.length > 1) {
+    for (const variant of withTypes[0].unitVariants) {
+      const key = variant.bhkType?.key;
+      if (
+        key &&
+        withTypes.every((dossier) =>
+          dossier.unitVariants.some((other) => other.bhkType?.key === key),
+        )
+      ) {
+        sharedBhk = key;
+        break;
+      }
+    }
+  }
+
+  // The anchor: the first property's requested type, else its type of the shared BHK.
+  const first = dossiers[0];
+  const anchor: DossierUnitVariant | null =
+    asked[0] ??
+    (first.unitVariants.length === 0
+      ? null
+      : (first.unitVariants.find(
+          (variant) => variant.bhkType?.key === sharedBhk,
+        ) ?? first.unitVariants[0]));
+  const anchorCarpet = anchor ? carpetOf(anchor) : null;
+  // Everyone else follows the anchor's own BHK type, whatever chose the anchor.
+  const targetBhk = anchor?.bhkType?.key ?? null;
+
+  return dossiers.map((dossier, index): Chosen => {
+    if (dossier.unitVariants.length === 0) return { variant: null, by: "none" };
+    const requestedVariant = asked[index];
+    if (requestedVariant) return { variant: requestedVariant, by: "requested" };
+    if (index === 0) {
+      return {
+        variant: anchor,
+        by: targetBhk !== null && targetBhk === sharedBhk ? "bhk" : "first",
+      };
+    }
+    const sameBhk = dossier.unitVariants.filter(
+      (variant) => targetBhk !== null && variant.bhkType?.key === targetBhk,
+    );
+    if (sameBhk.length > 0) {
+      return { variant: nearestByCarpet(sameBhk, anchorCarpet), by: "bhk" };
+    }
+    if (
+      anchorCarpet !== null &&
+      dossier.unitVariants.some((v) => carpetOf(v) !== null)
+    ) {
+      return {
+        variant: nearestByCarpet(dossier.unitVariants, anchorCarpet),
+        by: "area",
+      };
+    }
+    return { variant: dossier.unitVariants[0], by: "first" };
+  });
+};
+
+/* ------------------------------------------------------------------ */
+/* Cells and rows                                                      */
+/* ------------------------------------------------------------------ */
+
+const NO_CELL = {
+  text: null,
+  number: null,
+  bar: null,
+  largest: false,
+  regulatorChecked: false,
+} as const;
+
+const missing = (state: "not_stated" | "not_offered"): CompareCell => ({
+  state,
+  ...NO_CELL,
+});
+
+const textCell = (
+  text: string | null,
+  regulatorChecked = false,
+): CompareCell =>
+  text === null || text.trim() === ""
+    ? missing("not_stated")
+    : { state: "value", ...NO_CELL, text, regulatorChecked };
+
+const numberCell = (
+  number: number | null,
+  text: string | null,
+  regulatorChecked = false,
+): CompareCell =>
+  number === null || text === null
+    ? missing("not_stated")
+    : { state: "value", ...NO_CELL, text, number, regulatorChecked };
+
+const norm = (cell: CompareCell): string | number | null => {
+  if (cell.state !== "value") return null;
+  if (cell.number !== null) return cell.number;
+  return (cell.text ?? "").toLowerCase().replace(/\s+/g, " ").trim();
+};
+
+/** Two numbers are the same figure within a rounding tolerance. */
+const sameNumber = (a: number, b: number): boolean =>
+  Math.abs(a - b) <= Math.max(1, 0.005 * Math.max(Math.abs(a), Math.abs(b)));
+
+const finishRow = (
+  key: string,
+  label: string,
+  cells: CompareCell[],
+  options: { numeric?: boolean } = {},
+): CompareRow => {
+  const stated = cells.filter((cell) => cell.state === "value");
+  let status: RowStatus;
+  if (stated.length < cells.length) {
+    status = "gap";
+  } else {
+    const values = stated.map(norm);
+    const allSame = values.every((value) => {
+      const other = values[0];
+      if (typeof value === "number" && typeof other === "number") {
+        return sameNumber(value, other);
+      }
+      return value === other;
+    });
+    status = allSame ? "same" : "differs";
+  }
+
+  let sized = cells;
+  if (options.numeric) {
+    const numbers = stated.map((cell) => cell.number as number);
+    const max = Math.max(...numbers, 0);
+    const distinct = numbers.some((value) => !sameNumber(value, numbers[0]));
+    sized = cells.map((cell) =>
+      cell.state === "value" && cell.number !== null && max > 0
+        ? {
+            ...cell,
+            bar: cell.number / max,
+            largest: distinct && sameNumber(cell.number, max),
+          }
+        : cell,
+    );
+  }
+  return { key, label, cells: sized, status };
+};
+
+const AMENITY_STATE = (status: CatalogItemStatus): CompareCell =>
+  status === "available"
+    ? { state: "value", ...NO_CELL, text: "Available" }
+    : status === "explicitly_not_offered"
+      ? missing("not_offered")
+      : missing("not_stated");
+
+/* ------------------------------------------------------------------ */
+/* The model                                                           */
+/* ------------------------------------------------------------------ */
+
+const SHORT_MONTHS = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+];
+
+const shortDate = (iso: string | null): string | null => {
+  if (iso === null) return null;
+  const parsed = new Date(iso);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return `${parsed.getUTCDate()} ${SHORT_MONTHS[parsed.getUTCMonth()]} ${parsed.getUTCFullYear()}`;
+};
+
+const sourced = (dossier: PropertyDossier, fact: ReraSourcedFact): boolean =>
+  dossier.rera.lastCheckedAt !== null &&
+  dossier.rera.sourcedFacts.includes(fact);
+
+const monthsBetween = (earlier: string, later: string): number => {
+  const a = new Date(earlier);
+  const b = new Date(later);
+  return (
+    (b.getUTCFullYear() - a.getUTCFullYear()) * 12 +
+    (b.getUTCMonth() - a.getUTCMonth())
+  );
+};
+
+/** Progress to one decimal: RERA states more digits than mean anything. */
+const progressText = (value: string | null): string | null => {
+  const number = value === null ? NaN : Number(value);
+  return Number.isFinite(number) ? `${Math.round(number * 10) / 10}%` : null;
+};
+
+const plural = (count: number, one: string, many = `${one}s`) =>
+  `${count} ${count === 1 ? one : many}`;
+
+export const buildComparison = (
+  dossiers: PropertyDossier[],
+  requested: Record<string, string | undefined> = {},
+): CompareModel => {
+  if (dossiers.length === 0) {
+    return { columns: [], groups: [], summary: [], identicalRows: 0 };
+  }
+  const chosen = chooseUnitTypes(dossiers, requested);
+
+  const columns: CompareColumn[] = dossiers.map((dossier, i) => ({
+    slug: dossier.slug,
+    name: dossier.name,
+    locality: dossier.location.locality,
+    city: dossier.location.city,
+    developerName: dossier.developer.name,
+    reraRegistered: dossier.rera.registered,
+    registrationNumber: dossier.rera.registrationNumber,
+    regulatorCheckedOn: shortDate(dossier.rera.lastCheckedAt),
+    primaryMediaId:
+      dossier.media.find((media) => media.isPrimary)?.id ??
+      dossier.media[0]?.id ??
+      null,
+    variant: chosen[i].variant ? optionOf(chosen[i].variant) : null,
+    variants: dossier.unitVariants.map(optionOf),
+    variantChosenBy: chosen[i].by,
+  }));
+
+  const row = (
+    key: string,
+    label: string,
+    pick: (
+      dossier: PropertyDossier,
+      variant: DossierUnitVariant | null,
+    ) => CompareCell,
+    options?: { numeric?: boolean },
+  ) =>
+    finishRow(
+      key,
+      label,
+      dossiers.map((dossier, i) => pick(dossier, chosen[i].variant)),
+      options,
+    );
+
+  const groups: CompareGroup[] = [];
+
+  groups.push({
+    key: "timeline",
+    title: "Possession and timeline",
+    rows: [
+      row("possession_status", "Possession", (d) =>
+        textCell(
+          d.possession.status
+            ? POSSESSION_STATUS_LABEL[d.possession.status]
+            : null,
+        ),
+      ),
+      row("possession_date", "Possession date", (d) =>
+        textCell(
+          formatPossessionDate(d.possession.possessionDate),
+          sourced(d, "possession_date"),
+        ),
+      ),
+      row(
+        "construction_progress",
+        "Construction progress",
+        (d) =>
+          numberCell(
+            d.rera.constructionProgressPercent === null
+              ? null
+              : Number(d.rera.constructionProgressPercent),
+            progressText(d.rera.constructionProgressPercent),
+            sourced(d, "construction_progress"),
+          ),
+        { numeric: true },
+      ),
+      row("launched", "Launched", (d) =>
+        textCell(formatPossessionDate(d.possession.launchDate)),
+      ),
+    ],
+  });
+
+  const unitRows: CompareRow[] = [
+    row("configuration", "Configuration", (_d, v) =>
+      textCell(v?.bhkType?.label ?? null),
+    ),
+    row("layout", "Layout", (_d, v) => textCell(v?.layoutType?.label ?? null)),
+  ];
+  for (const basis of AREA_BASIS_ORDER) {
+    unitRows.push(
+      row(
+        `area_${basis}`,
+        AREA_BASIS_LABEL[basis],
+        (_d, v) => {
+          const raw = v ? areasByBasis(v.areas)[basis] : null;
+          const number = raw === null ? NaN : Number(raw);
+          const text = formatSqft(raw);
+          return numberCell(
+            Number.isFinite(number) ? number : null,
+            text === null ? null : `${text} sq ft`,
+          );
+        },
+        { numeric: true },
+      ),
+    );
+  }
+  unitRows.push(
+    row("units_of_type", "Units of this type", (_d, v) =>
+      numberCell(
+        v?.totalUnitsOfVariant ?? null,
+        v?.totalUnitsOfVariant == null ? null : String(v.totalUnitsOfVariant),
+      ),
+    ),
+  );
+  groups.push({ key: "unit_type", title: "The unit type", rows: unitRows });
+
+  groups.push({
+    key: "project",
+    title: "The project",
+    rows: [
+      row("property_type", "Type", (d) => textCell(d.propertyType.label)),
+      row("developer", "Developer", (d) => textCell(d.developer.name)),
+      row("towers", "Towers", (d) =>
+        numberCell(
+          d.totalTowers,
+          d.totalTowers === null ? null : String(d.totalTowers),
+        ),
+      ),
+      row("total_units", "Units in the project", (d) =>
+        numberCell(
+          d.totalUnits,
+          d.totalUnits === null ? null : String(d.totalUnits),
+          sourced(d, "total_units"),
+        ),
+      ),
+    ],
+  });
+
+  // Amenities: the union of what any compared property has a recorded status for.
+  const amenityKeys = new Map<string, { label: string; category: string }>();
+  for (const dossier of dossiers) {
+    for (const amenity of dossier.amenities) {
+      if (amenity.status !== "not_stated") {
+        amenityKeys.set(amenity.key, {
+          label: amenity.label,
+          category: amenity.category,
+        });
+      }
+    }
+  }
+  groups.push({
+    key: "amenities",
+    title: "Amenities",
+    rows: [...amenityKeys.entries()]
+      .sort(
+        (a, b) =>
+          a[1].category.localeCompare(b[1].category) ||
+          a[1].label.localeCompare(b[1].label),
+      )
+      .map(([key, meta]) =>
+        row(`amenity_${key}`, meta.label, (d) => {
+          const found = d.amenities.find((amenity) => amenity.key === key);
+          return AMENITY_STATE(found?.status ?? "not_stated");
+        }),
+      ),
+  });
+
+  const specKeys = new Map<string, { label: string; category: string }>();
+  for (const dossier of dossiers) {
+    for (const spec of dossier.specifications) {
+      if (spec.status !== "not_stated") {
+        specKeys.set(spec.key, { label: spec.label, category: spec.category });
+      }
+    }
+  }
+  groups.push({
+    key: "specifications",
+    title: "Specifications",
+    rows: [...specKeys.entries()]
+      .sort(
+        (a, b) =>
+          a[1].category.localeCompare(b[1].category) ||
+          a[1].label.localeCompare(b[1].label),
+      )
+      .map(([key, meta]) =>
+        row(`spec_${key}`, meta.label, (d) => {
+          const found = d.specifications.find((spec) => spec.key === key);
+          if (!found) return missing("not_stated");
+          if (found.status === "explicitly_not_offered")
+            return missing("not_offered");
+          return textCell(found.valueText);
+        }),
+      ),
+  });
+
+  groups.push({
+    key: "trust",
+    title: "RERA",
+    rows: [
+      row("rera_registration", "Registration", (d) =>
+        textCell(d.rera.registered ? "Registered" : null),
+      ),
+      row("rera_number", "Registration number", (d) =>
+        textCell(d.rera.registrationNumber, sourced(d, "registration_number")),
+      ),
+    ],
+  });
+
+  // A row nobody has a fact for says nothing, so it is not shown.
+  const shown = groups
+    .map((group) => ({
+      ...group,
+      rows: group.rows.filter((candidate) =>
+        candidate.cells.some((cell) => cell.state !== "not_stated"),
+      ),
+    }))
+    .filter((group) => group.rows.length > 0);
+
+  const identicalRows = shown
+    .flatMap((group) => group.rows)
+    .filter((candidate) => candidate.status === "same").length;
+
+  return {
+    columns,
+    groups: shown,
+    summary: buildSummary(dossiers, columns, shown),
+    identicalRows,
+  };
+};
+
+/* ------------------------------------------------------------------ */
+/* "If you choose A over B": stated differences only                   */
+/* ------------------------------------------------------------------ */
+
+const findRow = (groups: CompareGroup[], key: string): CompareRow | undefined =>
+  groups
+    .flatMap((group) => group.rows)
+    .find((candidate) => candidate.key === key);
+
+const buildSummary = (
+  dossiers: PropertyDossier[],
+  columns: CompareColumn[],
+  groups: CompareGroup[],
+): SummaryLine[] => {
+  const lines: SummaryLine[] = [];
+  const name = (i: number) => columns[i].name;
+
+  // Space: carpet area, only when every property states it and they differ.
+  const carpet = findRow(groups, "area_carpet");
+  if (carpet && carpet.status === "differs") {
+    const numbers = carpet.cells.map((cell) => cell.number as number);
+    const high = numbers.indexOf(Math.max(...numbers));
+    const low = numbers.indexOf(Math.min(...numbers));
+    const percent = Math.round(
+      ((numbers[high] - numbers[low]) / numbers[low]) * 100,
+    );
+    if (percent >= 2) {
+      lines.push({
+        rowKey: "area_carpet",
+        text: `${name(high)} has ${percent}% more carpet area than ${name(low)} (${carpet.cells[high].text} against ${carpet.cells[low].text}).`,
+      });
+    }
+  }
+
+  // Timeline: possession dates, only when every property states one.
+  if (dossiers.every((d) => d.possession.possessionDate !== null)) {
+    const dates = dossiers.map((d) => d.possession.possessionDate as string);
+    const earliest = dates.indexOf([...dates].sort()[0]);
+    const latest = dates.indexOf([...dates].sort().slice(-1)[0]);
+    const months = monthsBetween(dates[earliest], dates[latest]);
+    if (months >= 1) {
+      lines.push({
+        rowKey: "possession_date",
+        text: `${name(earliest)} is due ${plural(months, "month")} before ${name(latest)} (${formatPossessionDate(dates[earliest])} against ${formatPossessionDate(dates[latest])}).`,
+      });
+    }
+  }
+
+  // Progress on site, only when every property declares it.
+  const progress = findRow(groups, "construction_progress");
+  if (progress && progress.status === "differs") {
+    const numbers = progress.cells.map((cell) => cell.number as number);
+    const high = numbers.indexOf(Math.max(...numbers));
+    const low = numbers.indexOf(Math.min(...numbers));
+    if (numbers[high] - numbers[low] >= 5) {
+      lines.push({
+        rowKey: "construction_progress",
+        text: `${name(high)} reports more construction progress: ${progress.cells[high].text} against ${progress.cells[low].text} for ${name(low)}.`,
+      });
+    }
+  }
+
+  // Amenities: only among properties that recorded any amenity at all, so a
+  // property with none recorded is not read as having none.
+  const recorded = dossiers.map((d) =>
+    d.amenities.some((a) => a.status !== "not_stated"),
+  );
+  if (recorded.every(Boolean)) {
+    const offered = dossiers.map(
+      (d) =>
+        new Set(
+          d.amenities
+            .filter((a) => a.status === "available")
+            .map((a) => a.label),
+        ),
+    );
+    const most = offered.reduce(
+      (best, set, i) => (set.size > offered[best].size ? i : best),
+      0,
+    );
+    for (let other = 0; other < dossiers.length; other += 1) {
+      if (other === most) continue;
+      const extra = [...offered[most]].filter(
+        (label) => !offered[other].has(label),
+      );
+      if (extra.length >= 1 && offered[most].size > offered[other].size) {
+        const shown = extra.slice(0, 3).join(", ");
+        lines.push({
+          rowKey: "amenities",
+          text: `${name(most)} lists ${plural(offered[most].size - offered[other].size, "more amenity", "more amenities")} than ${name(other)}, including ${shown}${extra.length > 3 ? " and others" : ""}.`,
+        });
+        break;
+      }
+    }
+  }
+
+  // Trust: whose registration number the regulator's record confirms.
+  const checked = dossiers.map((d) => sourced(d, "registration_number"));
+  if (checked.some(Boolean) && !checked.every(Boolean)) {
+    const yes = checked.flatMap((value, i) => (value ? [name(i)] : []));
+    const no = checked.flatMap((value, i) => (value ? [] : [name(i)]));
+    lines.push({
+      rowKey: "rera_number",
+      text: `The regulator's record confirms the registration number of ${yes.join(" and ")}; that of ${no.join(" and ")} has not been checked against it.`,
+    });
+  }
+
+  return lines.slice(0, 5);
+};
