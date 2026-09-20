@@ -196,6 +196,30 @@ describe("the queue treats a property and its edits as one thing", () => {
     ]);
   });
 
+  it("records what each published edit changed, and nothing for one never published", async () => {
+    const latest = (await listSubmissionQueue(db)).find(
+      (item) => item.propertyId === propertyId,
+    )!;
+
+    const detail = await getSubmissionDetail(db, latest.id);
+
+    const [original, rejected, published] = detail!.versions;
+    expect(original.publishedAt).toBeInstanceOf(Date);
+    expect(original.changes).toEqual([]);
+    expect(rejected.publishedAt).toBeNull();
+    expect(rejected.changes).toEqual([]);
+    expect(published.publishedAt).toBeInstanceOf(Date);
+    expect(published.changes).toEqual([
+      {
+        fieldKey: "property.total_units",
+        label: expect.any(String),
+        from: null,
+        to: "40",
+        complex: false,
+      },
+    ]);
+  });
+
   it("leaves a new property with no versions", async () => {
     const [draft] = await db
       .insert(propertySubmissions)

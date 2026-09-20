@@ -1,5 +1,6 @@
 import { getReraState, type ReraState } from "@/lib/rera/submission-fetch";
 import { loadLiveValues } from "./live-values";
+import { buildRevisionHistory, type RevisionChange } from "./revision-history";
 import {
   SUBMISSION_STATUS_LABEL,
   type SubmissionStatus,
@@ -204,6 +205,11 @@ export interface SubmissionDetail extends SubmissionQueueItem {
     status: SubmissionStatus;
     kind: "original" | "edit";
     createdAt: Date;
+    /** When this version went live; null while it is not published. */
+    publishedAt: Date | null;
+    /** What it changed, from the publish record; empty for the original and for
+     * a version not yet published. */
+    changes: RevisionChange[];
   }[];
   /** For an edit of a published property: the values currently live, by field
    * key. Empty for a new property. Simple fields only. */
@@ -240,6 +246,45 @@ export interface SubmissionDetail extends SubmissionQueueItem {
     reviewStatus: string;
   }[];
 }
+
+const loadVersions = async (
+  database: PostgresJsDatabase,
+  propertyId: string,
+  fields: { fieldKey: string; label: string }[],
+): Promise<SubmissionDetail["versions"]> => {
+  const submissions = await database
+    .select({
+      id: propertySubmissions.id,
+      status: propertySubmissions.status,
+      createdAt: propertySubmissions.createdAt,
+    })
+    .from(propertySubmissions)
+    .where(eq(propertySubmissions.propertyId, propertyId))
+    .orderBy(propertySubmissions.createdAt);
+  const history = buildRevisionHistory(
+    await database
+      .select({
+        submissionId: propertyRevisions.submissionId,
+        publishedAt: propertyRevisions.publishedAt,
+        snapshot: propertyRevisions.snapshot,
+      })
+      .from(propertyRevisions)
+      .where(eq(propertyRevisions.propertyId, propertyId)),
+    new Map(fields.map((field) => [field.fieldKey, field.label])),
+  );
+  const bySubmission = new Map(
+    history.map((entry) => [entry.submissionId, entry]),
+  );
+  return submissions.map((row, index) => {
+    const entry = bySubmission.get(row.id);
+    return {
+      ...row,
+      kind: index === 0 ? ("original" as const) : ("edit" as const),
+      publishedAt: entry?.publishedAt ?? null,
+      changes: entry?.changes ?? [],
+    };
+  });
+};
 
 export const getSubmissionDetail = async (
   database: PostgresJsDatabase,
@@ -348,20 +393,7 @@ export const getSubmissionDetail = async (
     availableFields,
     rera: await getReraState(database, id),
     versions: owner?.propertyId
-      ? (
-          await database
-            .select({
-              id: propertySubmissions.id,
-              status: propertySubmissions.status,
-              createdAt: propertySubmissions.createdAt,
-            })
-            .from(propertySubmissions)
-            .where(eq(propertySubmissions.propertyId, owner.propertyId))
-            .orderBy(propertySubmissions.createdAt)
-        ).map((row, index) => ({
-          ...row,
-          kind: index === 0 ? ("original" as const) : ("edit" as const),
-        }))
+      ? await loadVersions(database, owner.propertyId, availableFields)
       : [],
     live: owner?.propertyId
       ? await loadLiveValues(database, owner.propertyId)

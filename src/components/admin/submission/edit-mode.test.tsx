@@ -847,12 +847,16 @@ describe("the versions of a property", () => {
       status: "published",
       kind: "original",
       createdAt: new Date("2026-09-19T10:00:00Z"),
+      publishedAt: new Date("2026-09-19T11:00:00Z"),
+      changes: [],
     },
     {
       id: "s1",
       status: "published",
       kind: "edit",
       createdAt: new Date("2026-09-20T10:00:00Z"),
+      publishedAt: new Date("2026-09-20T11:00:00Z"),
+      changes: [],
     },
   ];
 
@@ -880,6 +884,55 @@ describe("the versions of a property", () => {
     ).toHaveAttribute("href", "/admin/submissions/s0");
     expect(items[1]).toHaveTextContent("Edit");
     expect(items[1]).toHaveTextContent("You are here");
+  });
+
+  it("shows what a published edit changed, as was and now", () => {
+    render(
+      <SubmissionWorkbench
+        submission={editing({
+          id: "s1",
+          status: "published",
+          versions: [
+            versions[0],
+            {
+              ...versions[1],
+              changes: [
+                {
+                  fieldKey: "property.name",
+                  label: "Property name",
+                  from: "Kimana",
+                  to: "The Kimana Towers",
+                  complex: false,
+                },
+                {
+                  fieldKey: "property.total_units",
+                  label: "Total units",
+                  from: null,
+                  to: "76",
+                  complex: false,
+                },
+                {
+                  fieldKey: "property.amenities",
+                  label: "Amenities",
+                  from: null,
+                  to: null,
+                  complex: true,
+                },
+              ],
+            },
+          ],
+        } as Partial<SubmissionDetail>)}
+        media={[]}
+        permissionLevel="owner"
+      />,
+    );
+
+    const changes = document.querySelector('[data-slot="version-changes"]')!;
+    expect(changes).toHaveTextContent(
+      "Property name: Kimana → The Kimana Towers",
+    );
+    expect(changes).toHaveTextContent("Total units: set to 76");
+    expect(changes).toHaveTextContent("Amenities: changed");
   });
 
   it("is not shown for a property with a single version or a new property", () => {

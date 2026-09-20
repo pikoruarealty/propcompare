@@ -355,32 +355,52 @@ export function SubmissionWorkbench({
             Versions of this property
           </h2>
           <p className="text-muted-foreground mt-1 text-sm">
-            The submission that created it, and each edit since. The queue shows
-            only the latest.
+            The submission that created it, and each edit since, with what each
+            published edit changed. The queue shows only the latest.
           </p>
           <ol className="divide-border mt-3 divide-y text-sm">
             {submission.versions.map((version) => (
-              <li
-                key={version.id}
-                className="flex flex-wrap items-center justify-between gap-3 py-2"
-              >
-                <span>
-                  {version.kind === "original" ? "Original" : "Edit"}
-                  {" · "}
-                  {dateFormat.format(version.createdAt)}
-                  {" · "}
-                  {SUBMISSION_STATUS_LABEL[version.status]}
-                </span>
-                {version.id === submission.id ? (
-                  <span className="text-muted-foreground">You are here</span>
-                ) : (
-                  <Link
-                    href={`/admin/submissions/${version.id}`}
-                    className="text-primary underline underline-offset-4"
+              <li key={version.id} className="py-2">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <span>
+                    {version.kind === "original" ? "Original" : "Edit"}
+                    {" · "}
+                    {dateFormat.format(version.createdAt)}
+                    {" · "}
+                    {SUBMISSION_STATUS_LABEL[version.status]}
+                    {version.publishedAt
+                      ? ` · live since ${dateFormat.format(version.publishedAt)}`
+                      : ""}
+                  </span>
+                  {version.id === submission.id ? (
+                    <span className="text-muted-foreground">You are here</span>
+                  ) : (
+                    <Link
+                      href={`/admin/submissions/${version.id}`}
+                      className="text-primary underline underline-offset-4"
+                    >
+                      Open
+                    </Link>
+                  )}
+                </div>
+                {version.changes.length > 0 ? (
+                  <ul
+                    data-slot="version-changes"
+                    className="text-muted-foreground mt-1 space-y-0.5 text-xs"
                   >
-                    Open
-                  </Link>
-                )}
+                    {version.changes.map((change) => (
+                      <li key={change.fieldKey}>
+                        <span className="text-foreground">{change.label}</span>
+                        {": "}
+                        {change.complex
+                          ? "changed"
+                          : change.from === null
+                            ? `set to ${change.to}`
+                            : `${change.from} → ${change.to}`}
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
               </li>
             ))}
           </ol>
