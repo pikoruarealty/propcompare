@@ -1,4 +1,5 @@
-import { and, eq, ne } from "drizzle-orm";
+import { ADMIN_ONLY_FIELD_KEYS } from "@/lib/submissions/admin-only-fields";
+import { and, eq, ne, notInArray } from "drizzle-orm";
 import { db } from "@/db";
 import {
   amenityCatalog,
@@ -269,11 +270,14 @@ export const executeOcrExtractionJob = async (params: {
     })
     .from(propertySchemaFields)
     // A legal entity is chosen by an admin from recorded entities; a brochure
-    // can name a company but cannot know which record it is.
+    // can name a company but cannot know which record it is. The fields that
+    // change a live listing (removals, listing status) are an admin's decisions
+    // and are never asked of the model.
     .where(
       and(
         eq(propertySchemaFields.isActive, true),
         ne(propertySchemaFields.dataType, "legal_entity_id"),
+        notInArray(propertySchemaFields.fieldKey, [...ADMIN_ONLY_FIELD_KEYS]),
       ),
     );
   const propertyTypeRows = await db

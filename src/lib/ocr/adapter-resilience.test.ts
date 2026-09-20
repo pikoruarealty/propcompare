@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   createOpenRouterOcrAdapter,
   partialUsageOf,
+  validateNewPipelineExtraction,
   type ActiveOcrField,
 } from "./adapter";
 import { parseOcrRoutingManifest } from "./routing";
@@ -21,6 +22,7 @@ const activeFields: ActiveOcrField[] = [
   { fieldKey: "property.name", dataType: "string" },
   { fieldKey: "property.total_units", dataType: "positive_integer" },
   { fieldKey: "property.city", dataType: "string" },
+  { fieldKey: "property.plot_area_sqft", dataType: "positive_number" },
   { fieldKey: "unit_variants", dataType: "unit_variant_array" },
 ];
 
@@ -143,10 +145,11 @@ describe("more than expected, or messier than expected", () => {
       "floor-plans": floorPlans({
         unitsPerFloor: 4,
         dimensions: {
-          rooms: [{ name: "Living", lengthFt: 15, widthFt: 12 }],
+          lengthUnit: "ft",
+          rooms: [{ name: "Living", length: 15, width: 12 }],
           foyer: [
-            { name: "Block A foyer", lengthFt: 12.32, widthFt: 2.11 },
-            { lengthFt: 16.74, widthFt: 2.21 },
+            { name: "Block A foyer", length: 12.32, width: 2.11 },
+            { length: 16.74, width: 2.21 },
           ],
         },
       }),
@@ -167,7 +170,8 @@ describe("more than expected, or messier than expected", () => {
       "project-details": project(),
       "floor-plans": floorPlans({
         dimensions: {
-          rooms: [{ name: "Living", lengthFt: 15, widthFt: 12 }],
+          lengthUnit: "ft",
+          rooms: [{ name: "Living", length: 15, width: 12 }],
           balconies: null,
           foyer: null,
         },
@@ -188,13 +192,15 @@ describe("more than expected, or messier than expected", () => {
       "project-details": project(),
       "floor-plans": floorPlans({
         dimensions: {
+          lengthUnit: "ft",
+          areaUnit: "sq ft",
           rooms: [
-            { name: "Living", lengthFt: 15, widthFt: 12 },
+            { name: "Living", length: 15, width: 12 },
             { name: "OPEN TERRACE" },
-            { name: "Bedroom", areaSqft: 120 },
+            { name: "Bedroom", area: 120 },
           ],
           balconies: [{ name: "Balcony" }],
-          foyer: { name: "FOYER", lengthFt: 3.96, widthFt: 2.11 },
+          foyer: { name: "FOYER", length: 3.96, width: 2.11 },
         },
       }),
     });
@@ -214,7 +220,7 @@ describe("more than expected, or messier than expected", () => {
       "project-details": project(),
       "floor-plans": floorPlans({
         unitsPerFloor: "four",
-        areas: [{ basis: "carpet", areaSqft: "about 1,200" }],
+        areas: [{ basis: "carpet", area: "about 1,200", unit: "sq ft" }],
         dimensions: null,
         totalUnitsOfVariant: 24,
         somethingExtra: { anything: true },
@@ -408,5 +414,214 @@ describe("a paid answer is never lost", () => {
     });
 
     expect(calls).toEqual(["project-details"]);
+  });
+});
+
+describe("units: converted once, from what is printed, never assumed", () => {
+  const dims = (over: Record<string, unknown>) =>
+    floorPlans({ dimensions: over });
+
+  // Each call is a separate job: the same job id would replay the saved answer.
+  let job = 0;
+  const variantOf = async (answers: Record<string, unknown>) =>
+    (await adapterFor(answers).extract(request(`job-units-${(job += 1)}`)))
+      .extraction.unitVariants[0];
+
+  it("converts metres printed with the numbers to feet (Kimana's floor plans)", async () => {
+    const variant = await variantOf({
+      "project-details": project(),
+      "floor-plans": dims({
+        rooms: [
+          { name: "BED ROOM", length: "4.36 m", width: "7 m" },
+          { name: "TOILET", length: "2.75 m", width: "2.91 m" },
+        ],
+      }),
+    });
+
+    expect(variant.details.dimensions?.rooms).toEqual([
+      { name: "BED ROOM", lengthFt: 14.3, widthFt: 22.97 },
+      { name: "TOILET", lengthFt: 9.02, widthFt: 9.55 },
+    ]);
+  });
+
+  it("converts bare numbers using the unit the plan states once", async () => {
+    const variant = await variantOf({
+      "project-details": project(),
+      "floor-plans": dims({
+        lengthUnit: "mm",
+        rooms: [{ name: "Living", length: 4360, width: 7000 }],
+        balconies: [{ name: "Balcony", length: "3.05 m", width: "1.5 m" }],
+      }),
+    });
+
+    expect(variant.details.dimensions?.rooms).toEqual([
+      { name: "Living", lengthFt: 14.3, widthFt: 22.97 },
+    ]);
+    // A unit printed with the number wins over the plan's general unit.
+    expect(variant.details.dimensions?.balconies).toEqual([
+      { name: "Balcony", lengthFt: 10.01, widthFt: 4.92 },
+    ]);
+  });
+
+  it("reads feet and inches", async () => {
+    const variant = await variantOf({
+      "project-details": project(),
+      "floor-plans": dims({
+        rooms: [{ name: "Living", length: `12'-6"`, width: "10 ft 3 in" }],
+      }),
+    });
+
+    expect(variant.details.dimensions?.rooms).toEqual([
+      { name: "Living", lengthFt: 12.5, widthFt: 10.25 },
+    ]);
+  });
+
+  it("converts room and unit areas to square feet, whatever the unit", async () => {
+    const variant = await variantOf({
+      "project-details": project(),
+      "floor-plans": floorPlans({
+        areas: [
+          { basis: "carpet", area: 100, unit: "sq m" },
+          { basis: "super_built_up", area: "1,700 sq ft" },
+        ],
+        dimensions: { areaUnit: "sqm", rooms: [{ name: "Study", area: 12 }] },
+      }),
+    });
+
+    expect(variant.details.areas).toEqual([
+      { basis: "carpet", areaSqft: 1076.39 },
+      { basis: "super_built_up", areaSqft: 1700 },
+    ]);
+    expect(variant.details.dimensions?.rooms).toEqual([
+      { name: "Study", areaSqft: 129.17 },
+    ]);
+  });
+
+  it("does NOT store a number with no printed unit, and keeps everything else", async () => {
+    const variant = await variantOf({
+      "project-details": project(),
+      "floor-plans": floorPlans({
+        totalUnitsOfVariant: 24,
+        areas: [{ basis: "carpet", area: 875, unit: null }],
+        dimensions: {
+          lengthUnit: null,
+          rooms: [
+            { name: "Living", length: 4.36, width: 7 },
+            { name: "Study", length: "3 m", width: "3 m" },
+          ],
+        },
+      }),
+    });
+
+    // The unit-less numbers are gone; the printed-unit room and the unit count stay.
+    expect(variant.details).toEqual({
+      totalUnitsOfVariant: 24,
+      dimensions: { rooms: [{ name: "Study", lengthFt: 9.84, widthFt: 9.84 }] },
+    });
+  });
+
+  it("does not store a unit it does not recognise, and never falls back to feet", async () => {
+    const variant = await variantOf({
+      "project-details": project(),
+      "floor-plans": dims({
+        lengthUnit: "cubits",
+        rooms: [{ name: "Living", length: 4.36, width: 7 }],
+      }),
+    });
+
+    expect(variant.details.dimensions?.rooms).toEqual([]);
+  });
+
+  it("ignores measurements in our own canonical shape: they carry no unit, so they are not trusted", async () => {
+    const variant = await variantOf({
+      "project-details": project(),
+      "floor-plans": floorPlans({
+        areas: [{ basis: "carpet", areaSqft: 875 }],
+        dimensions: {
+          rooms: [{ name: "Living", lengthFt: 15, widthFt: 12 }],
+        },
+      }),
+    });
+
+    expect(variant.details.areas).toBeUndefined();
+    expect(variant.details.dimensions?.rooms).toEqual([]);
+  });
+
+  it("converts a plot area printed in square yards, and leaves out one with no unit", async () => {
+    const withUnit = await adapterFor({
+      "project-details": project({
+        fields: [
+          {
+            fieldKey: "property.plot_area_sqft",
+            value: 200,
+            unit: "sq yd",
+            evidence: [{ pageNumber: 1, sourceSnippet: "200 sq yd" }],
+          },
+        ],
+      }),
+      "floor-plans": floorPlans({}),
+    }).extract(request("job-plot-a"));
+    expect(
+      withUnit.extraction.fields.find(
+        (field) => field.fieldKey === "property.plot_area_sqft",
+      )?.value,
+    ).toBe(1800);
+
+    const withoutUnit = await adapterFor({
+      "project-details": project({
+        fields: [
+          {
+            fieldKey: "property.plot_area_sqft",
+            value: 1800,
+            evidence: [{ pageNumber: 1, sourceSnippet: "1800" }],
+          },
+        ],
+      }),
+      "floor-plans": floorPlans({}),
+    }).extract(request("job-plot-b"));
+    expect(
+      withoutUnit.extraction.fields.some(
+        (field) => field.fieldKey === "property.plot_area_sqft",
+      ),
+    ).toBe(false);
+  });
+
+  it("converts exactly once: the same saved answer always gives the same result, and re-validating it changes nothing", async () => {
+    const answers = {
+      "project-details": project(),
+      "floor-plans": dims({
+        lengthUnit: "m",
+        rooms: [{ name: "BED ROOM", length: 4.36, width: 7 }],
+      }),
+    };
+
+    const first = await variantOf(answers);
+    const second = await variantOf(answers);
+    expect(second.details).toEqual(first.details);
+    expect(first.details.dimensions?.rooms).toEqual([
+      { name: "BED ROOM", lengthFt: 14.3, widthFt: 22.97 },
+    ]);
+
+    // The result is canonical (feet). Passing it through the canonical validator
+    // that ingestion uses must not convert it again.
+    const extraction = (
+      await adapterFor(answers).extract(request("job-units-revalidate"))
+    ).extraction;
+    const revalidated = validateNewPipelineExtraction(
+      structuredClone(extraction),
+      manifest,
+      activeFields,
+      "ocr-v1",
+      "v1",
+    );
+    expect(revalidated.unitVariants[0].details).toEqual(first.details);
+
+    // And handing the canonical result back to the converter as if it were a
+    // model answer converts nothing and stores nothing: it has no printed unit.
+    const again = await variantOf({
+      "project-details": project(),
+      "floor-plans": floorPlans(first.details),
+    });
+    expect(again.details.dimensions?.rooms).toEqual([]);
   });
 });

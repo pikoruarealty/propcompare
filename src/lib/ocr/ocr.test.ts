@@ -65,13 +65,13 @@ const validScopePayload = (scopeKey: string): unknown => {
       unitVariants: [
         {
           variantName: "2 BHK - Type A",
-          details: { areas: [{ basis: "carpet", areaSqft: 875 }] },
+          details: { areas: [{ basis: "carpet", area: 875, unit: "sq ft" }] },
           confidence: 0.9,
           evidence: [{ pageNumber: 2, sourceSnippet: "2 BHK Type A" }],
         },
         {
           variantName: "3 BHK - Type B",
-          details: { areas: [{ basis: "carpet", areaSqft: 1240 }] },
+          details: { areas: [{ basis: "carpet", area: 1240, unit: "sq ft" }] },
           confidence: 0.88,
           evidence: [{ pageNumber: 3, sourceSnippet: "3 BHK Type B" }],
         },

@@ -1,4 +1,5 @@
 import { mkdir, rename, writeFile, readFile } from "node:fs/promises";
+import { readMeasurement } from "@/lib/units/measurements";
 import path from "node:path";
 import { PDFDocument } from "pdf-lib";
 import {
@@ -250,6 +251,10 @@ const validateFieldValue = (
   if (dataType === "positive_integer") {
     return readPositiveInteger(value, path);
   }
+  if (dataType === "positive_number") {
+    // Area fields (`*_sqft`) arrive here already converted from the printed unit.
+    return readPositiveNumber(value, path);
+  }
   if (dataType === "property_type_key") {
     const key = readNonEmptyString(value, path);
     if (field.allowedValues && !field.allowedValues.includes(key)) {
@@ -398,6 +403,110 @@ const parseDimensions = (
     dimensions.balconies = readRooms(dims.balconies, `${dimPath}.balconies`);
   }
   return dimensions;
+};
+
+/**
+ * The ONE place a brochure measurement is converted to feet or square feet.
+ *
+ * The model returns what is printed, never a conversion: numbers or text such as
+ * "4.36 m" or "12'-6\"", plus the unit the plan states once for everything on it
+ * (`lengthUnit`, `areaUnit`), or null when none is printed. This function reads
+ * each one with `readMeasurement`, which converts from the printed unit and
+ * refuses a number that has none: a measurement with no unit is left out and
+ * logged, never assumed to be feet. It emits our canonical shape (`lengthFt`,
+ * `widthFt`, `areaSqft`), which `parseVariantDetails` then validates. Nothing
+ * after this converts again, and canonical keys in the model's answer are ignored
+ * here, so a value can never be converted twice or trusted without a unit.
+ */
+const convertProviderDetails = (raw: unknown, path: string): unknown => {
+  if (!isRecord(raw)) return raw;
+  const out: Record<string, unknown> = { ...raw };
+
+  const measure = (
+    value: unknown,
+    kind: "length" | "area",
+    legend: unknown,
+    where: string,
+  ): number | undefined => {
+    if (value === undefined || value === null) return undefined;
+    const result = readMeasurement(value, kind, legend);
+    if (result.ok) return result.value;
+    console.warn(`[ocr] left out ${where}: ${result.reason}`);
+    return undefined;
+  };
+
+  const convertRoom = (room: unknown, where: string): unknown => {
+    if (!isRecord(room)) return room;
+    const converted: Record<string, unknown> = {};
+    if (room.name !== undefined) converted.name = room.name;
+    const legendLength = dimensionLegend.length;
+    const legendArea = dimensionLegend.area;
+    const length = measure(
+      room.length,
+      "length",
+      legendLength,
+      `${where}.length`,
+    );
+    const width = measure(room.width, "length", legendLength, `${where}.width`);
+    const area = measure(room.area, "area", legendArea, `${where}.area`);
+    if (length !== undefined) converted.lengthFt = length;
+    if (width !== undefined) converted.widthFt = width;
+    if (area !== undefined) converted.areaSqft = area;
+    return converted;
+  };
+
+  const dimensionLegend: { length: unknown; area: unknown } = {
+    length: undefined,
+    area: undefined,
+  };
+
+  if (Array.isArray(raw.areas)) {
+    out.areas = raw.areas.flatMap((entry, index) => {
+      if (!isRecord(entry)) return [entry];
+      const areaSqft = measure(
+        entry.area,
+        "area",
+        entry.unit,
+        `${path}.areas[${index}]`,
+      );
+      return areaSqft === undefined ? [] : [{ basis: entry.basis, areaSqft }];
+    });
+    // Every area unreadable: say nothing, rather than an empty list.
+    if ((out.areas as unknown[]).length === 0) delete out.areas;
+  }
+
+  if (isRecord(raw.dimensions)) {
+    const dims = raw.dimensions;
+    dimensionLegend.length = dims.lengthUnit;
+    dimensionLegend.area = dims.areaUnit;
+    const convertedDims: Record<string, unknown> = {};
+    if (Array.isArray(dims.rooms)) {
+      convertedDims.rooms = dims.rooms.map((room, index) =>
+        convertRoom(room, `${path}.dimensions.rooms[${index}]`),
+      );
+    } else if (dims.rooms === null) {
+      convertedDims.rooms = null;
+    }
+    if (Array.isArray(dims.foyer)) {
+      convertedDims.foyer = dims.foyer.map((foyer, index) =>
+        convertRoom(foyer, `${path}.dimensions.foyer[${index}]`),
+      );
+    } else if (dims.foyer !== undefined) {
+      convertedDims.foyer =
+        dims.foyer === null
+          ? null
+          : convertRoom(dims.foyer, `${path}.dimensions.foyer`);
+    }
+    if (Array.isArray(dims.balconies)) {
+      convertedDims.balconies = dims.balconies.map((room, index) =>
+        convertRoom(room, `${path}.dimensions.balconies[${index}]`),
+      );
+    } else if (dims.balconies === null) {
+      convertedDims.balconies = null;
+    }
+    out.dimensions = convertedDims;
+  }
+  return out;
 };
 
 const parseVariantDetails = (
@@ -860,7 +969,7 @@ const createScopePrompt = (
   const sourcePages = scope.pages.map((page) => page.pageNumber);
   const scalarFields = fieldsForScope(scope, activeFields);
   const variantDetails =
-    "totalUnitsOfVariant (positive integer), unitsPerFloor (positive integer), areas [{basis: carpet|super_built_up|built_up, areaSqft: positive number}], and dimensions {rooms: [room], foyer: one room object or null (never a list; put extra foyers in rooms), balconies: [room]}; each room has name and any explicitly printed lengthFt, widthFt, or areaSqft";
+    'totalUnitsOfVariant (positive integer), unitsPerFloor (positive integer), areas [{basis: carpet|super_built_up|built_up, area: the number exactly as printed, unit: the unit printed with it or null}], and dimensions {lengthUnit: the unit the plan states for its lengths or null, areaUnit: the unit stated for room areas or null, rooms: [room], foyer: one room object or null (never a list; put extra foyers in rooms), balconies: [room]}; each room has name and any explicitly printed length, width, or area, exactly as printed (a number, or text such as "4.36 m" or "12\'-6\\"")';
   const variantOutput =
     scope.kind === "floor_plans"
       ? `"unitVariants": [{"variantName": string, "details": object, "confidence": number, "evidence": [{"pageNumber": number, "sourceSnippet": string}]}]`
@@ -882,6 +991,7 @@ Output shape:
 }
 
 Rules:
+- UNITS ARE EXACT. Copy every measurement exactly as printed and NEVER convert, round, or assume a unit. Give the unit exactly as printed: with the number when it is printed there ("4.36 m", "1,250 sq ft"), or once as lengthUnit / areaUnit / unit when the plan states it for everything (a scale note or legend such as "all dimensions in mm"). If no unit is printed anywhere for a measurement, set its unit to null and still copy the number: it will be held for a person to check, not guessed. Never treat a number as feet or square feet unless feet are printed. For any field whose key ends in _sqft, return value exactly as printed plus a unit key (for example {"fieldKey": "property.plot_area_sqft", "value": 1200, "unit": "sq yd", ...}); do not convert it yourself.
 - Extract only facts explicitly printed on these pages. Never infer, count, summarize marketing copy, or fabricate missing values.
 - Never return a price, currency amount, rate per square foot, or commercial term anywhere, including unmappedRawEvidence.
 - The only active scalar fields for this scope are: ${JSON.stringify(scalarFields)}. Use their exact fieldKey and dataType-compatible value. Omit missing fields.
@@ -1116,9 +1226,25 @@ const parseScopeResponse = (
       const contract = activeFields.find(
         (field) => field.fieldKey === fieldKey,
       );
+      // A field named for square feet is converted here, once, from the unit the
+      // brochure printed beside it. The model does not convert, and a value with
+      // no printed unit is left out, never assumed to be square feet.
+      let value: unknown = candidate.value;
+      if (fieldKey.endsWith("_sqft")) {
+        const measured = readMeasurement(
+          candidate.value,
+          "area",
+          candidate.unit,
+        );
+        if (!measured.ok) {
+          console.warn(`[ocr] left out ${fieldKey}: ${measured.reason}`);
+          continue;
+        }
+        value = measured.value;
+      }
       const built: OcrFieldCandidate = {
         fieldKey,
-        value: candidate.value,
+        value,
         ...(candidate.confidence === undefined
           ? {}
           : {
@@ -1135,7 +1261,7 @@ const parseScopeResponse = (
         ),
       };
       if (contract !== undefined) {
-        validateFieldValue(contract, candidate.value, `fields[${index}].value`);
+        validateFieldValue(contract, value, `fields[${index}].value`);
       }
       known.push(built);
     } catch (error) {
@@ -1235,7 +1361,11 @@ const parseScopeResponse = (
       return {
         scopeKey: scope.scopeKey,
         variantName,
-        details: parseVariantDetails(candidate.details, `${path}.details`),
+        // The model's raw reading is converted here, once, and then validated.
+        details: parseVariantDetails(
+          convertProviderDetails(candidate.details, `${path}.details`),
+          `${path}.details`,
+        ),
         ...(confidence === undefined ? {} : { confidence }),
         evidence: parseEvidenceList(
           normalizeProviderEvidence(candidate.evidence, scope.scopeKey),
@@ -1271,7 +1401,10 @@ const parseScopeResponse = (
       {
         scopeKey: scope.scopeKey,
         details: parseVariantDetails(
-          response.unitVariant.details,
+          convertProviderDetails(
+            response.unitVariant.details,
+            "unitVariant.details",
+          ),
           "unitVariant.details",
         ),
         ...(confidence === undefined ? {} : { confidence }),
