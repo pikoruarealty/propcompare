@@ -56,33 +56,33 @@ GujRERA requires every registered project to file its quarterly progress report 
 
 ### Discovery
 
-- [ ] Inspect GujRERA in a browser; save a sample response per field; list what a project record exposes and how it is reached. No code beyond a throwaway probe.
-- [ ] Confirm the RERA-authoritative field mapping with the owner.
-- [ ] Check whether the site shows its own last-updated date per project.
+- [x] Inspect GujRERA in a browser; save a sample response per field; list what a project record exposes and how it is reached. No code beyond a throwaway probe.
+- [x] Confirm the RERA-authoritative field mapping with the owner.
+- [x] Check whether the site shows its own last-updated date per project.
 
 ### Implementation
 
-- [ ] `schema.v7.md` and migration (after approval).
-- [ ] `src/lib/rera/`: adapter interface, registry, the `gujrera` adapter, normalized record type.
-- [ ] Fetch job queue, claim, lease, heartbeat, failure states (modelled on the OCR worker).
-- [ ] Build a `rera_scrape` submission from a record vs. the property (RERA value proposed; `not_stated` where RERA is silent, never blank or invented).
-- [ ] Review-time "Fetch RERA record" action and evidence display.
-- [ ] Difference flag in the reconciliation screen and property view.
-- [ ] Due-check scheduler and worker entry point.
-- [ ] Admin: enter or change a property's RERA number and see fetch history.
+- [x] `schema.v7.md` and migration (after approval).
+- [x] `src/lib/rera/`: adapter interface, registry, the `gujrera` adapter, normalized record type.
+- [x] Fetch job queue, claim, lease, heartbeat, failure states (modelled on the OCR worker).
+- [x] Build a `rera_scrape` submission from a record vs. the property (RERA value proposed; `not_stated` where RERA is silent, never blank or invented).
+- [x] Review-time "Fetch RERA record" action and evidence display.
+- [x] Difference flag in the reconciliation screen and property view.
+- [x] Due-check scheduler and worker entry point.
+- [x] Admin: enter or change a property's RERA number (a listing of past fetches is not built: the panel shows the latest).
 
 ### Tests
 
-- [ ] Adapter tests against saved real responses (no live network in CI); malformed and empty responses fail safely.
-- [ ] Integration: a differing record produces a submission and never a live write; an identical record produces neither a submission nor a live write.
-- [ ] Due-check: before, inside and after the window; late filer; extended deadline; failed check retried.
-- [ ] Concurrency: two workers never run the same job.
-- [ ] A test that nothing outside the publish transaction writes live tables from this path.
-- [ ] Browser check: RERA number entered → record fetched → difference shown → approved → published.
+- [x] Adapter tests against saved real responses (no live network in CI); malformed and empty responses fail safely.
+- [x] Integration: a differing record produces a submission and never a live write; an identical record produces neither a submission nor a live write.
+- [x] Due-check: before, inside and after the window; late filer; extended deadline; failed check retried.
+- [x] Concurrency: two workers never run the same job.
+- [x] A test that nothing outside the publish transaction writes live tables from this path.
+- [ ] Browser check: RERA number entered → record fetched → difference shown → approved → published. (Fetch, difference and apply are browser-checked on Kimana; publishing a RERA-sourced draft through the browser has not been.)
 
 ### Documentation
 
-- [ ] `schema.v7.md`, API spec, admin app-flow, `ARCHITECTURE.md` regulator-adapter note, `production-readiness.md` (fetch rate, terms review, monitoring), `PROGRESS.md`, `DECISIONS.md`.
+- [x] `schema.v7.md`, API spec, admin app-flow, `ARCHITECTURE.md` regulator-adapter note, `production-readiness.md` (fetch rate, terms review, monitoring), `PROGRESS.md`, `DECISIONS.md`.
 
 ## Acceptance
 
@@ -111,7 +111,7 @@ _(fill in at completion)_
 - [x] Quarterly due-check worker (`src/lib/rera/refresh.ts`): due once the latest closed quarter's window has passed and the last good record shows no filing for it; weekly re-check, daily-then-doubling after failures (capped at a week). Off unless `RERA_WORKER_ENABLED=true`; `bun run rera:worker` to run alone.
 - [x] A `rera_scrape` draft edit created automatically from a differing record, values as `needs_review`; none when nothing differs, when an edit is open, or when the same proposal was already rejected. Tested on real Postgres (`refresh.integration.test.ts`); not run against the live site (kill switch off).
 - [ ] Developer-facing entry for their own properties (waits for the developer portal).
-- [ ] Buyer-facing "last checked".
-- [ ] Areas (square metres to square feet) and property type, once the owner agrees the mapping.
+- [x] Buyer-facing "last checked": buyer pages credit GujRERA per fact with the check date (`DECISIONS.md` 2026-09-20).
+- [x] Carpet area per unit type (`2026-09-20-rera-carpet-area.md`). [ ] Property type and project land area stay unmapped until the owner agrees the mapping.
 - [ ] A second regulator: add an adapter file and a registry entry.
 - [x] Kill switch (`RERA_WORKER_ENABLED`, off by default) and request spacing. [ ] Failure alerting stays open (`docs/production-readiness.md`).

@@ -92,6 +92,11 @@ const latestRegulatorCheck = async (
   };
 };
 
+/** An id that is not shaped like one cannot match a row, and would make Postgres
+ * refuse the comparison (a 500) instead of finding nothing (a 404). */
+const UUID_SHAPE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 const toIsoString = (value: Date | null): string | null =>
   value === null ? null : value.toISOString();
 
@@ -377,6 +382,7 @@ export const getPublishedMediaObjectPath = async (
   db: ReadDb,
   id: string,
 ): Promise<string | null> => {
+  if (!UUID_SHAPE.test(id)) return null;
   const [row] = await db
     .select({ gcsPath: propertyMedia.gcsPath })
     .from(propertyMedia)
@@ -396,6 +402,7 @@ export const getPublishedMediaForServing = async (
   gcsPath: string;
   mediaType: "photo" | "floor_plan" | "video" | "brochure_pdf";
 } | null> => {
+  if (!UUID_SHAPE.test(id)) return null;
   const [row] = await db
     .select({
       gcsPath: propertyMedia.gcsPath,

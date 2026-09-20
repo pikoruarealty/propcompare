@@ -79,7 +79,7 @@ Background: `GET /api/v1/media/{id}` (signed-URL redirect) and `StorageAdapter.g
 - [x] Media upload in the admin submission flow (photos, floor plans, brochure pages as images), via `StorageAdapter.upload()`, published only through the approval path. The developer-facing upload waits for the developer portal.
 - [x] Resolved 2026-09-19: `brochure_pdf` is buyer-facing only if the developer marks it public (private by default); source documents and buyer media stay in separate storage paths.
 - [x] `PropertyCard` and the dossier render real pictures (thumbnails on cards, a zoomable pop-up carousel).
-- [x] The "found" test for `getPublishedMediaObjectPath` exists (`src/lib/properties/queries.integration.test.ts`). Still open: an integration test for `GET /api/v1/media/{id}` (only a mocked-dependency route test exists); the picture flow is covered by browser checks.
+- [x] The "found" test for `getPublishedMediaObjectPath` exists (`src/lib/properties/queries.integration.test.ts`). The route now has a real-database integration test too (`src/app/api/v1/media/[id]/route.integration.test.ts`: redirect, 404s, removed unit type, unlisted and deleted property); it found and fixed a 500 on a malformed id.
 
 ## Tests
 

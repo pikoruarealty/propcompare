@@ -24,11 +24,11 @@ decision, and no browser-canvas extraction is allowed.
 - [x] Document the approved v6 media shape and the publish invariants.
 - [x] Add the additive database schema and generated migration; do not write a
       live catalog row in the migration.
-- [ ] Add server-side draft-media validation and upload, including ownership
+- [x] Add server-side draft-media validation and upload, including ownership
       checks and immutable object paths.
 - [x] Extend `publishSubmission` to copy only reviewed, approved media in its
       transaction; preserve attribution and source kind in the revision.
-- [ ] Add admin review controls for media and an own-image upload action.
-- [ ] Add focused unit, integration, route authorization, and UI tests.
-- [ ] Update API/flow/schema/progress/tasklist documentation and verify format,
+- [x] Add admin review controls for media and an own-image upload action.
+- [x] Add focused unit, integration, route authorization, and UI tests.
+- [x] Update API/flow/schema/progress/tasklist documentation and verify format,
       lint, typecheck, and the full suite.

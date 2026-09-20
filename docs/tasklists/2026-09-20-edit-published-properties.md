@@ -43,29 +43,29 @@ Every detail we hold must be editable, including after a property is live. An ed
 
 ### Discovery
 
-- [ ] Read publisher removal and replace semantics for unit types, areas, amenities, specifications and media; list every field that can be edited and how each is seeded.
-- [ ] Confirm the reconciliation editor can render a "live value" beside each candidate (no new data path; read from the property).
+- [x] Read publisher removal and replace semantics for unit types, areas, amenities, specifications and media; list every field that can be edited and how each is seeded.
+- [x] Confirm the reconciliation editor can render a "live value" beside each candidate (no new data path; read from the property).
 
 ### Implementation
 
-- [ ] `createEditSubmission(propertyId)`: bound to property and developer, `manual_form`, no fabricated fields; one open edit per property, or a clear message if one is open.
-- [ ] `POST /api/v1/admin/properties/{id}/edits` and the "Edit this property" action.
-- [ ] Seed-on-open for each field type; whole-set fields seeded as full sets.
-- [ ] Live-value column and a changed-only summary in the reconciliation screen.
-- [ ] Publisher applies `developer.name` (canonical developer only; duplicate-name guard).
-- [ ] Property view: revision history.
+- [x] `createEditSubmission(propertyId)`: bound to property and developer, `manual_form`, no fabricated fields; one open edit per property, or a clear message if one is open.
+- [x] `POST /api/v1/admin/properties/{id}/edits` and the "Edit this property" action.
+- [x] Seed-on-open for each field type; whole-set fields seeded as full sets.
+- [x] Live-value column and a changed-only summary in the reconciliation screen.
+- [x] Publisher applies `developer.name` (canonical developer only; duplicate-name guard).
+- [x] Property view: revision history.
 
 ### Tests
 
-- [ ] Integration: an edit changes only the edited fields and leaves the rest byte-identical; the live page is unchanged before publish.
-- [ ] Integration: editing one amenity, one unit-type room and the developer name each publish correctly.
-- [ ] Route tests: 401, 403 for non-admin, 404, one open edit per property.
-- [ ] A test that the edit path never writes a live table outside publish.
-- [ ] Browser check (Chrome and Brave): edit → review → approve → publish → change visible on the buyer page.
+- [x] Integration: an edit changes only the edited fields and leaves the rest byte-identical; the live page is unchanged before publish.
+- [x] Integration: editing one amenity, one unit-type room and the developer name each publish correctly.
+- [x] Route tests: 401, 403 for non-admin, 404, one open edit per property.
+- [x] A test that the edit path never writes a live table outside publish.
+- [x] Browser check (Chrome and Brave): edit → review → approve → publish → change visible on the buyer page.
 
 ### Documentation
 
-- [ ] API spec, admin app-flow, `PROGRESS.md`, `DECISIONS.md`.
+- [x] API spec, admin app-flow, `PROGRESS.md`, `DECISIONS.md`.
 
 ## Acceptance
 
@@ -84,12 +84,12 @@ _(fill in at completion)_
 - [x] Integration test that publishes an edit and checks only the edited fields changed and everything else is identical.
 - [x] Real-browser check on Kimana (`scripts/verify-rera-fetch.mjs`): start edit, fetch RERA, use RERA's values, live property untouched.
 
-**Gaps and bugs found on the way** (full text in `DECISIONS.md` 2026-09-20): nothing could start an edit of an existing property (now built); `developer.name` is in the contract but never applied on publish (still open); the buyer email check rejected any address with an "s" (fixed); duplicate room names broke the dossier's React keys (fixed); the migration-timestamp trap; a leaked test run (cleaned).
+**Gaps and bugs found on the way** (full text in `DECISIONS.md` 2026-09-20): nothing could start an edit of an existing property (now built); `developer.name` is in the contract but was never applied on publish (now applied); the buyer email check rejected any address with an "s" (fixed); duplicate room names broke the dossier's React keys (fixed); the migration-timestamp trap; a leaked test run (cleaned).
 
 **Still to do**
 
-- [ ] Seed and edit whole-set fields of a live property (amenities, specifications, unit types) and its pictures; decide removal semantics.
-- [ ] Publisher applies `developer.name` (with a duplicate-name guard).
+- [x] Seed and edit whole-set fields of a live property (amenities, specifications, unit types); removal is explicit and soft (`DECISIONS.md` 2026-09-20). **Pictures are the exception:** publishing an edit only adds pictures; a published picture cannot be removed or replaced, and the edit screen does not show the published ones. Removing one needs a soft-removal column on `property_media` (a schema change, so the owner's approval first).
+- [x] Publisher applies `developer.name`. **The duplicate-name guard was not built:** renaming a developer to another developer's name is allowed (no unique constraint on the name either). Say if you want it; it changes publish logic.
 - [x] Revision history: the versions list on a property's submission screen now shows when each edit went live and what it changed (was → now for single values; "changed" for amenity, specification and unit-type sets). Read from `property_revisions`. (A standalone property page in the admin is still not built.)
 - [ ] A property page in the admin (today an edit starts from the property's published submission).
 - [ ] The edit path for developers, when the developer portal exists.

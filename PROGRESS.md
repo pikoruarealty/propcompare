@@ -1,5 +1,9 @@
 # Progress
 
+## 2026-09-20 (late night, 3) — Media route tested for real; tasklists reconciled
+
+**Done:** a real-database test of `GET /api/v1/media/{id}` (a live picture redirects to a signed link for its own object; unknown, removed-unit-type, unlisted and deleted pictures are 404). **It found a bug:** a malformed id (for example `abc`) made Postgres refuse the comparison and the route answered 500; it is now a 404. The edit-published, RERA-sync and submission-media tasklists no longer show finished work as open. **Still open, and needing your call:** a published picture cannot be removed or replaced by an edit (a soft-removal column on `property_media` would be needed, so a schema change), and renaming a developer to another developer's name is allowed (the planned duplicate-name guard was never built).
+
 ## 2026-09-20 (late night, 2) — Sign-in redirects
 
 **Done:** opening `/admin/login` (or `/developers/login`) while signed in with the right role now goes straight on to the page you were headed for, or the portal home, and never honours an off-site `next`. Any `/admin/...` or `/developers/...` address, real or not, sends a signed-out person to that portal's login and brings them back afterwards. A signed-in admin at a made-up admin address sees a plain not-found. Checked in a real browser and by tests.
