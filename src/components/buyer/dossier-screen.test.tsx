@@ -1,5 +1,5 @@
 import { render, screen, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   richDossierFixture,
   sparseDossierFixture,
@@ -127,6 +127,46 @@ describe("DossierScreen — area bases", () => {
     const unstated = areas.querySelectorAll('[data-fact-status="not_stated"]');
     expect(stated).toHaveLength(1);
     expect(unstated).toHaveLength(2);
+  });
+});
+
+describe("DossierScreen — repeated room names", () => {
+  it("lists every room even when a floor plan repeats a name", () => {
+    // Real floor plans repeat names (two bedrooms, several ducts). Keying on the
+    // name alone made React warn and could drop or duplicate rows.
+    const dossier: PropertyDossier = {
+      ...richDossierFixture,
+      unitVariants: richDossierFixture.unitVariants.map((variant, index) =>
+        index === 0
+          ? {
+              ...variant,
+              dimensions: {
+                rooms: [
+                  { name: "Bedroom", lengthFt: 12, widthFt: 10 },
+                  { name: "Bedroom", lengthFt: 11, widthFt: 10 },
+                  { name: "Duct", lengthFt: 3, widthFt: 2 },
+                  { name: "Duct", lengthFt: 3, widthFt: 2 },
+                ],
+              },
+            }
+          : variant,
+      ),
+    };
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const { container } = renderDossier(dossier);
+      const first = container.querySelectorAll(
+        '[data-slot="unit-variant"]',
+      )[0]!;
+      const dimensions = first.querySelector(
+        '[data-slot="variant-dimensions"]',
+      )!;
+
+      expect(dimensions.querySelectorAll("dt")).toHaveLength(4);
+      expect(errors).not.toHaveBeenCalled();
+    } finally {
+      errors.mockRestore();
+    }
   });
 });
 

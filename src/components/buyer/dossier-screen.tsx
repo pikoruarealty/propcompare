@@ -142,9 +142,11 @@ function UnitVariant({ variant }: { variant: DossierUnitVariant }) {
         <div data-slot="variant-dimensions" className="flex flex-col gap-2">
           <Eyebrow>Room dimensions</Eyebrow>
           <dl className="grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2">
-            {rooms.map((room) => (
+            {rooms.map((room, index) => (
               <div
-                key={room.name}
+                // A floor plan can list the same room name more than once
+                // (two bedrooms, several ducts), so the name alone is not a key.
+                key={`${room.name}:${index}`}
                 className="border-border flex items-baseline justify-between gap-4 border-b pb-1"
               >
                 <dt className="text-muted-foreground text-sm">{room.name}</dt>

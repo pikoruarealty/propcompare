@@ -28,7 +28,7 @@ export const cleanOptionalEmail = (
 ): string | null | undefined => {
   const email = input.trim().toLowerCase();
   if (!email) return null; // left blank — fine
-  return /^[^s@]+@[^s@]+.[^s@]+$/.test(email) && email.length <= 254
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && email.length <= 254
     ? email
     : undefined; // present but not an email
 };

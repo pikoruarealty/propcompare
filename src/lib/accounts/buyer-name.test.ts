@@ -31,4 +31,18 @@ describe("buyer name and email helpers", () => {
     expect(cleanOptionalEmail(" Riya@Example.com ")).toBe("riya@example.com");
     expect(cleanOptionalEmail("nope")).toBeUndefined();
   });
+
+  it("accepts ordinary addresses that contain the letter s", () => {
+    // A mistyped character class once rejected any address containing "s".
+    expect(cleanOptionalEmail("testuser@gmail.com")).toBe("testuser@gmail.com");
+    expect(cleanOptionalEmail("sunil@sun.in")).toBe("sunil@sun.in");
+  });
+
+  it("rejects addresses that are not addresses", () => {
+    expect(cleanOptionalEmail("a b@example.com")).toBeUndefined();
+    expect(cleanOptionalEmail("a@@example.com")).toBeUndefined();
+    expect(cleanOptionalEmail("a@examplexcom")).toBeUndefined();
+    expect(cleanOptionalEmail("@example.com")).toBeUndefined();
+    expect(cleanOptionalEmail(`${"a".repeat(250)}@x.com`)).toBeUndefined();
+  });
 });
