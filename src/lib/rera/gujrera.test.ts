@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { createGujreraAdapter, type FetchLike } from "./gujrera";
 import {
+  amarisDetailResponse,
+  amarisFormOneResponse,
   detailResponse,
+  formOneResponse,
   inventoryResponse,
   kimanaSearchHit,
   KIMANA_NUMBER,
@@ -26,6 +29,7 @@ const fakeSite = (overrides: Routes = {}) => {
     "/formone/public/getfrom-one-progs-rept-projectid/17929": progressResponse,
     "/formthree/public/get-fromthree-a-details-byid/417562": inventoryResponse,
     "/quarter/public/getprojectqtrs/17929": quartersResponse,
+    "/formone/public/getfrom-one-byformone-id/278008": formOneResponse,
     ...overrides,
   };
   const fetchImpl: FetchLike = async (url, init) => {
@@ -73,6 +77,66 @@ describe("GujRERA adapter — a full record", () => {
       gaps: [],
       fetchedAt: "2026-09-20T06:00:00.000Z",
     });
+  });
+
+  it("reads what else the registration says, without turning it into counts", async () => {
+    const record =
+      await adapterFor(fakeSite()).lookupByRegistrationNumber(KIMANA_NUMBER);
+
+    expect(record).toMatchObject({
+      projectDescription: "Residential Apartments",
+      landAreaSqm: 7628,
+      coveredParkingSlots: 246,
+      pincode: null,
+      // Two towers are one block here: this is not a tower count.
+      blocks: [{ name: "A+B", slabs: 24 }],
+    });
+  });
+
+  it("does not turn a blank swimming-pool flag into an amenity or a refusal", async () => {
+    const record =
+      await adapterFor(fakeSite()).lookupByRegistrationNumber(KIMANA_NUMBER);
+
+    expect(record.declaredAmenityKeys).toEqual([]);
+  });
+
+  it("declares a swimming pool only when the flag says Yes (Amaris)", async () => {
+    const site = fakeSite({
+      "/project_reg/public/getproject-details/17929": amarisDetailResponse,
+      "/formone/public/getfrom-one-byformone-id/278008": amarisFormOneResponse,
+    });
+
+    const record =
+      await adapterFor(site).lookupByRegistrationNumber(KIMANA_NUMBER);
+
+    expect(record.declaredAmenityKeys).toEqual(["swimming_pool"]);
+    expect(record).toMatchObject({
+      projectDescription: "4BHK and 5BHK (Penthouse)",
+      pincode: "382481",
+      landAreaSqm: 15949,
+      coveredParkingSlots: 1327,
+    });
+    // Four blocks of 14 slabs, reported as listed and nothing more.
+    expect(record.blocks.map((block) => block.name)).toEqual([
+      "A",
+      "B",
+      "C",
+      "D",
+    ]);
+    expect(record.blocks.every((block) => block.slabs === 14)).toBe(true);
+  });
+
+  it("reports the blocks as a gap, not an error, when they cannot be read", async () => {
+    const site = fakeSite({
+      "/formone/public/getfrom-one-byformone-id/278008": () =>
+        new Response("no", { status: 500 }),
+    });
+
+    const record =
+      await adapterFor(site).lookupByRegistrationNumber(KIMANA_NUMBER);
+
+    expect(record.blocks).toEqual([]);
+    expect(record.gaps).toEqual(["blocks"]);
   });
 
   it("reports the latest quarterly filing, ignoring other filing kinds", async () => {
@@ -125,7 +189,7 @@ describe("GujRERA adapter — a full record", () => {
     });
     await adapter.lookupByRegistrationNumber(KIMANA_NUMBER);
 
-    expect(seen.length).toBe(6);
+    expect(seen.length).toBe(7);
     for (const init of seen) {
       const headers = init.headers as Record<string, string>;
       expect(headers["User-Agent"]).toMatch(/^PropCompare-RERA-Check/);

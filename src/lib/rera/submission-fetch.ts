@@ -1,6 +1,7 @@
 import { and, desc, eq, ne, or, sql } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import {
+  amenityCatalog,
   developerLegalEntities,
   properties,
   propertySubmissionFields,
@@ -137,6 +138,29 @@ const loadEntities = async (
   return rows;
 };
 
+const loadAmenityLabels = async (
+  database: PostgresJsDatabase,
+): Promise<Record<string, string>> =>
+  Object.fromEntries(
+    (
+      await database
+        .select({ key: amenityCatalog.key, label: amenityCatalog.label })
+        .from(amenityCatalog)
+    ).map((row) => [row.key, row.label]),
+  );
+
+/** Records stored before a field existed lack it; fill what is missing so a
+ * reader never has to guard for an older fetch. */
+const withDefaults = (record: RegulatorRecord): RegulatorRecord => ({
+  ...record,
+  projectDescription: record.projectDescription ?? null,
+  pincode: record.pincode ?? null,
+  landAreaSqm: record.landAreaSqm ?? null,
+  coveredParkingSlots: record.coveredParkingSlots ?? null,
+  blocks: record.blocks ?? [],
+  declaredAmenityKeys: record.declaredAmenityKeys ?? [],
+});
+
 const isRecord = (value: unknown): value is RegulatorRecord =>
   value !== null &&
   typeof value === "object" &&
@@ -228,11 +252,17 @@ export const fetchReraForSubmission = async (
     throw cause;
   }
 
-  const [current, entities] = await Promise.all([
+  const [current, entities, amenityLabels] = await Promise.all([
     loadCurrentValues(database, submission),
     loadEntities(database, submission),
+    loadAmenityLabels(database),
   ]);
-  const comparison = compareWithRecord(record, current, entities);
+  const comparison = compareWithRecord(
+    record,
+    current,
+    entities,
+    amenityLabels,
+  );
   await database
     .update(reraFetchJobs)
     .set({
@@ -290,7 +320,7 @@ const latestSucceededJob = async (
     .orderBy(desc(reraFetchJobs.createdAt))
     .limit(1);
   const record = (job?.payload as { record?: unknown } | null)?.record;
-  return job && isRecord(record) ? { job, record } : null;
+  return job && isRecord(record) ? { job, record: withDefaults(record) } : null;
 };
 
 /** The RERA panel's state for a submission: the latest successful fetch, compared
@@ -311,7 +341,10 @@ export const getReraState = async (
       comparison: [],
     };
   }
-  const entities = await loadEntities(database, submission);
+  const [entities, amenityLabels] = await Promise.all([
+    loadEntities(database, submission),
+    loadAmenityLabels(database),
+  ]);
   return {
     registrationNumber:
       typeof registrationNumber === "string" ? registrationNumber : null,
@@ -320,7 +353,12 @@ export const getReraState = async (
       fetchedAt: (found.job.runAt ?? found.job.createdAt).toISOString(),
       record: found.record,
     },
-    comparison: compareWithRecord(found.record, current, entities),
+    comparison: compareWithRecord(
+      found.record,
+      current,
+      entities,
+      amenityLabels,
+    ),
   };
 };
 
@@ -346,12 +384,13 @@ export const applyReraValues = async (
     throw new ReraFetchError("job_not_found", "That RERA fetch was not found.");
   }
 
-  const [current, entities] = await Promise.all([
+  const [current, entities, amenityLabels] = await Promise.all([
     loadCurrentValues(database, submission),
     loadEntities(database, submission),
+    loadAmenityLabels(database),
   ]);
   const items = writableItems(
-    compareWithRecord(found.record, current, entities),
+    compareWithRecord(found.record, current, entities, amenityLabels),
   );
   if (items.length === 0) {
     throw new ReraFetchError(

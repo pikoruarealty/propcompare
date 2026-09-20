@@ -30,6 +30,20 @@ export interface RegulatorRecord {
   totalUnits: number | null;
   /** 0–100, as declared in the latest progress report. */
   constructionProgressPercent: number | null;
+  /** The regulator's own description ("4BHK and 5BHK (Penthouse)"). Free text. */
+  projectDescription: string | null;
+  pincode: string | null;
+  /** Land area of the project as registered, in square metres (not converted). */
+  landAreaSqm: number | null;
+  /** Covered parking slots the project declares. */
+  coveredParkingSlots: number | null;
+  /** The blocks the regulator lists, with their slab counts. A block can hold
+   * several towers ("A+B") and a slab is not a storey, so these describe the
+   * registration and are not a tower or floor count. */
+  blocks: { name: string; slabs: number | null }[];
+  /** Amenity-catalogue keys the regulator affirmatively declares. Only a positive
+   * declaration is listed: a blank flag is not stated, never "not offered". */
+  declaredAmenityKeys: string[];
   /** The most recent quarterly filing the regulator lists, if any. */
   latestQuarter: RegulatorQuarter | null;
   /** The public page a person can open to check this record. */

@@ -58,6 +58,11 @@ const isoDate = (value: unknown): string | null => {
 const finiteNumber = (value: unknown): number | null =>
   typeof value === "number" && Number.isFinite(value) ? value : null;
 
+const positive = (value: unknown): number | null => {
+  const number = finiteNumber(value);
+  return number !== null && number > 0 ? number : null;
+};
+
 const sleep = (ms: number) =>
   ms > 0 ? new Promise<void>((resolve) => setTimeout(resolve, ms)) : undefined;
 
@@ -249,6 +254,37 @@ export const createGujreraAdapter = (
         gaps.push("unit count");
       }
 
+      // The block list lives with the registration's form-one.
+      const formOneId = String(summary?.formOneId ?? "");
+      let blocks: RegulatorRecord["blocks"] = [];
+      if (/^\d{1,12}$/.test(formOneId)) {
+        const formOne = asRecord(
+          await optional(
+            gaps,
+            "blocks",
+            `/formone/public/getfrom-one-byformone-id/${formOneId}`,
+          ),
+        );
+        const list = asRecord(formOne?.data ?? formOne)?.formOneAList;
+        blocks = (Array.isArray(list) ? list : []).flatMap((entry) => {
+          const block = asRecord(entry);
+          const name = text(block?.blockName);
+          if (!name) return [];
+          const slabs = Number(block?.totalNoOfSlabs);
+          return [
+            {
+              name,
+              slabs: Number.isInteger(slabs) && slabs > 0 ? slabs : null,
+            },
+          ];
+        });
+      }
+
+      const developments = Array.isArray(detail?.dev) ? detail.dev : [];
+      const swimmingPool = developments.some(
+        (entry) => asRecord(entry)?.sewSwimCapacityFlag === "Yes",
+      );
+
       const quarters = asRecord(
         await optional(
           gaps,
@@ -274,6 +310,16 @@ export const createGujreraAdapter = (
             .join(", ") || null,
         totalUnits,
         constructionProgressPercent,
+        projectDescription: text(project.projectDesc),
+        pincode: text(project.pinCode),
+        landAreaSqm: positive(
+          project.totLandAreaForProjectUnderReg ??
+            project.totAreaOfLandLayout ??
+            project.totAreaOfLand,
+        ),
+        coveredParkingSlots: positive(project.coveredParking),
+        blocks,
+        declaredAmenityKeys: swimmingPool ? ["swimming_pool"] : [],
         latestQuarter: latestQuarter(quarters?.data),
         sourceUrl: `${ORIGIN}/#/search-glob/gloabl-data`,
         fetchedAt: now().toISOString(),

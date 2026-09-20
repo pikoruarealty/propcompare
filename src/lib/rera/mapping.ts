@@ -49,6 +49,22 @@ export const RERA_AUTHORITATIVE_FIELDS: ReraFieldRule[] = [
 ];
 
 export const LEGAL_ENTITY_FIELD_KEY = "property.legal_entity_id";
+export const POSSESSION_STATUS_FIELD_KEY = "property.possession_status";
+export const AMENITIES_FIELD_KEY = "property.amenities";
+
+/**
+ * Possession status has no field on RERA, but declared progress does, so it is
+ * derived by a stated rule and labelled as derived: progress below 100 is under
+ * construction; 100 is ready to move. "Nearing possession" is a judgement about
+ * dates and is never derived; an admin can set it.
+ */
+export const derivePossessionStatus = (
+  record: RegulatorRecord,
+): "under_construction" | "ready_to_move" | null => {
+  const progress = record.constructionProgressPercent;
+  if (progress === null) return null;
+  return progress >= 100 ? "ready_to_move" : "under_construction";
+};
 
 export type ComparisonStatus =
   /** We hold the same value RERA states. */
@@ -65,8 +81,9 @@ export interface ReraComparisonItem {
   label: string;
   /** What RERA states, for display. */
   reraValue: string | number | null;
-  /** What we would write. Null when nothing can be proposed for this field. */
-  proposedValue: string | number | null;
+  /** What we would write. Null when nothing can be proposed for this field. A
+   * list (the amenity set) for a set-valued field. */
+  proposedValue: string | number | string[] | null;
   /** What we hold now, for display. */
   currentValue: string | number | null;
   status: ComparisonStatus;
@@ -127,6 +144,7 @@ export const compareWithRecord = (
   record: RegulatorRecord,
   current: Record<string, unknown>,
   entities: LegalEntityChoice[],
+  amenityLabels: Record<string, string> = {},
 ): ReraComparisonItem[] => {
   const items: ReraComparisonItem[] = RERA_AUTHORITATIVE_FIELDS.map((rule) => {
     const reraValue = rule.read(record);
@@ -147,6 +165,60 @@ export const compareWithRecord = (
       currentValue,
       status,
     };
+  });
+
+  // Possession status: derived, so it says so.
+  const derived = derivePossessionStatus(record);
+  const currentStatus = asDisplay(current[POSSESSION_STATUS_FIELD_KEY]);
+  items.push({
+    fieldKey: POSSESSION_STATUS_FIELD_KEY,
+    label: "Possession status",
+    reraValue: derived,
+    proposedValue: derived,
+    currentValue: currentStatus,
+    status:
+      derived === null
+        ? "rera_silent"
+        : currentStatus === null
+          ? "not_held"
+          : sameValue(derived, currentStatus)
+            ? "same"
+            : "differs",
+    note:
+      derived === null
+        ? undefined
+        : "Derived from RERA's declared progress: under 100% is under construction.",
+  });
+
+  // Amenities: RERA has no list, only a swimming-pool declaration on some
+  // projects. It can add to the set, never remove from it, and silence is not a
+  // statement that anything is missing.
+  const held = Array.isArray(current[AMENITIES_FIELD_KEY])
+    ? (current[AMENITIES_FIELD_KEY] as unknown[]).filter(
+        (key): key is string => typeof key === "string",
+      )
+    : [];
+  const declared = record.declaredAmenityKeys ?? [];
+  const label = (key: string) => amenityLabels[key] ?? key;
+  const missing = declared.filter((key) => !held.includes(key));
+  items.push({
+    fieldKey: AMENITIES_FIELD_KEY,
+    label: "Amenities",
+    reraValue: declared.length > 0 ? declared.map(label).join(", ") : null,
+    proposedValue: missing.length > 0 ? [...held, ...missing] : null,
+    currentValue: held.length > 0 ? held.map(label).join(", ") : null,
+    status:
+      declared.length === 0
+        ? "rera_silent"
+        : missing.length === 0
+          ? "same"
+          : "not_held",
+    note:
+      declared.length === 0
+        ? "RERA lists no amenities for this project, so ours are left as they are."
+        : missing.length > 0
+          ? "RERA declares this and it is not yet listed. It is added; nothing is removed."
+          : undefined,
   });
 
   const currentEntityId = asDisplay(current[LEGAL_ENTITY_FIELD_KEY]);

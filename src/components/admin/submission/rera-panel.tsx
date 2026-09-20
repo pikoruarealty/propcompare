@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import type { ReraComparisonItem } from "@/lib/rera/mapping";
 import { writableItems } from "@/lib/rera/mapping";
 import type { ReraState } from "@/lib/rera/submission-fetch";
+import type { RegulatorRecord } from "@/lib/rera/types";
 import { cn } from "@/lib/utils";
 import { ConfirmAction } from "./confirm-action";
 import { inputClass, labelClass } from "./form-classes";
@@ -19,6 +20,17 @@ const formatDate = (iso: string): string =>
     timeZone: "UTC",
   });
 
+const POSSESSION_LABEL: Record<string, string> = {
+  under_construction: "Under construction",
+  nearing_possession: "Nearing possession",
+  ready_to_move: "Ready to move",
+};
+
+const SQFT_PER_SQM = 10.7639;
+
+const formatNumber = (value: number): string =>
+  value.toLocaleString("en-IN", { maximumFractionDigits: 0 });
+
 /** A comparison value as a person reads it; empty is "—". */
 export const displayReraValue = (
   fieldKey: string,
@@ -27,6 +39,9 @@ export const displayReraValue = (
   if (value === null) return "—";
   if (typeof value === "string" && DATE_ONLY.test(value)) {
     return formatDate(value);
+  }
+  if (fieldKey === "property.possession_status" && typeof value === "string") {
+    return POSSESSION_LABEL[value] ?? value;
   }
   if (fieldKey === "property.rera_construction_progress_percent") {
     return `${Number(value)}%`;
@@ -196,6 +211,7 @@ export function ReraPanel({
               )}
             />
           </dl>
+          <ReraExtras record={record} />
           {record.gaps.length > 0 ? (
             <p className="text-muted-foreground text-sm">
               RERA did not return: {record.gaps.join(", ")}. What we hold for
@@ -275,6 +291,57 @@ export function ReraPanel({
         </p>
       )}
     </section>
+  );
+}
+
+/**
+ * What else the registration says, shown for reference and not written to the
+ * listing. Land area is the registered project land, separate from the brochure's
+ * plot area, and RERA reports it in square metres. Blocks and slabs describe the
+ * registration: a block can hold several towers and a slab is not a storey, so
+ * they are not taken as tower or floor counts.
+ */
+function ReraExtras({ record }: { record: RegulatorRecord }) {
+  const facts: [string, string][] = [];
+  if (record.projectDescription) {
+    facts.push(["Described as", record.projectDescription]);
+  }
+  if (record.landAreaSqm !== null) {
+    facts.push([
+      "Land area",
+      `${formatNumber(record.landAreaSqm)} sq m (${formatNumber(record.landAreaSqm * SQFT_PER_SQM)} sq ft)`,
+    ]);
+  }
+  if (record.blocks.length > 0) {
+    facts.push([
+      "Blocks",
+      record.blocks
+        .map((block) =>
+          block.slabs === null
+            ? block.name
+            : `${block.name} (${block.slabs} slabs)`,
+        )
+        .join(", "),
+    ]);
+  }
+  if (record.coveredParkingSlots !== null) {
+    facts.push(["Covered parking", `${record.coveredParkingSlots} slots`]);
+  }
+  if (record.pincode) facts.push(["Pincode", record.pincode]);
+  if (facts.length === 0) return null;
+  return (
+    <div data-slot="rera-extras">
+      <dl className="border-border bg-card grid gap-x-8 gap-y-3 rounded-lg border p-5 text-sm sm:grid-cols-2">
+        {facts.map(([label, value]) => (
+          <Fact key={label} label={label} value={value} />
+        ))}
+      </dl>
+      <p className="text-muted-foreground mt-2 text-xs">
+        Also on the RERA record, for reference. Not written to the listing: land
+        area is separate from the brochure&rsquo;s plot area, and a block can
+        hold several towers, so blocks are not tower or floor counts.
+      </p>
+    </div>
   );
 }
 

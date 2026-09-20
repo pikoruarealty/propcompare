@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   compareWithRecord,
+  derivePossessionStatus,
   LEGAL_ENTITY_FIELD_KEY,
   matchLegalEntity,
   writableItems,
@@ -21,6 +22,12 @@ const record: RegulatorRecord = {
   address: null,
   totalUnits: 76,
   constructionProgressPercent: 67.71875,
+  projectDescription: "Residential Apartments",
+  pincode: null,
+  landAreaSqm: 7628,
+  coveredParkingSlots: 246,
+  blocks: [{ name: "A+B", slabs: 24 }],
+  declaredAmenityKeys: [],
   latestQuarter: null,
   sourceUrl: "https://gujrera.gujarat.gov.in/",
   fetchedAt: "2026-09-20T06:00:00.000Z",
@@ -131,6 +138,8 @@ describe("compareWithRecord", () => {
       "property.possession_date",
       "property.total_units",
       "property.rera_construction_progress_percent",
+      "property.possession_status",
+      "property.amenities",
       LEGAL_ENTITY_FIELD_KEY,
     ]);
   });
@@ -212,7 +221,135 @@ describe("writableItems", () => {
       "property.possession_date",
       "property.total_units",
       "property.rera_construction_progress_percent",
+      "property.possession_status",
       LEGAL_ENTITY_FIELD_KEY,
     ]);
+  });
+});
+
+describe("possession status, derived from RERA's progress", () => {
+  it("is under construction while progress is below 100, and ready to move at 100", () => {
+    expect(
+      derivePossessionStatus({ ...record, constructionProgressPercent: 67.7 }),
+    ).toBe("under_construction");
+    expect(
+      derivePossessionStatus({ ...record, constructionProgressPercent: 0 }),
+    ).toBe("under_construction");
+    expect(
+      derivePossessionStatus({ ...record, constructionProgressPercent: 100 }),
+    ).toBe("ready_to_move");
+  });
+
+  it("is never guessed when progress is missing, and never says 'nearing possession'", () => {
+    expect(
+      derivePossessionStatus({ ...record, constructionProgressPercent: null }),
+    ).toBeNull();
+    for (const progress of [0, 50, 95, 99.9, 100]) {
+      expect(
+        derivePossessionStatus({
+          ...record,
+          constructionProgressPercent: progress,
+        }),
+      ).not.toBe("nearing_possession");
+    }
+  });
+
+  it("is proposed with a note saying it is derived, and flagged when we hold another", () => {
+    const items = byKey(
+      compareWithRecord(
+        record,
+        { "property.possession_status": "ready_to_move" },
+        entities,
+      ),
+    );
+
+    expect(items["property.possession_status"]).toMatchObject({
+      status: "differs",
+      proposedValue: "under_construction",
+      currentValue: "ready_to_move",
+    });
+    expect(items["property.possession_status"].note).toMatch(
+      /Derived from RERA/,
+    );
+  });
+
+  it("proposes nothing when RERA gave no progress", () => {
+    const items = byKey(
+      compareWithRecord(
+        { ...record, constructionProgressPercent: null },
+        {},
+        entities,
+      ),
+    );
+
+    expect(items["property.possession_status"]).toMatchObject({
+      status: "rera_silent",
+      proposedValue: null,
+    });
+  });
+});
+
+describe("amenities", () => {
+  const labels = { swimming_pool: "Swimming pool", security: "Security" };
+  const withPool = { ...record, declaredAmenityKeys: ["swimming_pool"] };
+
+  it("is silent, and leaves ours alone, when RERA declares none", () => {
+    const items = byKey(
+      compareWithRecord(
+        record,
+        { "property.amenities": ["security"] },
+        entities,
+        labels,
+      ),
+    );
+
+    expect(items["property.amenities"]).toMatchObject({
+      status: "rera_silent",
+      proposedValue: null,
+    });
+    expect(items["property.amenities"].note).toMatch(/lists no amenities/);
+  });
+
+  it("adds a declared pool to what we hold and never removes anything", () => {
+    const items = byKey(
+      compareWithRecord(
+        withPool,
+        { "property.amenities": ["security"] },
+        entities,
+        labels,
+      ),
+    );
+
+    expect(items["property.amenities"]).toMatchObject({
+      status: "not_held",
+      reraValue: "Swimming pool",
+      currentValue: "Security",
+      proposedValue: ["security", "swimming_pool"],
+    });
+  });
+
+  it("proposes just the pool when we hold no amenities", () => {
+    const items = byKey(compareWithRecord(withPool, {}, entities, labels));
+
+    expect(items["property.amenities"].proposedValue).toEqual([
+      "swimming_pool",
+    ]);
+    expect(items["property.amenities"].currentValue).toBeNull();
+  });
+
+  it("matches when the pool is already listed", () => {
+    const items = byKey(
+      compareWithRecord(
+        withPool,
+        { "property.amenities": ["swimming_pool", "security"] },
+        entities,
+        labels,
+      ),
+    );
+
+    expect(items["property.amenities"]).toMatchObject({
+      status: "same",
+      proposedValue: null,
+    });
   });
 });

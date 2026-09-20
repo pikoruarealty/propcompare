@@ -17,9 +17,11 @@ import { publishSubmission } from "@/lib/submissions/publisher";
 import { createManualSubmission } from "@/lib/submissions/reconciliation";
 import { createGujreraAdapter } from "./gujrera";
 import {
+  amarisDetailResponse,
   detailResponse,
+  formOneResponse,
   inventoryResponse,
-  KIMANA_NUMBER,
+  kimanaSearchHit,
   POISON,
   progressResponse,
   quartersResponse,
@@ -35,6 +37,8 @@ import {
 } from "./submission-fetch";
 
 const userId = `rera-fetch-${randomUUID()}`;
+// Never a real registration number: the local database can hold the real project.
+const TEST_NUMBER = `PR/GJ/TEST/${randomUUID().toUpperCase()}`;
 let developerId: string;
 let entityId: string;
 const submissionIds: string[] = [];
@@ -43,12 +47,15 @@ const propertyIds: string[] = [];
 /** GujRERA stand-in answering with the saved Kimana shapes. */
 const stubRegistry = (overrides: Record<string, unknown> = {}) => {
   const routes: Record<string, unknown> = {
-    "/project_reg/public/global-search": searchResponse(),
+    "/project_reg/public/global-search": searchResponse([
+      { ...kimanaSearchHit, regNo: TEST_NUMBER },
+    ]),
     "/project_reg/public/getproject-details/17929": detailResponse,
     "/project_reg/public/alldatabyprojectid/17929": summaryResponse,
     "/formone/public/getfrom-one-progs-rept-projectid/17929": progressResponse,
     "/formthree/public/get-fromthree-a-details-byid/417562": inventoryResponse,
     "/quarter/public/getprojectqtrs/17929": quartersResponse,
+    "/formone/public/getfrom-one-byformone-id/278008": formOneResponse,
     ...overrides,
   };
   return createRegulatorRegistry([
@@ -168,19 +175,21 @@ describe("fetching a RERA record for a submission", () => {
 
     const result = await fetchReraForSubmission(db, {
       submissionId,
-      registrationNumber: KIMANA_NUMBER,
+      registrationNumber: TEST_NUMBER,
       requestedBy: userId,
       registry: stubRegistry(),
     });
 
     expect(result.record.projectName).toBe("The Kimana Towers");
     expect(result.comparison.map((item) => item.status)).toEqual([
-      "not_held",
-      "not_held",
-      "not_held",
-      "not_held",
-      "not_held",
-      "not_held",
+      "not_held", // registration number
+      "not_held", // name
+      "not_held", // possession date
+      "not_held", // total units
+      "not_held", // construction progress
+      "not_held", // possession status (derived)
+      "rera_silent", // amenities: Kimana declares no pool
+      "not_held", // promoter
     ]);
     // Looking is not applying.
     expect(await fieldsOf(submissionId)).toEqual({});
@@ -209,7 +218,7 @@ describe("fetching a RERA record for a submission", () => {
 
     const { comparison } = await fetchReraForSubmission(db, {
       submissionId,
-      registrationNumber: KIMANA_NUMBER,
+      registrationNumber: TEST_NUMBER,
       requestedBy: userId,
       registry: stubRegistry(),
     });
@@ -225,7 +234,7 @@ describe("fetching a RERA record for a submission", () => {
     await expect(
       fetchReraForSubmission(db, {
         submissionId,
-        registrationNumber: KIMANA_NUMBER,
+        registrationNumber: TEST_NUMBER,
         requestedBy: userId,
         registry: stubRegistry({
           "/project_reg/public/global-search": searchResponse([]),
@@ -317,7 +326,7 @@ describe("fetching a RERA record for a submission", () => {
     await expect(
       fetchReraForSubmission(db, {
         submissionId,
-        registrationNumber: KIMANA_NUMBER,
+        registrationNumber: TEST_NUMBER,
         requestedBy: userId,
         registry: stubRegistry(),
       }),
@@ -328,7 +337,7 @@ describe("fetching a RERA record for a submission", () => {
     await expect(
       fetchReraForSubmission(db, {
         submissionId: randomUUID(),
-        registrationNumber: KIMANA_NUMBER,
+        registrationNumber: TEST_NUMBER,
         requestedBy: userId,
         registry: stubRegistry(),
       }),
@@ -347,7 +356,7 @@ describe("using RERA's values", () => {
     });
     const { jobId, comparison } = await fetchReraForSubmission(db, {
       submissionId,
-      registrationNumber: KIMANA_NUMBER,
+      registrationNumber: TEST_NUMBER,
       requestedBy: userId,
       registry: stubRegistry(),
     });
@@ -363,6 +372,7 @@ describe("using RERA's values", () => {
       "property.possession_date",
       "property.total_units",
       "property.rera_construction_progress_percent",
+      "property.possession_status",
       "property.legal_entity_id",
     ]);
     const fields = await fieldsOf(submissionId);
@@ -373,9 +383,11 @@ describe("using RERA's values", () => {
       67.71875,
     );
     expect(fields["property.legal_entity_id"].value).toBe(entityId);
-    expect(fields["property.rera_registration_number"].value).toBe(
-      KIMANA_NUMBER,
+    // Derived from RERA's declared progress (67.7%, under 100).
+    expect(fields["property.possession_status"].value).toBe(
+      "under_construction",
     );
+    expect(fields["property.rera_registration_number"].value).toBe(TEST_NUMBER);
     for (const field of Object.values(fields)) {
       expect(field.reviewStatus).toBe("confirmed");
     }
@@ -385,16 +397,19 @@ describe("using RERA's values", () => {
     const submissionId = await newDraft();
     const { jobId } = await fetchReraForSubmission(db, {
       submissionId,
-      registrationNumber: KIMANA_NUMBER,
+      registrationNumber: TEST_NUMBER,
       requestedBy: userId,
       registry: stubRegistry(),
     });
     await applyReraValues(db, { submissionId, jobId });
 
     const before = await getReraState(db, submissionId);
-    expect(before.comparison.every((item) => item.status === "same")).toBe(
-      true,
-    );
+    // Everything RERA speaks to matches; amenities are RERA-silent for Kimana.
+    expect(
+      before.comparison.every(
+        (item) => item.status === "same" || item.status === "rera_silent",
+      ),
+    ).toBe(true);
     expect(before.lastFetch?.jobId).toBe(jobId);
 
     // An admin keeps their own possession date.
@@ -417,11 +432,68 @@ describe("using RERA's values", () => {
     expect(date?.currentValue).toBe("2028-01-31");
   });
 
+  it("adds a declared swimming pool to the amenities we hold, removing nothing (Amaris)", async () => {
+    const submissionId = await newDraft();
+    await db.insert(propertySubmissionFields).values({
+      submissionId,
+      fieldKey: "property.amenities",
+      value: ["security"],
+      reviewStatus: "edited",
+    });
+    const registry = stubRegistry({
+      "/project_reg/public/getproject-details/17929": amarisDetailResponse,
+    });
+    const { jobId, comparison } = await fetchReraForSubmission(db, {
+      submissionId,
+      registrationNumber: TEST_NUMBER,
+      requestedBy: userId,
+      registry,
+    });
+    const amenities = comparison.find(
+      (item) => item.fieldKey === "property.amenities",
+    );
+    expect(amenities).toMatchObject({
+      status: "not_held",
+      proposedValue: ["security", "swimming_pool"],
+    });
+
+    await applyReraValues(db, { submissionId, jobId });
+
+    expect((await fieldsOf(submissionId))["property.amenities"].value).toEqual([
+      "security",
+      "swimming_pool",
+    ]);
+  });
+
+  it("does not touch the amenities when RERA declares none (Kimana)", async () => {
+    const submissionId = await newDraft();
+    await db.insert(propertySubmissionFields).values({
+      submissionId,
+      fieldKey: "property.amenities",
+      value: ["security", "gymnasium"],
+      reviewStatus: "edited",
+    });
+    const { jobId } = await fetchReraForSubmission(db, {
+      submissionId,
+      registrationNumber: TEST_NUMBER,
+      requestedBy: userId,
+      registry: stubRegistry(),
+    });
+
+    const { applied } = await applyReraValues(db, { submissionId, jobId });
+
+    expect(applied).not.toContain("property.amenities");
+    expect((await fieldsOf(submissionId))["property.amenities"].value).toEqual([
+      "security",
+      "gymnasium",
+    ]);
+  });
+
   it("refuses to apply when nothing differs", async () => {
     const submissionId = await newDraft();
     const { jobId } = await fetchReraForSubmission(db, {
       submissionId,
-      registrationNumber: KIMANA_NUMBER,
+      registrationNumber: TEST_NUMBER,
       requestedBy: userId,
       registry: stubRegistry(),
     });
@@ -437,7 +509,7 @@ describe("using RERA's values", () => {
     const second = await newDraft();
     const { jobId } = await fetchReraForSubmission(db, {
       submissionId: first,
-      registrationNumber: KIMANA_NUMBER,
+      registrationNumber: TEST_NUMBER,
       requestedBy: userId,
       registry: stubRegistry(),
     });
@@ -452,7 +524,7 @@ describe("using RERA's values", () => {
     const submissionId = await newDraft();
     const { jobId } = await fetchReraForSubmission(db, {
       submissionId,
-      registrationNumber: KIMANA_NUMBER,
+      registrationNumber: TEST_NUMBER,
       requestedBy: userId,
       registry: stubRegistry(),
     });
@@ -485,7 +557,7 @@ describe("an edit of an already-published property", () => {
 
     const { jobId, comparison } = await fetchReraForSubmission(db, {
       submissionId: edit.id,
-      registrationNumber: KIMANA_NUMBER,
+      registrationNumber: TEST_NUMBER,
       requestedBy: userId,
       registry: stubRegistry(),
     });

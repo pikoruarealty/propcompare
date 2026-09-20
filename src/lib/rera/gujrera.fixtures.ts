@@ -50,13 +50,68 @@ export const detailResponse = {
       projectAddress2: "Ambli",
       distName: "Ahmedabad",
       subDistName: "Ahmedabad City",
+      projectDesc: "Residential Apartments",
+      pinCode: null,
       totAreaOfLand: 7628,
+      totLandAreaForProjectUnderReg: 7628,
       totCarpetArea: 25356.46,
+      coveredParking: 246,
       costOfLand: POISON,
       estimatedCost: POISON,
       totalProjectCost: POISON,
     },
+    // Kimana leaves the swimming-pool flag blank: not stated, not "no".
+    dev: [{ sewSwimCapacityFlag: null, sewDisposalFlag: null }],
     contr: [{ contractortName: "Builder Ltd", emailId: POISON_TEXT }],
+  },
+};
+
+/** Amaris (project 28310): declares a pool, four blocks, a described mix. */
+export const amarisDetailResponse = {
+  ...detailResponse,
+  data: {
+    ...detailResponse.data,
+    projectDetail: {
+      ...detailResponse.data.projectDetail,
+      projectName: "AMARIS",
+      projectDesc: "4BHK and 5BHK (Penthouse)",
+      pinCode: "382481",
+      totLandAreaForProjectUnderReg: 15949,
+      coveredParking: 1327,
+    },
+    dev: [
+      {
+        sewSwimCapacityFlag: "Yes",
+        sewSwimCapLiter: "244080.00",
+        sewSwimCapLenght: 22.6,
+      },
+    ],
+  },
+};
+
+export const formOneResponse = {
+  status: 200,
+  data: {
+    progressReport: 67.71875,
+    formOneAList: [
+      {
+        blockId: 63414,
+        blockName: "A+B",
+        totalNoOfSlabs: "24",
+        blockProgress: 75.3125,
+      },
+    ],
+  },
+};
+
+export const amarisFormOneResponse = {
+  status: 200,
+  data: {
+    formOneAList: ["A", "B", "C", "D"].map((blockName) => ({
+      blockName,
+      totalNoOfSlabs: "14",
+      blockProgress: 0,
+    })),
   },
 };
 
@@ -72,6 +127,7 @@ export const summaryResponse = {
     promoterEmailId: POISON_TEXT,
     promoterMobileNo: "0000000000",
     formThreeId: 417562,
+    formOneId: 278008,
   },
 };
 

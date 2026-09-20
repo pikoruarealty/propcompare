@@ -19,6 +19,12 @@ const record: RegulatorRecord = {
   address: null,
   totalUnits: 76,
   constructionProgressPercent: 67.71875,
+  projectDescription: "Residential Apartments",
+  pincode: null,
+  landAreaSqm: 7628,
+  coveredParkingSlots: 246,
+  blocks: [{ name: "A+B", slabs: 24 }],
+  declaredAmenityKeys: [],
   latestQuarter: {
     name: "Q-14",
     periodEndsOn: "2026-06-30",
