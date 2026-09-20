@@ -312,3 +312,20 @@ export const dossierJsonLd = (
 
 /** Re-exported for the screen, which groups both catalog lists identically. */
 export type DossierCatalogItem = DossierAmenity | DossierSpecification;
+
+/**
+ * A short name for a unit type, for a tab or a table column. Published names carry
+ * detail that belongs in the open type's heading, not its tab: the flats it covers
+ * ("(301 & 302)"), a flat-number run ("Unit 2101 / 2102"), a trailing "Unit". So
+ * "Block A - Typical Floor Unit (401 to 2001 & 402 to 2002)" becomes "Block A -
+ * Typical Floor", and "Block A Penthouse - Unit 2101 / 2102 (21st Floor …)" becomes
+ * "Block A Penthouse". A name that would be emptied is returned as it was.
+ */
+export const shortUnitTypeName = (name: string): string => {
+  const short = name
+    .replace(/\s*\([^)]*\)/g, "")
+    .replace(/\s*[-–—]?\s*\bUnits?\b(?:\s+\d[\d\s/&,+-]*)?\s*$/i, "")
+    .replace(/[\s\-–—]+$/, "")
+    .trim();
+  return short === "" ? name : short;
+};

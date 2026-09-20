@@ -21,6 +21,7 @@ import {
   groupByCategory,
   humaniseCategory,
   readRoomDimensions,
+  shortUnitTypeName,
 } from "@/lib/properties/dossier";
 import type { ReraSourcedFact } from "@/lib/properties/rera-source";
 import type {
@@ -163,16 +164,12 @@ function Section({
 }
 
 /**
- * The unit types as one card with a tab each, so a property with many types is one
- * block on the page instead of a long stack. A single type needs no tabs. Only the
- * chosen tab's details are on the page; the tab shows the type's name in full to
- * assistive technology and on hover, and is cut short on screen.
+ * The unit types as one card, with browser-style tabs along its top. Only the open
+ * type is on the page. A tab carries a short name (`shortUnitTypeName`), the full
+ * name is on hover and in the open type's heading. Tabs share the width and shrink
+ * together, so six types fit without a scroll bar; a narrow phone scrolls the strip
+ * sideways with the bar hidden. A single type needs no tabs.
  */
-/** A tab's label: the name without a trailing bracketed note ("(301 & 302)"), which
- * the open type's heading still shows in full. */
-const tabLabel = (name: string): string =>
-  name.replace(/s*([^)]*)s*$/, "").trim() || name;
-
 function Configurations({ variants }: { variants: DossierUnitVariant[] }) {
   return (
     <div
@@ -185,22 +182,29 @@ function Configurations({ variants }: { variants: DossierUnitVariant[] }) {
         </div>
       ) : (
         <Tabs defaultValue={variants[0].id}>
-          <TabsList aria-label="Unit types" className="px-3 pt-2">
+          <TabsList
+            aria-label="Unit types"
+            className="bg-muted gap-1 overflow-x-auto border-b-0 px-2 pt-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          >
             {variants.map((variant) => (
               <TabsTrigger
                 key={variant.id}
                 value={variant.id}
                 title={variant.variantName}
-                className="max-w-72"
+                className="border-border hover:bg-card/60 data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:border-primary min-w-28 flex-1 basis-0 justify-center rounded-t-lg border border-b-0 border-transparent px-4 py-2.5 data-[state=active]:border-t-2 data-[state=active]:border-x-transparent"
               >
                 <span className="truncate">
-                  {tabLabel(variant.variantName)}
+                  {shortUnitTypeName(variant.variantName)}
                 </span>
               </TabsTrigger>
             ))}
           </TabsList>
           {variants.map((variant) => (
-            <TabsContent key={variant.id} value={variant.id} className="p-6">
+            <TabsContent
+              key={variant.id}
+              value={variant.id}
+              className="mt-0 p-6"
+            >
               <UnitVariant variant={variant} />
             </TabsContent>
           ))}
