@@ -291,6 +291,10 @@ const runPublish = async (
     const developerProfileNarrative = getStringField(
       "developer.profile_narrative",
     );
+    // A developer's name is changed only by an edit of an existing property. On a
+    // new property the field is a proposal (a brochure prints a legal name, not
+    // necessarily the brand) and the canonical developer already chosen stands.
+    const developerName = getStringField("developer.name")?.trim();
     const reraRegistrationNumber = getStringField(
       "property.rera_registration_number",
     );
@@ -390,6 +394,22 @@ const runPublish = async (
           .set(updateColumns)
           .where(eq(properties.id, propertyId));
       }
+    }
+
+    if (!isNewProperty && developerName) {
+      const [propertyDeveloper] = await tx
+        .select({ developerId: properties.developerId })
+        .from(properties)
+        .where(eq(properties.id, propertyId));
+      if (!propertyDeveloper) {
+        throw new SubmissionPublishError(
+          "developer.name requires a canonical developer",
+        );
+      }
+      await tx
+        .update(developers)
+        .set({ name: developerName })
+        .where(eq(developers.id, propertyDeveloper.developerId));
     }
 
     if (developerProfileNarrative !== undefined) {

@@ -81,10 +81,13 @@ export function FieldEditor({
   error,
   onSave,
   onCancel,
+  lockedVariantNames,
 }: {
   field: EditableField;
   initial: unknown;
   lookups: SubmissionLookups;
+  /** Unit types already published: their names are fixed and they stay. */
+  lockedVariantNames?: string[];
   pending: boolean;
   error: string | null;
   onSave: (value: unknown) => void;
@@ -157,6 +160,7 @@ export function FieldEditor({
         value={draft as VariantForm[]}
         onChange={setDraft}
         lookups={lookups}
+        lockedNames={lockedVariantNames}
       />
     );
   } else if (type === "possession_status") {

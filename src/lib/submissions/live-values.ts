@@ -1,15 +1,30 @@
-import { eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
-import { properties, propertyTypes } from "@/db/schema/catalog";
+import {
+  amenityCatalog,
+  bhkTypes,
+  developers,
+  layoutTypes,
+  properties,
+  propertyAmenities,
+  propertySpecifications,
+  propertyTypes,
+  specificationCatalog,
+  unitAreas,
+  unitVariants,
+} from "@/db/schema/catalog";
 
 /**
- * The published value of each simple contract field, keyed by field key, for the
- * screens that set a proposed change beside what is live and for the RERA
- * comparison. Read only: nothing here changes a live table.
+ * The published value of each contract field, keyed by field key, for the screens
+ * that set a proposed change beside what is live, that start an edit from what is
+ * published, and for the RERA comparison. Read only: nothing here changes a live
+ * table.
  *
- * Only single-value fields are here. Amenities, specifications, unit types and
- * pictures are not summarised this way; an edit that leaves them out keeps what is
- * published. A field with no published value is absent, never `null`.
+ * Simple fields, the amenity set, each specification, the unit types (with their
+ * areas and room dimensions) and the developer's name and narrative are covered.
+ * A field with no published value is absent, never `null`. Amenities the property
+ * does not list as available are absent from the set, so "not stated" and "not
+ * offered" both read as not in it.
  */
 export const loadLiveValues = async (
   database: PostgresJsDatabase,
@@ -53,7 +68,112 @@ export const loadLiveValues = async (
       row.progress === null ? null : Number(row.progress),
     "property.legal_entity_id": row.legalEntityId,
   };
-  return Object.fromEntries(
+  const live: Record<string, unknown> = Object.fromEntries(
     Object.entries(values).filter(([, value]) => value !== null),
   );
+
+  const [developer] = await database
+    .select({
+      name: developers.name,
+      profileNarrative: developers.profileNarrative,
+    })
+    .from(properties)
+    .innerJoin(developers, eq(developers.id, properties.developerId))
+    .where(eq(properties.id, propertyId));
+  if (developer) {
+    live["developer.name"] = developer.name;
+    if (developer.profileNarrative) {
+      live["developer.profile_narrative"] = developer.profileNarrative;
+    }
+  }
+
+  const amenities = await database
+    .select({ key: amenityCatalog.key })
+    .from(propertyAmenities)
+    .innerJoin(
+      amenityCatalog,
+      eq(amenityCatalog.id, propertyAmenities.amenityCatalogId),
+    )
+    .where(
+      and(
+        eq(propertyAmenities.propertyId, propertyId),
+        eq(propertyAmenities.status, "available"),
+      ),
+    )
+    .orderBy(asc(amenityCatalog.key));
+  if (amenities.length > 0) {
+    live["property.amenities"] = amenities.map((row) => row.key);
+  }
+
+  const specifications = await database
+    .select({
+      key: specificationCatalog.key,
+      valueText: propertySpecifications.valueText,
+    })
+    .from(propertySpecifications)
+    .innerJoin(
+      specificationCatalog,
+      eq(
+        specificationCatalog.id,
+        propertySpecifications.specificationCatalogId,
+      ),
+    )
+    .where(
+      and(
+        eq(propertySpecifications.propertyId, propertyId),
+        eq(propertySpecifications.status, "available"),
+      ),
+    );
+  for (const row of specifications) {
+    if (row.valueText)
+      live[`property.specifications.${row.key}`] = row.valueText;
+  }
+
+  const variants = await database
+    .select({
+      id: unitVariants.id,
+      variantName: unitVariants.variantName,
+      bhkTypeKey: bhkTypes.key,
+      layoutTypeKey: layoutTypes.key,
+      totalUnitsOfVariant: unitVariants.totalUnitsOfVariant,
+      unitsPerFloor: unitVariants.unitsPerFloor,
+      dimensions: unitVariants.dimensions,
+    })
+    .from(unitVariants)
+    .leftJoin(bhkTypes, eq(bhkTypes.id, unitVariants.bhkTypeId))
+    .leftJoin(layoutTypes, eq(layoutTypes.id, unitVariants.layoutTypeId))
+    .where(eq(unitVariants.propertyId, propertyId))
+    .orderBy(asc(unitVariants.variantName));
+  if (variants.length > 0) {
+    const areas = await database
+      .select({
+        unitVariantId: unitAreas.unitVariantId,
+        basis: unitAreas.basis,
+        areaSqft: unitAreas.areaSqft,
+      })
+      .from(unitAreas)
+      .innerJoin(unitVariants, eq(unitVariants.id, unitAreas.unitVariantId))
+      .where(eq(unitVariants.propertyId, propertyId));
+    live["unit_variants"] = variants.map((variant) => ({
+      variantName: variant.variantName,
+      ...(variant.bhkTypeKey ? { bhkTypeKey: variant.bhkTypeKey } : {}),
+      ...(variant.layoutTypeKey
+        ? { layoutTypeKey: variant.layoutTypeKey }
+        : {}),
+      ...(variant.totalUnitsOfVariant !== null
+        ? { totalUnitsOfVariant: variant.totalUnitsOfVariant }
+        : {}),
+      ...(variant.unitsPerFloor !== null
+        ? { unitsPerFloor: variant.unitsPerFloor }
+        : {}),
+      ...(variant.dimensions ? { dimensions: variant.dimensions } : {}),
+      areas: areas
+        .filter((area) => area.unitVariantId === variant.id)
+        .map((area) => ({
+          basis: area.basis,
+          areaSqft: Number(area.areaSqft),
+        })),
+    }));
+  }
+  return live;
 };

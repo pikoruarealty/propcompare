@@ -1,5 +1,9 @@
 import { getReraState, type ReraState } from "@/lib/rera/submission-fetch";
 import { loadLiveValues } from "./live-values";
+import {
+  SUBMISSION_STATUS_LABEL,
+  type SubmissionStatus,
+} from "./status-labels";
 import { and, desc, eq, sql } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import {
@@ -10,6 +14,7 @@ import {
   layoutTypes,
   ocrExtractionJobs,
   properties,
+  propertyRevisions,
   propertySchemaFields,
   propertySubmissionFieldEvidence,
   propertySubmissionFields,
@@ -31,17 +36,19 @@ import { describeExtractionFailure } from "@/lib/ingestion/extraction-status";
  * Missing values stay `null` (rendered "Not stated"), never guessed.
  */
 
-export type SubmissionStatus = (typeof submissionStatus.enumValues)[number];
+export {
+  SUBMISSION_STATUS_LABEL,
+  type SubmissionStatus,
+} from "./status-labels";
 
-export const SUBMISSION_STATUS_LABEL: Record<SubmissionStatus, string> = {
-  draft: "Draft",
-  submitted: "New",
-  in_review: "Under review",
-  changes_requested: "Changes requested",
-  approved: "Approved",
-  rejected: "Rejected",
-  published: "Published",
-};
+// The pure status list must be exactly the database enum.
+type DatabaseStatus = (typeof submissionStatus.enumValues)[number];
+const statusesMatch: [SubmissionStatus] extends [DatabaseStatus]
+  ? [DatabaseStatus] extends [SubmissionStatus]
+    ? true
+    : never
+  : never = true;
+void statusesMatch;
 
 export const isSubmissionStatus = (
   value: string | undefined,
@@ -50,6 +57,12 @@ export const isSubmissionStatus = (
 
 export interface SubmissionQueueItem {
   id: string;
+  /** The published property this submission created or changes; null until a new
+   * property is first published. */
+  propertyId: string | null;
+  /** True for a change to a property that already existed: created bound to it,
+   * or published after the property's first publication. */
+  isEdit: boolean;
   status: SubmissionStatus;
   source: "manual_form" | "ocr_brochure" | "rera_scrape";
   developerName: string | null;
@@ -74,6 +87,8 @@ export const listSubmissionQueue = async (
   const rows = await database
     .select({
       id: propertySubmissions.id,
+      propertyId: propertySubmissions.propertyId,
+      isEdit: sql<boolean>`(${propertySubmissions.propertyId} is not null and (${propertySubmissions.status} <> 'published' or exists (select 1 from ${propertyRevisions} r where r.property_id = ${propertySubmissions.propertyId} and r.submission_id <> ${propertySubmissions.id} and r.published_at < (select r2.published_at from ${propertyRevisions} r2 where r2.submission_id = ${propertySubmissions.id} limit 1))))`,
       status: propertySubmissions.status,
       source: propertySubmissions.source,
       developerName: developers.name,
@@ -100,6 +115,14 @@ export const listSubmissionQueue = async (
           ? eq(propertySubmissions.status, filter.status)
           : undefined,
         filter.id ? eq(propertySubmissions.id, filter.id) : undefined,
+        // One row per property: a property's newest submission that was not
+        // rejected. A brochure that became a property and the edits made to it
+        // are versions of one thing, not separate rows. Rejected edits are history
+        // and appear only under the Rejected filter. Looking one up by id is never
+        // filtered.
+        filter.id
+          ? undefined
+          : sql`(${propertySubmissions.propertyId} is null or ${propertySubmissions.id} = (select s2.id from ${propertySubmissions} s2 where s2.property_id = ${propertySubmissions.propertyId} and s2.status <> 'rejected' order by s2.created_at desc limit 1)${filter.status === "rejected" ? sql` or ${propertySubmissions.status} = 'rejected'` : sql``})`,
       ),
     )
     .orderBy(desc(propertySubmissions.createdAt));
@@ -171,8 +194,14 @@ export interface SubmissionDetail extends SubmissionQueueItem {
   /** The latest RERA fetch for this submission or its property, and how it
    * compares with what the submission holds now. */
   rera: ReraState;
-  /** The published property this submission changes; `null` for a new property. */
-  propertyId: string | null;
+  /** Every submission of the same property, oldest first: the one that created it
+   * and each edit since. Empty until the property exists. */
+  versions: {
+    id: string;
+    status: SubmissionStatus;
+    kind: "original" | "edit";
+    createdAt: Date;
+  }[];
   /** For an edit of a published property: the values currently live, by field
    * key. Empty for a new property. Simple fields only. */
   live: Record<string, unknown>;
@@ -315,7 +344,22 @@ export const getSubmissionDetail = async (
     })),
     availableFields,
     rera: await getReraState(database, id),
-    propertyId: owner?.propertyId ?? null,
+    versions: owner?.propertyId
+      ? (
+          await database
+            .select({
+              id: propertySubmissions.id,
+              status: propertySubmissions.status,
+              createdAt: propertySubmissions.createdAt,
+            })
+            .from(propertySubmissions)
+            .where(eq(propertySubmissions.propertyId, owner.propertyId))
+            .orderBy(propertySubmissions.createdAt)
+        ).map((row, index) => ({
+          ...row,
+          kind: index === 0 ? ("original" as const) : ("edit" as const),
+        }))
+      : [],
     live: owner?.propertyId
       ? await loadLiveValues(database, owner.propertyId)
       : {},

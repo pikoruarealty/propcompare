@@ -114,7 +114,7 @@ export default async function SubmissionQueuePage({
                   Location
                 </th>
                 <th scope="col" className="px-6 py-4">
-                  Source
+                  Change
                 </th>
                 <th scope="col" className="px-6 py-4">
                   Date
@@ -156,12 +156,19 @@ export default async function SubmissionQueuePage({
                       "Not stated"
                     )}
                   </td>
-                  <td className="text-muted-foreground px-6 py-5">
-                    {submission.source === "ocr_brochure"
-                      ? "Brochure"
-                      : submission.source === "manual_form"
-                        ? "Manual"
-                        : "RERA"}
+                  <td className="px-6 py-5">
+                    <p data-slot="change-type">
+                      {submission.isEdit
+                        ? "Update to a live listing"
+                        : "New listing"}
+                    </p>
+                    <p className="text-muted-foreground mt-1 text-xs">
+                      {submission.source === "ocr_brochure"
+                        ? "From a brochure"
+                        : submission.source === "manual_form"
+                          ? "Entered manually"
+                          : "From RERA"}
+                    </p>
                   </td>
                   <td className="data-tabular px-6 py-5">
                     {dateFormat.format(
@@ -170,6 +177,14 @@ export default async function SubmissionQueuePage({
                   </td>
                   <td className="px-6 py-5">
                     <StatusPill status={submission.status} />
+                    {submission.isEdit && submission.status !== "published" ? (
+                      <p
+                        data-slot="live-note"
+                        className="text-muted-foreground mt-1.5 text-xs"
+                      >
+                        Current listing stays live
+                      </p>
+                    ) : null}
                   </td>
                   <td className="px-6 py-5 text-right">
                     <Button

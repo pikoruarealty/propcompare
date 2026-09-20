@@ -5,13 +5,44 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { countNeedingReview } from "@/lib/submissions/field-display";
+import {
+  countNeedingReview,
+  groupFields,
+} from "@/lib/submissions/field-display";
+import { SUBMISSION_STATUS_LABEL } from "@/lib/submissions/status-labels";
 import type { SubmissionDetail } from "@/lib/submissions/queue";
 import { ExtractionStatus } from "./extraction-status";
-import { FieldsPanel } from "./submission/fields-panel";
+import { ConfirmAllBar, FieldsPanel } from "./submission/fields-panel";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { MediaPanel, type MediaItem } from "./submission/media-panel";
 import { ReraPanel } from "./submission/rera-panel";
 import { WorkflowPanel } from "./submission/workflow-panel";
+
+const dateFormat = new Intl.DateTimeFormat("en-IN", {
+  dateStyle: "medium",
+  timeZone: "Asia/Kolkata",
+});
+
+/** A small count on a tab: attention when something needs doing there. */
+function TabBadge({
+  children,
+  tone,
+}: {
+  children: React.ReactNode;
+  tone?: "attention";
+}) {
+  return (
+    <span
+      className={
+        tone === "attention"
+          ? "text-primary rounded-full bg-[color-mix(in_oklab,var(--color-terracotta)_14%,var(--color-chalk))] px-1.5 text-xs font-semibold tabular-nums"
+          : "bg-muted text-muted-foreground rounded-full px-1.5 text-xs tabular-nums"
+      }
+    >
+      {children}
+    </span>
+  );
+}
 
 /**
  * The reconciliation screen for one submission, whether it began as a brochure or
@@ -106,6 +137,24 @@ export function SubmissionWorkbench({
     [submission.rera.comparison],
   );
 
+  const [tab, setTab] = React.useState("project");
+  const groups = React.useMemo(
+    () => groupFields(submission.availableFields, submission.fields),
+    [submission.availableFields, submission.fields],
+  );
+  /** Values still waiting for a decision, per group of fields and in all. */
+  const reviewCount = Object.fromEntries(
+    groups.map(({ group, rows }) => [
+      group.key,
+      rows.filter((row) => row.candidate?.reviewStatus === "needs_review")
+        .length,
+    ]),
+  );
+  const waitingForReview = submission.fields.filter(
+    (field) => field.reviewStatus === "needs_review",
+  ).length;
+  const differsFromRera = Object.keys(reraDifferences).length;
+
   const [starting, setStarting] = React.useState(false);
   /** Starts a correction to this published property and goes to it. */
   const startEdit = async () => {
@@ -184,6 +233,48 @@ export function SubmissionWorkbench({
         </p>
       ) : null}
 
+      {submission.versions.length > 1 ? (
+        <section
+          data-slot="versions"
+          aria-labelledby="versions-heading"
+          className="border-border bg-card rounded-lg border p-5"
+        >
+          <h2 id="versions-heading" className="font-display text-xl">
+            Versions of this property
+          </h2>
+          <p className="text-muted-foreground mt-1 text-sm">
+            The submission that created it, and each edit since. The queue shows
+            only the latest.
+          </p>
+          <ol className="divide-border mt-3 divide-y text-sm">
+            {submission.versions.map((version) => (
+              <li
+                key={version.id}
+                className="flex flex-wrap items-center justify-between gap-3 py-2"
+              >
+                <span>
+                  {version.kind === "original" ? "Original" : "Edit"}
+                  {" · "}
+                  {dateFormat.format(version.createdAt)}
+                  {" · "}
+                  {SUBMISSION_STATUS_LABEL[version.status]}
+                </span>
+                {version.id === submission.id ? (
+                  <span className="text-muted-foreground">You are here</span>
+                ) : (
+                  <Link
+                    href={`/admin/submissions/${version.id}`}
+                    className="text-primary underline underline-offset-4"
+                  >
+                    Open
+                  </Link>
+                )}
+              </li>
+            ))}
+          </ol>
+        </section>
+      ) : null}
+
       <WorkflowPanel
         status={submission.status}
         permissionLevel={permissionLevel}
@@ -214,45 +305,93 @@ export function SubmissionWorkbench({
         />
       ) : null}
 
-      <ReraPanel
-        rera={submission.rera}
-        editable={editable}
-        pending={pending}
-        onFetch={(registrationNumber) =>
-          postJson("/rera/fetch", { registrationNumber })
-        }
-        onApply={(jobId) => postJson("/rera/apply", { jobId })}
-      />
+      {inReview ? (
+        <ConfirmAllBar
+          waiting={waitingForReview}
+          pending={pending}
+          onConfirmAll={() => run(...post("/fields/confirm-pending"))}
+        />
+      ) : null}
 
-      <FieldsPanel
-        submission={submission}
-        reraDifferences={reraDifferences}
-        editable={editable}
-        inReview={inReview}
-        pending={pending}
-        onSave={saveField}
-        onConfirmAll={() => run(...post("/fields/confirm-pending"))}
-        onReview={(fieldKey, reviewStatus) =>
-          run(
-            ...post(`/fields/${encodeURIComponent(fieldKey)}/review`, {
-              reviewStatus,
-            }),
-          )
-        }
-      />
+      <Tabs value={tab} onValueChange={setTab} data-slot="edit-tabs">
+        <TabsList aria-label="Sections of this submission">
+          <TabsTrigger value="rera">
+            RERA
+            {differsFromRera > 0 ? (
+              <TabBadge tone="attention">{differsFromRera}</TabBadge>
+            ) : null}
+          </TabsTrigger>
+          {groups.map(({ group }) => (
+            <TabsTrigger key={group.key} value={group.key}>
+              {group.title}
+              {reviewCount[group.key] > 0 ? (
+                <TabBadge tone="attention">{reviewCount[group.key]}</TabBadge>
+              ) : null}
+            </TabsTrigger>
+          ))}
+          <TabsTrigger value="images">
+            Images
+            {media.length > 0 ? <TabBadge>{media.length}</TabBadge> : null}
+          </TabsTrigger>
+        </TabsList>
 
-      <MediaPanel
-        submissionId={submission.id}
-        media={media}
-        variantNames={variantNames}
-        editable={editable}
-        inReview={inReview}
-        pending={pending}
-        onReview={(mediaId, reviewStatus, isPublic) =>
-          run(...post(`/media/${mediaId}/review`, { reviewStatus, isPublic }))
-        }
-        onUploaded={() => router.refresh()}
-      />
+        {/* Every tab stays mounted, only hidden, so a half-edited field is kept
+            when you look at another tab. */}
+        <TabsContent value="rera" forceMount hidden={tab !== "rera"}>
+          <ReraPanel
+            rera={submission.rera}
+            editable={editable}
+            pending={pending}
+            onFetch={(registrationNumber) =>
+              postJson("/rera/fetch", { registrationNumber })
+            }
+            onApply={(jobId) => postJson("/rera/apply", { jobId })}
+          />
+        </TabsContent>
+
+        {groups.map(({ group }) => (
+          <TabsContent
+            key={group.key}
+            value={group.key}
+            forceMount
+            hidden={tab !== group.key}
+          >
+            <FieldsPanel
+              submission={submission}
+              only={group.key}
+              reraDifferences={reraDifferences}
+              editable={editable}
+              inReview={inReview}
+              pending={pending}
+              onSave={saveField}
+              onReview={(fieldKey, reviewStatus) =>
+                run(
+                  ...post(`/fields/${encodeURIComponent(fieldKey)}/review`, {
+                    reviewStatus,
+                  }),
+                )
+              }
+            />
+          </TabsContent>
+        ))}
+
+        <TabsContent value="images" forceMount hidden={tab !== "images"}>
+          <MediaPanel
+            submissionId={submission.id}
+            media={media}
+            variantNames={variantNames}
+            editable={editable}
+            inReview={inReview}
+            pending={pending}
+            onReview={(mediaId, reviewStatus, isPublic) =>
+              run(
+                ...post(`/media/${mediaId}/review`, { reviewStatus, isPublic }),
+              )
+            }
+            onUploaded={() => router.refresh()}
+          />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

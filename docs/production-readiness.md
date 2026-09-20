@@ -41,6 +41,8 @@ Last updated: 2026-09-21 (first property live, legal entities)
 - [ ] **Logging and monitoring:** error tracking, uptime check, and a review that no log line carries a phone number, OTP, or exact price.
 - [ ] **CI runs green on GitHub** with the new Postgres service (added 2026-09-19; not yet observed passing).
 - [ ] **Content security policy and security headers.**
+- [ ] **Buyer gallery thumbnails:** the small cards load the full 1600 px picture (lazily); generate real thumbnails when a property has many pictures or traffic grows.
+- [ ] **Removing an amenity or a unit type from a live listing** (the publisher only adds and updates today; needs an owner decision).
 - [ ] **OCR cost controls:** the page-routing confirmation gates paid runs; also decide per-developer or per-day limits and who sees the spend.
 - [ ] **GujRERA fetch (manual fetch built 2026-09-20; quarterly job not yet).** Before scheduling it: (1) the endpoints are the ones GujRERA's own public pages call, not a documented API, so expect them to change and watch for failures; (2) its TLS server needs legacy renegotiation, handled only in `src/lib/rera/legacy-tls-fetch.ts` for that one host, so check this still holds on the production runtime and that nothing else uses it; (3) the owner reports no terms-of-use blocker, but the site's terms were not independently reviewed; (4) keep the polite rate (one request at a time, a pause between, a plain user agent) and add a kill switch and alerting on repeated failures; (5) the site publishes prices, which the adapter never reads or stores, so keep the test that proves it.
 

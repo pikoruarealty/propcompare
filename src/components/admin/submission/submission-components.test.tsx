@@ -142,6 +142,8 @@ describe("FieldEditor", () => {
     );
     await user.type(screen.getByPlaceholderText(/3 BHK/), "3 BHK - A");
     await user.selectOptions(screen.getByLabelText("Bedrooms"), "3 BHK");
+    // Areas have their own tab.
+    await user.click(screen.getByRole("tab", { name: /Areas/ }));
     await user.type(screen.getByLabelText("Area 1 for unit type 1"), "1450");
     await user.click(screen.getByRole("button", { name: "Save" }));
     expect(onSave).toHaveBeenCalledWith([

@@ -2,7 +2,7 @@ import { cn } from "@/lib/utils";
 import {
   SUBMISSION_STATUS_LABEL,
   type SubmissionStatus,
-} from "@/lib/submissions/queue";
+} from "@/lib/submissions/status-labels";
 
 /**
  * A submission's status as a small pill (pills are reserved for chips and tags
