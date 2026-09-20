@@ -17,25 +17,22 @@ import { DisplayHeading, Eyebrow } from "./typography";
  * rendered. Price restraint on this card is a property of the contract rather
  * than of this file's discipline.
  *
- * Three deliberate absences, each decided rather than overlooked:
+ * The card image is the property's primary published picture (a photo before a
+ * floor plan), fetched from `/api/v1/media/{id}`. A property with no picture
+ * keeps a plain neutral frame: it states nothing, because "no picture here" is
+ * not a claim about the property.
  *
- * 1. **No image.** `primaryMedia.gcsPath` is a Google Cloud Storage path, not a
- *    browser-fetchable URL, and how media is delivered — public bucket, signed
- *    URLs, or a proxy route — is an open decision gate that blocks step 6. The
- *    card holds a neutral frame in the layout so resolving that gate is a
- *    change of one element rather than a re-layout. The frame is `aria-hidden`
- *    and states nothing: it is not a "no photo" claim, because a property may
- *    well have one that this build cannot yet display.
+ * Two deliberate absences, each decided rather than overlooked:
  *
- * 2. **No verified badge.** `VerifiedBadge` refuses to render without the RERA
+ * 1. **No verified badge.** `VerifiedBadge` refuses to render without the RERA
  *    registration number that is its evidence, and `PropertySummary` carries
  *    `reraRegistered` but not the number — only the dossier has it. So the card
  *    cannot construct a verified fact, and rather than widening the step 1
  *    contract to let a listing show a badge, the badge stays where its evidence
  *    is. See DECISIONS.md (2026-09-07).
  *
- * 3. **No save or compare action.** Both are Phase 3 and depend on routes that
- *    do not exist; a disabled control promising them would be decoration.
+ * 2. **No save or compare action on the card itself.** Those live on the
+ *    dossier and the saved and compare pages.
  *
  * Everything absent in the data renders through `FactValue`, so a property with
  * no possession date says so instead of leaving a gap the reader has to
@@ -60,12 +57,27 @@ export function PropertyCard({ property }: PropertyCardProps) {
       aria-labelledby={headingId}
       className="border-border bg-card relative flex h-full flex-col overflow-hidden rounded-lg border transition-colors focus-within:border-[var(--color-terracotta)] hover:border-[var(--color-terracotta)]"
     >
-      {/* Reserved for the card image once media delivery is decided (step 6). */}
       <div
         data-slot="property-card-media"
-        aria-hidden="true"
-        className="bg-muted border-border aspect-[4/3] w-full border-b"
-      />
+        aria-hidden={property.primaryMedia ? undefined : true}
+        className="bg-muted border-border relative aspect-[4/3] w-full overflow-hidden border-b"
+      >
+        {property.primaryMedia ? (
+          // Served through the media route (a fresh short-lived link per request),
+          // never by storage path.
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={`/api/v1/media/${property.primaryMedia.id}`}
+            alt={`${property.name}, ${property.locality}`}
+            loading="lazy"
+            className={
+              property.primaryMedia.mediaType === "floor_plan"
+                ? "size-full object-contain"
+                : "size-full object-cover"
+            }
+          />
+        ) : null}
+      </div>
 
       <div className="flex flex-1 flex-col gap-4 p-6">
         <div className="flex flex-col gap-1">

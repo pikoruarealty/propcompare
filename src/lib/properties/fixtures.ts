@@ -37,6 +37,7 @@ export const richSummaryFixture: PropertySummary = {
     { key: "3bhk", label: "3 BHK" },
   ],
   primaryMedia: {
+    id: "eeeeeeee-1111-4111-8111-eeeeeeeeeeee",
     gcsPath: "properties/riverfront-heights/exterior-01.jpg",
     mediaType: "photo",
   },
@@ -187,6 +188,7 @@ export const richDossierFixture: PropertyDossier = {
       caption: "East elevation",
       unitVariantId: null,
       isPrimary: true,
+      attribution: "Image from the Riverfront Developers brochure",
     },
     {
       id: "ffffffff-1111-4111-8111-ffffffffffff",
@@ -195,6 +197,7 @@ export const richDossierFixture: PropertyDossier = {
       caption: null,
       unitVariantId: "cccccccc-1111-4111-8111-cccccccccccc",
       isPrimary: false,
+      attribution: null,
     },
   ],
 };

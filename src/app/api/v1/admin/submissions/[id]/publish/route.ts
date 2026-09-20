@@ -1,4 +1,8 @@
+import { eq } from "drizzle-orm";
+import { revalidatePath } from "next/cache";
 import type { NextRequest } from "next/server";
+import { db } from "@/db";
+import { properties } from "@/db/schema/catalog";
 import { requireAdminRequest } from "@/lib/accounts/api-session";
 import { errorResponse, internalErrorResponse } from "@/lib/properties/http";
 import {
@@ -30,6 +34,19 @@ export const POST = async (
       actorUserId: session.userId,
       actorRole: "owner",
     });
+    // Buyer pages are cached; make the published change visible straight away.
+    // Best effort: the property is already live either way.
+    try {
+      const [property] = await db
+        .select({ slug: properties.slug })
+        .from(properties)
+        .where(eq(properties.id, published.propertyId));
+      revalidatePath("/");
+      revalidatePath("/properties");
+      if (property) revalidatePath(`/properties/${property.slug}`);
+    } catch (cause) {
+      console.error("Could not refresh cached pages after publish:", cause);
+    }
     return Response.json(published, {
       headers: { "Cache-Control": "no-store" },
     });

@@ -518,3 +518,42 @@ Owner asked whether classifying how each imagery page is laid out (fills the pag
 - **Why server-side:** a browser canvas cannot be read back reliably (Brave perturbs it) and the image has to be stored, not just shown.
 - **Deferred, on evidence:** pulling individual pictures out of a busy page (embedded-image extraction) is not built. It is added only if whole-page renders prove unsuitable for real brochures. The layout hint is what would let a later step choose automatically. Rejected for licensing: `mupdf` (AGPL). Kept in reserve: a WASM pdfium build, if `@napi-rs/canvas` proves troublesome on the eventual host.
 - **Deployment note:** `sharp` and `@napi-rs/canvas` ship platform-specific native binaries and are listed in `serverExternalPackages` in `next.config.ts`; the production host must install them for its own platform (recorded in `docs/production-readiness.md`).
+
+---
+
+**2026-09-21 — Brochure extraction runs in a durable in-server worker that the queue confirmation feeds; Brevo is the email provider.**
+Owner asked for the real consumer, not a script. Choices made while building it:
+
+- **The queue is the database.** A queued `ocr_extraction_jobs` row is the work item, so a restart loses nothing. Claiming is the existing conditional `queued → processing` update, so any number of workers can run and only one gets a job. No schema change and no new queue technology.
+- **Where it runs.** `src/instrumentation.ts` starts one polling loop per server process (guarded against dev reloads, skipped under test and when `OCR_WORKER_ENABLED=false`), so `bun run dev` and `bun run start` are enough. `bun run ocr:worker` runs the same loop alone for a host that separates web and worker. Alternatives rejected: work inside the queue request (extraction takes minutes and would be lost on any timeout or restart); a serverless queue (no hosting decision yet, and the database already is a queue).
+- **Only explicit work.** The worker picks up only jobs an admin queued through the separate confirmation. It never runs on upload or categorize.
+- **Crash recovery.** A running job refreshes `updated_at` every minute; one silent for ten minutes (`OCR_WORKER_LEASE_MS`) is failed as `worker_interrupted`, visible in the UI and retryable. A job that cannot even start (missing key, unreadable routing) is failed rather than left queued.
+- **Retry is an admin choice, and paid.** A failed attempt can be re-queued (a second paid run, so its own confirmation with no price) or reopened as a draft to change the pages (needed after `output_length`, where the same pages would fail again). Only a failed attempt can move, by a conditional update.
+- **Failure text.** Screens show a plain-language message chosen from the error code, never the stored provider message, which can quote a response.
+- **Ledger gap closed.** When a run fails part-way, requests already billed (scopes that succeeded, and the one whose reply was unusable) are recorded. Kept beside the error, not on it, so no error type changes shape.
+- **Test seam.** `OPENROUTER_OCR_ENDPOINT` points extraction at a stand-in provider for end-to-end checks; unset in production.
+- **Email: Brevo** (owner, 2026-09-21). `src/lib/email/` follows the storage and OCR adapter pattern. Invite links are emailed when `BREVO_API_KEY` and `BREVO_SENDER_EMAIL` are set and always still shown on screen, so a missing or failing provider never blocks an invitation; only failure codes are logged, never addresses or links. The sender domain must be verified in Brevo before this is trusted in production (`docs/production-readiness.md`).
+
+---
+
+**2026-09-21 — Developer legal entities are approved and built (schema v6 section 3); the schema-review gate was waived by the owner for this change.**
+Owner answers to the three open questions: record legal name, entity type and RERA promoter number; keep it admin-only for now (not on the buyer dossier); pick the entity per property during reconciliation. The owner also said to proceed without a separate review stop. Design and reasoning are in `docs/schema/schema.v6.md` section 3 (migration `0010`). Choices made: entities can be added or corrected by any admin (a factual record, not access); `developers.rera_developer_id` is kept for now and folding it into the entity table is deferred to the GujRERA scoping; the link cannot point at another developer's entity, enforced at edit time and again at publish.
+
+---
+
+**2026-09-21 — A paid model answer is never thrown away, and messy output is mapped, not rejected. (Owner's principle, after the first real brochure run wasted about $0.27.)**
+The first live run on Kimana Towers failed after all three scopes had been paid for: the floor-plan answer listed several foyers where the contract allows one, a strict check rejected the whole run, and the raw answer was discarded. Fixed, in this order of importance:
+
+- **Raw first.** Each scope's answer is written to the job's checkpoint immediately, before it is validated (and after the commercial-data guard, so no price is ever written). More data than expected is preserved, not an error.
+- **Retry is free where it can be.** A retry of the same job reuses every saved answer that still parses and asks again only for a scope with no usable answer, so a parser fix costs nothing to re-run. `src/db/reread-saved-answers.ts` re-reads an untouched draft's saved answers at no cost and refuses if any value was edited.
+- **Take what we need, leave the rest.** A field whose value does not fit is left out (it shows as "not stated" for the admin to fill), duplicates and out-of-scope fields are skipped, each optional unit detail is read independently, several foyers become named rooms, a null list means none, and a room with no printed measurement is left out on its own. Names, evidence and confidence stay strict. Every omission is logged with its reason.
+- **All spend is recorded**, including when the final whole-extraction check fails.
+- **Rehearse before paying.** A stand-in provider can replay real saved answers plus a deliberately messy one (`scripts/stub-ocr-provider.mjs`), and `publishSubmission` gained a `dryRun` that runs the real transaction and rolls it back (`src/db/publish-dry-run.ts`). Use both before any paid run on a new kind of brochure.
+- Raw answers currently live on local disk (`OCR_CHECKPOINT_DIR`); moving them to durable storage is in `docs/production-readiness.md`.
+
+Measured: Kimana Towers (18 pages) cost about $0.77 in total in provider spend, of which $0.27 was the wasted first floor-plan call.
+
+---
+
+**2026-09-21 — The first real property went from brochure upload to live on the buyer site through the UI; what was added to make that possible.**
+Kimana Towers (Sun VN Developers LLP) was uploaded, categorized, extracted by Claude, reviewed, approved and published entirely through the admin screens, then verified live in a browser (browse card with picture, dossier, all nine images, credits, no price). Additions: a "Confirm all remaining values" action for a submission in review (`POST /api/v1/admin/submissions/{id}/fields/confirm-pending`, with a confirmation dialog, for an admin who has checked the values against the brochure); the buyer card and dossier now show pictures through `/api/v1/media/{id}` (`PropertySummaryMedia` gained `id`, `DossierMedia` gained `attribution`; a photo is preferred over a floor plan for the card; brochures and videos are never a card image); publishing refreshes the cached buyer pages (`revalidatePath`); `src/db/cleanup-test-data.ts` removes unpublished test drafts and empty test developers (dry run by default, protects named submissions). Recorded plainly: the values were confirmed by the AI assistant during testing after checking the page evidence for the name, developer, locality and specification text, not by the owner. The owner's field-level spot-check is still to do, and corrections go through a new submission like any other change.

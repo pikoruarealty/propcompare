@@ -44,9 +44,8 @@ import { VerifiedBadge, reraVerifiedFact } from "./verified-badge";
  * Two absences worth naming, both deliberate. **Coordinates are not shown.**
  * `latitude`/`longitude` are modelled to support map and locality search later
  * (DECISIONS.md, 2026-08-31); printing them as text would be the raw database
- * dump this screen exists to avoid. **Media files are not served.** The
- * media-delivery gate is deferred past Phase 2B (DECISIONS.md, 2026-09-07), so
- * the dossier lists what media the catalog holds without fetching any of it.
+ * dump this screen exists to avoid. **Media is served through the media
+ * route** (`/api/v1/media/{id}`), never by storage path.
  */
 
 const MEDIA_TYPE_LABEL: Record<MediaType, string> = {
@@ -162,13 +161,14 @@ function UnitVariant({ variant }: { variant: DossierUnitVariant }) {
 }
 
 /**
- * What media the catalog holds, listed rather than displayed.
+ * The property's published pictures and documents.
  *
- * Media delivery is deferred past this phase, so no file is fetched — but the
- * *inventory* is a published fact and withholding it would be its own small
- * dishonesty. The distinction this section keeps is between "this property has
- * no media" and "this property has media you cannot see here yet"; collapsing
- * the two into one empty state would state something false about the property.
+ * Photos and floor plans are shown, each fetched from `/api/v1/media/{id}` (a
+ * fresh short-lived link per request; the storage path never reaches the page)
+ * with its credit beneath it, because images taken from a developer's brochure
+ * are published with attribution (DECISIONS.md, 2026-09-19). Other files, such as
+ * a public brochure PDF, are offered as a download. A property with no media says
+ * so plainly.
  */
 function MediaSection({ media }: { media: readonly DossierMedia[] }) {
   if (media.length === 0) {
@@ -182,26 +182,62 @@ function MediaSection({ media }: { media: readonly DossierMedia[] }) {
     );
   }
 
+  const pictures = media.filter(
+    (item) => item.mediaType === "photo" || item.mediaType === "floor_plan",
+  );
+  const documents = media.filter(
+    (item) => item.mediaType !== "photo" && item.mediaType !== "floor_plan",
+  );
+
   return (
     <Section title="Photos and plans" data-slot="dossier-media">
-      <BodyText className="text-muted-foreground">
-        These are published for this property. Viewing them here is not
-        available yet.
-      </BodyText>
-      <ul className="flex flex-col gap-2">
-        {media.map((item) => (
-          <li
-            key={item.id}
-            data-slot="media-item"
-            className="border-border flex flex-wrap items-baseline gap-x-3 border-b pb-2 text-sm"
-          >
-            <span className="text-foreground font-medium">
-              {MEDIA_TYPE_LABEL[item.mediaType]}
-            </span>
-            <FactValue value={item.caption} />
-          </li>
-        ))}
-      </ul>
+      {pictures.length > 0 ? (
+        <ul className="grid gap-6 sm:grid-cols-2">
+          {pictures.map((item) => (
+            <li key={item.id} data-slot="media-item">
+              <figure className="flex flex-col gap-2">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={`/api/v1/media/${item.id}`}
+                  alt={item.caption ?? MEDIA_TYPE_LABEL[item.mediaType]}
+                  loading="lazy"
+                  className="border-border bg-muted w-full rounded-md border object-contain"
+                />
+                <figcaption className="text-muted-foreground text-sm">
+                  <span className="text-foreground font-medium">
+                    {MEDIA_TYPE_LABEL[item.mediaType]}
+                  </span>
+                  {item.caption ? ` · ${item.caption}` : ""}
+                  {item.attribution ? (
+                    <span className="block text-xs">
+                      Credit: {item.attribution}
+                    </span>
+                  ) : null}
+                </figcaption>
+              </figure>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {documents.length > 0 ? (
+        <ul className="flex flex-col gap-2">
+          {documents.map((item) => (
+            <li
+              key={item.id}
+              data-slot="media-item"
+              className="border-border flex flex-wrap items-baseline gap-x-3 border-b pb-2 text-sm"
+            >
+              <a
+                href={`/api/v1/media/${item.id}`}
+                className="text-foreground font-medium underline underline-offset-4"
+              >
+                {MEDIA_TYPE_LABEL[item.mediaType]}
+              </a>
+              <FactValue value={item.caption} />
+            </li>
+          ))}
+        </ul>
+      ) : null}
     </Section>
   );
 }

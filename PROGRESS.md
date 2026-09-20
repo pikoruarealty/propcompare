@@ -1,6 +1,30 @@
 # Progress
 
-## 2026-09-20 (late night) — Brochure pages as images
+## 2026-09-19 (later) — The first real property is live, end to end through the UI
+
+**Done:** The Kimana Towers (Sun VN Developers LLP) went from brochure upload to live on the buyer website entirely through the admin screens: upload, categorize, confirm pages, Claude extraction, review, approve, publish. Verified in a browser: it is in the browse list with its exterior picture, its dossier opens, all nine images (exterior render and eight floor plans, each tied to its unit type) load with their credit, and no price appears (`scripts/verify-property-live.mjs`, 7/7). Kimana's extraction found 6 unit types with full room lists; the brochure gave no property type, possession, RERA number, amenities or BHK types, so those are honestly "not stated" except property type (Apartment) and the legal entity, which were set by hand.
+
+**Built along the way:** the extraction worker was proven with a real server kill (interrupted, then retried to completion); the real run exposed that a strict check threw away a paid answer, so raw answers are now saved before validation, retries reuse them, and messy output is mapped rather than rejected (free rehearsal with replayed real answers; a rolled-back publish dry run). "Confirm all remaining values" for review. Buyer card and dossier now show pictures. Publishing refreshes the cached buyer pages. Developer legal entities (schema v6 §3, migration 0010): record name, type and RERA promoter number, pick one per property during review, admin-only for now. Brevo confirmed delivering. The test data was cleared from the queue (19 drafts, 26 developer profiles).
+
+**Cost:** Kimana Towers cost about $0.77 in provider spend, of which $0.27 was wasted before the safeguards existed.
+
+**Verified:** full suite, lint, typecheck and prettier (see the run at the end of this session); browser checks in Chrome (and Brave for the worker) against a stand-in provider and the real one.
+
+**Not verified:** the owner's field-by-field spot-check of Kimana (the AI assistant confirmed the values after checking the name, developer, locality and specification evidence). Corrections go through a new submission.
+
+**Next:** buyer retention (saved properties and comparisons), enquiries with an admin inbox, "claim / report a problem / last checked", the intake cookie, and GujRERA once scoped. Tasklist: `docs/tasklists/2026-09-21-first-property-live.md`.
+
+## 2026-09-19 — Extraction worker: the whole flow now runs through the UI
+
+**Done:** queueing a brochure no longer stops at "queued". A worker starts with the app server (and can run alone with `bun run ocr:worker`), claims queued attempts safely (two workers never run the same one), runs the Claude extraction and writes the draft fields with evidence. The submission and page-review screens show waiting / reading / finished / failed and refresh by themselves; a failure is explained in plain words, with "Edit pages" or a confirmed "Try again" (new `POST /api/v1/admin/ocr-jobs/{id}/retry`). A run whose server died is failed as interrupted after ten minutes without a heartbeat, so nothing spins forever. The known cost gap is closed: spend from scopes that succeeded before a mid-run failure now reaches the ledger. Developer invite links are also emailed through Brevo when configured (still shown on screen), and `format:check` is clean again.
+
+**Verified:** 883 tests, lint, typecheck, prettier clean. `scripts/verify-extraction-worker.mjs` ran upload → confirm pages → queue → failure → Try again → finished → draft with evidence in Chrome and Brave, 18/18, against a stand-in provider (`scripts/stub-ocr-provider.mjs`), so no paid call. Tasklist: `docs/tasklists/2026-09-21-extraction-worker.md`.
+
+**Not yet verified:** a real Claude run, a real Brevo email, and a process killed mid-run.
+
+**Next:** load the first real brochure through the UI (the paid run, with the owner's go-ahead each time), including the human accuracy spot-check.
+
+## 2026-09-19 — Brochure pages as images
 
 **Done:** the router now reports how imagery sits on each page (`imageLayout`), and the page grid has "Use as image": the chosen brochure page is rendered on the server (WebP, 1600 px, ~150–250 KB) into a private, unreviewed image candidate credited to the developer, and appears in the submission's Images list for review like any other. The same page cannot be added twice, even under a race. Whole-page rendering was checked on a real dimensioned floor plan (Kimana p8) and a colour plan (Amaris p40): both legible.
 
@@ -10,13 +34,13 @@
 
 **Next:** the Claude extraction live run on confirmed pages (paid; owner go-ahead needed), then the human field-level accuracy check.
 
-## 2026-09-20 (night) — Page categorization validated live
+## 2026-09-19 — Page categorization validated live
 
 **Done:** with OpenRouter credits restored, "Categorize brochure pages" ran through the real admin UI on Kimana (18 pages, 15 s), Amaris (69 pages, 58 s) and 360 (29 pages, 74 s). The owner checked the categories by hand and confirms they are accurate. Total spend about $0.027, all visible in the admin Usage tab, none shown beside the action. One correction to my earlier reading: the Amaris page lists I compared against were an earlier router run, not a human answer, so that comparison shows repeatability only. `scripts/categorize-brochures.mjs` now passes the file by path (Playwright refuses 50 MB+ buffers; 360 is 62 MB).
 
 **Next:** the layout hint on imagery pages and a whole-page "use as image" action; then the Claude extraction live run on the confirmed pages, and the human field-level accuracy check.
 
-## 2026-09-20 (night) — Developer invites
+## 2026-09-19 — Developer invites
 
 **Done:** an owner can invite someone to an existing developer profile from the profile's new Team panel. The invitation is a one-time seven-day link shown once (no email service yet); the invitee sets a password at `/developers/accept-invite`, is signed in, and the link is dead. The owner can issue a new link, withdraw an invitation, or remove access, which also ends the person's open sessions. An existing account is never repurposed, only a hash of the token is stored, and every bad link gets the same plain answer. Decisions in `DECISIONS.md` 2026-09-20.
 
@@ -26,7 +50,7 @@
 
 **Phase 2A now:** everything not blocked is done except extracting brochure photos into the image list (needs a server-side PDF image extractor — a dependency decision) and GujRERA (to be planned). Blocked on OpenRouter credits: the live categorization test, then the OCR live run and accuracy spot-check.
 
-## 2026-09-20 (evening) — Reconciliation, media review and manual entry, finished
+## 2026-09-19 — Reconciliation, media review and manual entry, finished
 
 **Picked up from Codex:** its session (floor-plan OCR contract, confirmed routing before extraction, the `submission_media` schema and publish path — all committed) stopped while wiring the reconciliation screens. Its uncommitted backend compiled but had no tests and its screen took raw JSON for every field. Finished: the backend now has integration and route tests (including a race test for simultaneous submits and proof an upload cannot claim a brochure source); `requirePortalRole` is generic so admin pages read their permission level without a cast; and the screen is rebuilt — fields grouped as a listing reads, typed inputs from the approved vocabularies (numbers, choices, amenities by category, a real unit-types editor), image upload with credit and previews, and confirmations before approve, reject and publish.
 
@@ -34,7 +58,7 @@
 
 **Still open in Phase 2A:** the live categorization test (waiting on OpenRouter credits), then the OCR live run and human accuracy spot-check; extracting brochure photos into the image list (needs a server-side PDF image extractor); the developer invite flow; GujRERA (deliberately separate, to be planned).
 
-## 2026-09-20 (later) — Human-confirmed brochure routing and OCR queue
+## 2026-09-19 — Human-confirmed brochure routing and OCR queue
 
 **Done:** the admin page-review workbench now saves a complete human routing
 decision before extraction: every page is project details, amenities,
@@ -60,7 +84,7 @@ unrelated pre-existing files; no task file is unformatted.
 Kimana, Amaris, and 360. Then queue controlled extraction through this flow.
 The next code slice after that is OCR-draft review and admin reconciliation.
 
-## 2026-09-20 (later) — Floor-plan OCR contract v2
+## 2026-09-19 — Floor-plan OCR contract v2
 
 **Done:** the versioned routing-manifest contract now supports `v2` and one ordered `floor_plans` scope. The existing v1 manifest and pre-named, one-variant `unit_variant` scope stay fully supported. Claude receives all confirmed floor-plan pages together and may return zero or more distinct, evidence-backed variants; the adapter rejects duplicate variant names and AI-supplied BHK/layout lookup keys, then assembles the results into the existing `unit_variants` submission field with correct per-item evidence paths. No database migration, new table, direct catalog write, or change to `publishSubmission` was made. Contract reference: `docs/ocr-routing-contract.v2.md`.
 
@@ -68,7 +92,7 @@ The next code slice after that is OCR-draft review and admin reconciliation.
 
 **Next:** a separately scoped confirm-pages and OCR-queue step will turn the admin's selected categories into a v2 manifest, require the separate paid-run confirmation (without showing a price), and queue extraction. This remains independent of adding OpenRouter credits; credits are only needed for the later live router/extraction validation.
 
-## 2026-09-20 (later) — Categorize brochure pages, and the admin-only usage ledger
+## 2026-09-19 — Categorize brochure pages, and the admin-only usage ledger
 
 **Done:** the page-review screen has a "Categorize brochure pages" action (a vision-model pass, stored on the draft attempt): each page gets a suggested category, confidence and imagery tags, pages worth reading are pre-selected, any page can be re-typed or deselected, and a brochure with no floor plans says its floor-plan step will be skipped. No cost is shown anywhere near it. Every paid request is recorded in a new append-only `ai_usage_events` table (migration `0008`, owner-approved) and shown in a separate admin-only **Usage** tab (totals with a "≥" lower bound when a cost was not reported, by brochure, developer, model, and recent requests). A test fails if anything outside admin and ingestion code touches the ledger.
 
@@ -76,7 +100,7 @@ The next code slice after that is OCR-draft review and admin reconciliation.
 
 **Found:** local and CI database roles grant the app full CRUD on new tables by default, so append-only needs an explicit `REVOKE` (in the migration). Known gap: partial extraction spend is not recorded when a run fails part-way.
 
-## 2026-09-20 — Brochure upload and the zoomable page viewer
+## 2026-09-19 — Brochure upload and the zoomable page viewer
 
 **Done:** an admin can upload a brochure PDF for a developer (`/admin/submissions/new` → `POST /api/v1/admin/source-documents`); it is validated as a real PDF, stored through `StorageAdapter`, and creates the immutable source document, a draft submission and a draft OCR attempt with an empty routing manifest — no paid OCR runs. The page-review screen (`/admin/submissions/[id]/pages`) shows every page as a lazily rendered thumbnail, any page selectable or deselectable, and any page opens in a large viewer with zoom in/out/fit, previous/next and keyboard shortcuts. pdf.js runs in the browser only (legacy build, bundler-loaded worker), and only ever draws to visible canvases — it never reads pixels back, which is what would break under Brave Shields.
 

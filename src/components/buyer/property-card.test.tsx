@@ -146,27 +146,29 @@ describe("PropertyCard — the two trust rules", () => {
   });
 });
 
-describe("PropertyCard — the deferred media gate", () => {
-  it("renders no image even when the property has primary media", () => {
-    // `gcsPath` is a storage path, not a URL. Until media delivery is decided
-    // (step 6), rendering it as an `src` would produce a broken image on every
-    // card that has media — the failure this reservation exists to prevent.
+describe("PropertyCard — the card image", () => {
+  it("shows the primary picture through the media route, never by storage path", () => {
     expect(richSummaryFixture.primaryMedia).not.toBeNull();
 
     const { card } = renderCard(richSummaryFixture);
+    const image = card.querySelector("img");
 
-    expect(card.querySelector("img")).toBeNull();
+    expect(image).not.toBeNull();
+    expect(image).toHaveAttribute(
+      "src",
+      `/api/v1/media/${richSummaryFixture.primaryMedia?.id}`,
+    );
+    expect(image).toHaveAttribute("alt", expect.stringContaining("Vastrapur"));
     expect(card.innerHTML).not.toContain(
       richSummaryFixture.primaryMedia?.gcsPath ?? "",
     );
   });
 
-  it("keeps the media frame silent rather than claiming there is no photo", () => {
-    // A property may well have a photo this build cannot yet display. Saying
-    // "no image" would be a fabricated fact about the property.
-    const { card } = renderCard(richSummaryFixture);
+  it("keeps a silent neutral frame when there is no picture, claiming nothing", () => {
+    const { card } = renderCard(sparseSummaryFixture);
     const frame = card.querySelector('[data-slot="property-card-media"]');
 
+    expect(card.querySelector("img")).toBeNull();
     expect(frame).not.toBeNull();
     expect(frame).toHaveAttribute("aria-hidden", "true");
     expect(frame?.textContent).toBe("");

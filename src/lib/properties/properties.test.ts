@@ -291,6 +291,7 @@ describe("dossier fixtures match the dossier contract", () => {
         expect(summary.primaryMedia).toBeNull();
       } else {
         expect(summary.primaryMedia).toEqual({
+          id: primary.id,
           gcsPath: primary.gcsPath,
           mediaType: primary.mediaType,
         });

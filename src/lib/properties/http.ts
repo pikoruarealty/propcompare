@@ -47,6 +47,7 @@ export type ApiErrorCode =
   | "phone_not_verified"
   | "forbidden"
   | "developer_not_found"
+  | "legal_entity_not_found"
   | "submission_not_found"
   | "field_not_found"
   | "invalid_document"

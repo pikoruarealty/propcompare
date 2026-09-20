@@ -34,6 +34,8 @@ export interface LookupRef {
 }
 
 export interface PropertySummaryMedia {
+  /** Serve the file at `/api/v1/media/{id}`; the storage path is not a URL. */
+  id: string;
   gcsPath: string;
   mediaType: MediaType;
 }
@@ -155,6 +157,8 @@ export interface DossierMedia {
   caption: string | null;
   unitVariantId: string | null;
   isPrimary: boolean;
+  /** Who the image is credited to (for example the developer whose brochure it came from). */
+  attribution: string | null;
 }
 
 /** The response of `GET /api/v1/properties/{slug}`. */

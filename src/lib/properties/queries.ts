@@ -24,6 +24,7 @@ import type {
   PropertyDossier,
   PropertyListResult,
   PropertySummary,
+  PropertySummaryMedia,
   UnitVariantDimensions,
 } from "./types";
 
@@ -144,17 +145,13 @@ export const loadBhkTypesByProperty = async (
 export const loadPrimaryMediaByProperty = async (
   db: ReadDb,
   propertyIds: string[],
-): Promise<
-  Map<string, { gcsPath: string; mediaType: DossierMedia["mediaType"] }>
-> => {
-  const byProperty = new Map<
-    string,
-    { gcsPath: string; mediaType: DossierMedia["mediaType"] }
-  >();
+): Promise<Map<string, PropertySummaryMedia>> => {
+  const byProperty = new Map<string, PropertySummaryMedia>();
   if (propertyIds.length === 0) return byProperty;
 
   const rows = await db
     .select({
+      id: propertyMedia.id,
       propertyId: propertyMedia.propertyId,
       gcsPath: propertyMedia.gcsPath,
       mediaType: propertyMedia.mediaType,
@@ -162,10 +159,18 @@ export const loadPrimaryMediaByProperty = async (
       displayOrder: propertyMedia.displayOrder,
     })
     .from(propertyMedia)
-    .where(inArray(propertyMedia.propertyId, propertyIds))
+    // A card can only show a picture: brochures and videos are never its image.
+    .where(
+      and(
+        inArray(propertyMedia.propertyId, propertyIds),
+        inArray(propertyMedia.mediaType, ["photo", "floor_plan"]),
+      ),
+    )
     .orderBy(
       asc(propertyMedia.propertyId),
       desc(propertyMedia.isPrimary),
+      // A photo of the building beats a floor plan as the card image.
+      sql`(${propertyMedia.mediaType} = 'photo') desc`,
       asc(propertyMedia.displayOrder),
     );
 
@@ -173,6 +178,7 @@ export const loadPrimaryMediaByProperty = async (
     // Ordering puts the winning row first, so the first seen per property wins.
     if (byProperty.has(row.propertyId)) continue;
     byProperty.set(row.propertyId, {
+      id: row.id,
       gcsPath: row.gcsPath,
       mediaType: row.mediaType,
     });
@@ -465,6 +471,7 @@ export const getPublishedPropertyBySlug = async (
       caption: propertyMedia.caption,
       unitVariantId: propertyMedia.unitVariantId,
       isPrimary: propertyMedia.isPrimary,
+      attribution: propertyMedia.attribution,
     })
     .from(propertyMedia)
     .where(eq(propertyMedia.propertyId, row.id))
@@ -510,6 +517,7 @@ export const getPublishedPropertyBySlug = async (
     caption: mediaRow.caption ?? null,
     unitVariantId: mediaRow.unitVariantId ?? null,
     isPrimary: mediaRow.isPrimary,
+    attribution: mediaRow.attribution ?? null,
   }));
 
   return {

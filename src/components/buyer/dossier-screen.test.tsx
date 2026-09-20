@@ -275,10 +275,16 @@ describe("DossierScreen — media, with delivery deferred", () => {
     );
   });
 
-  it("fetches no media file, since delivery is not decided yet", () => {
+  it("shows pictures through the media route with their credit, never by storage path", () => {
     const { container } = renderDossier(richDossierFixture);
+    const images = [...container.querySelectorAll("img")];
 
-    expect(container.querySelector("img")).toBeNull();
+    expect(images.map((img) => img.getAttribute("src"))).toEqual(
+      richDossierFixture.media.map((item) => `/api/v1/media/${item.id}`),
+    );
+    expect(container).toHaveTextContent(
+      "Credit: Image from the Riverfront Developers brochure",
+    );
     expect(container.querySelector("video")).toBeNull();
     for (const media of richDossierFixture.media) {
       expect(container.innerHTML).not.toContain(media.gcsPath);
