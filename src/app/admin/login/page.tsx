@@ -4,6 +4,7 @@ import { AuthShell } from "@/components/auth/auth-shell";
 import { PasswordLoginForm } from "@/components/auth/password-login-form";
 import { signInAdmin } from "@/app/actions/portal-auth";
 import { safeReturnPath } from "@/lib/accounts/return-path";
+import { redirectIfSignedIn } from "@/lib/accounts/session";
 
 export const metadata: Metadata = {
   title: "Admin sign in — PropCompare",
@@ -20,6 +21,7 @@ export default async function AdminLoginPage({
     Array.isArray(next) ? next[0] : next,
     "/admin",
   );
+  await redirectIfSignedIn("admin", returnTo);
 
   return (
     <AuthShell

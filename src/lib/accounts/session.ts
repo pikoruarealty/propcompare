@@ -50,3 +50,22 @@ export const requirePortalRole = async <K extends "developer" | "admin">(
     role: role as Extract<AccountRole, { kind: K }>,
   };
 };
+
+/**
+ * For a portal's login screen: someone already signed in with the right role has
+ * no reason to see the form, so they are sent on to where they were headed
+ * (`returnTo`, already reduced to a same-site path by the caller). Anyone else,
+ * including a signed-in account of the other role, still sees the form.
+ */
+export const redirectIfSignedIn = async (
+  expected: "developer" | "admin",
+  returnTo: string,
+): Promise<void> => {
+  const session = await auth.api.getSession({
+    headers: await headers(),
+    query: { disableCookieCache: true },
+  });
+  if (!session) return;
+  const role = await resolveAccountRole(db, session.user.id);
+  if (role.kind === expected) redirect(returnTo);
+};

@@ -1,5 +1,9 @@
 # Progress
 
+## 2026-09-20 (late night, 2) — Sign-in redirects
+
+**Done:** opening `/admin/login` (or `/developers/login`) while signed in with the right role now goes straight on to the page you were headed for, or the portal home, and never honours an off-site `next`. Any `/admin/...` or `/developers/...` address, real or not, sends a signed-out person to that portal's login and brings them back afterwards. A signed-in admin at a made-up admin address sees a plain not-found. Checked in a real browser and by tests.
+
 ## 2026-09-20 (late night) — Buyer pages credit GujRERA
 
 **Done:** the buyer dossier shows a muted "Source: GujRERA, checked 20 Sep 2026" under a fact, only when the regulator's record at the last successful check stated exactly the published value: registration number, construction progress, possession date and unit count. It never appears on a brochure-sourced or differing value, on possession status (derived by us), or when the record was never checked. The API's `rera` object gains `lastCheckedAt` and `sourcedFacts`. On Kimana all four facts are credited. **Verified:** typecheck, lint and prettier clean, the full suite (109 files, 1352 tests), and a look at Kimana's page in a real browser. **Still open:** the email to inforera@gujarat.gov.in about the Copyright Policy wording (yours to send).
