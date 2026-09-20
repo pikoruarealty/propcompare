@@ -25,6 +25,8 @@ interface IssuedLink {
   email: string;
   inviteUrl: string;
   expiresAt: string;
+  /** Whether the link was also emailed (only when an email provider is configured). */
+  emailed?: boolean;
 }
 
 const date = new Intl.DateTimeFormat("en-IN", { dateStyle: "medium" });
@@ -163,10 +165,12 @@ export function TeamPanel({
             Invitation ready for {link.email}
           </p>
           <p className="text-muted-foreground mt-1 text-sm">
-            Send them this link. It works once, expires on{" "}
-            {date.format(new Date(link.expiresAt))}, and{" "}
-            <strong>cannot be shown again</strong> — if it is lost, issue a new
-            one.
+            {link.emailed
+              ? "We emailed this link to them. You can also send it yourself. "
+              : "Send them this link. "}
+            It works once, expires on {date.format(new Date(link.expiresAt))},
+            and <strong>cannot be shown again</strong> — if it is lost, issue a
+            new one.
           </p>
           <div className="mt-3 flex flex-col gap-2 sm:flex-row">
             <input

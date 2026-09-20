@@ -1,4 +1,4 @@
-import { mkdir, rename, writeFile } from "node:fs/promises";
+import { mkdir, rename, writeFile, readFile } from "node:fs/promises";
 import path from "node:path";
 import { PDFDocument } from "pdf-lib";
 import {
@@ -339,6 +339,67 @@ const parseRoom = (value: unknown, path: string): OcrRoomDimension => {
   return room;
 };
 
+/**
+ * Reads a list of rooms, keeping each one that can be read. A room with no printed
+ * measurement (an open terrace, a splash pool) carries no dimension, so it is left
+ * out on its own rather than taking the rest of the list with it.
+ */
+const readRooms = (rooms: unknown[], listPath: string): OcrRoomDimension[] => {
+  const kept: OcrRoomDimension[] = [];
+  rooms.forEach((room, index) => {
+    try {
+      kept.push(parseRoom(room, `${listPath}[${index}]`));
+    } catch (error) {
+      if (!(error instanceof OcrContractError)) throw error;
+      console.warn(`[ocr] left out one room: ${error.message}`);
+    }
+  });
+  return kept;
+};
+
+const parseDimensions = (
+  dims: unknown,
+  dimPath: string,
+): NonNullable<OcrUnitVariantDetailsCandidate["dimensions"]> => {
+  if (!isRecord(dims)) {
+    throw new OcrContractError(`${dimPath} must be an object`);
+  }
+  const dimensions: NonNullable<OcrUnitVariantDetailsCandidate["dimensions"]> =
+    {};
+  // A null list means "none", the same as leaving it out.
+  if (dims.rooms !== undefined && dims.rooms !== null) {
+    if (!Array.isArray(dims.rooms)) {
+      throw new OcrContractError(`${dimPath}.rooms must be an array`);
+    }
+    dimensions.rooms = readRooms(dims.rooms, `${dimPath}.rooms`);
+  }
+  if (Array.isArray(dims.foyer)) {
+    // Several foyers (one per block, say) do not fit a single foyer, but nothing
+    // needs to be lost: keep each one as a named room.
+    dimensions.rooms = [
+      ...(dimensions.rooms ?? []),
+      ...dims.foyer.map((foyer, index) =>
+        parseRoom(
+          isRecord(foyer) && foyer.name === undefined
+            ? { ...foyer, name: "Foyer" }
+            : foyer,
+          `${dimPath}.foyer[${index}]`,
+        ),
+      ),
+    ];
+  } else if (dims.foyer !== undefined) {
+    dimensions.foyer =
+      dims.foyer === null ? null : parseRoom(dims.foyer, `${dimPath}.foyer`);
+  }
+  if (dims.balconies !== undefined && dims.balconies !== null) {
+    if (!Array.isArray(dims.balconies)) {
+      throw new OcrContractError(`${dimPath}.balconies must be an array`);
+    }
+    dimensions.balconies = readRooms(dims.balconies, `${dimPath}.balconies`);
+  }
+  return dimensions;
+};
+
 const parseVariantDetails = (
   value: unknown,
   path: string,
@@ -347,76 +408,72 @@ const parseVariantDetails = (
     throw new OcrContractError(`${path} must be an object`);
   }
   const result: OcrUnitVariantDetailsCandidate = {};
-  if (value.totalUnitsOfVariant !== undefined) {
-    result.totalUnitsOfVariant = readPositiveInteger(
-      value.totalUnitsOfVariant,
-      `${path}.totalUnitsOfVariant`,
-    );
-  }
-  if (value.unitsPerFloor !== undefined) {
-    result.unitsPerFloor = readPositiveInteger(
-      value.unitsPerFloor,
-      `${path}.unitsPerFloor`,
-    );
-  }
-  if (value.areas !== undefined) {
-    if (!Array.isArray(value.areas)) {
-      throw new OcrContractError(`${path}.areas must be an array`);
+  const leaveOutIfUnreadable = (detail: string, read: () => void): void => {
+    try {
+      read();
+    } catch (error) {
+      if (!(error instanceof OcrContractError)) throw error;
+      // Optional detail read off a drawing: leave it out rather than fail the run.
+      console.warn(`[ocr] left out ${detail}: ${error.message}`);
     }
-    const bases = new Set<string>();
-    result.areas = value.areas.map((area, index) => {
-      const areaPath = `${path}.areas[${index}]`;
-      if (!isRecord(area)) {
-        throw new OcrContractError(`${areaPath} must be an object`);
-      }
-      if (
-        !["carpet", "super_built_up", "built_up"].includes(String(area.basis))
-      ) {
-        throw new OcrContractError(`${areaPath}.basis is not supported`);
-      }
-      const basis = area.basis as "carpet" | "super_built_up" | "built_up";
-      if (bases.has(basis)) {
-        throw new OcrContractError(`${path}.areas contains duplicate bases`);
-      }
-      bases.add(basis);
-      return {
-        basis,
-        areaSqft: readPositiveNumber(area.areaSqft, `${areaPath}.areaSqft`),
-      };
+  };
+  if (value.totalUnitsOfVariant !== undefined) {
+    leaveOutIfUnreadable("totalUnitsOfVariant", () => {
+      result.totalUnitsOfVariant = readPositiveInteger(
+        value.totalUnitsOfVariant,
+        `${path}.totalUnitsOfVariant`,
+      );
     });
   }
-  if (value.dimensions !== undefined) {
-    if (!isRecord(value.dimensions)) {
-      throw new OcrContractError(`${path}.dimensions must be an object`);
-    }
-    const dimensions: NonNullable<
-      OcrUnitVariantDetailsCandidate["dimensions"]
-    > = {};
-    if (value.dimensions.rooms !== undefined) {
-      if (!Array.isArray(value.dimensions.rooms)) {
-        throw new OcrContractError(`${path}.dimensions.rooms must be an array`);
-      }
-      dimensions.rooms = value.dimensions.rooms.map((room, index) =>
-        parseRoom(room, `${path}.dimensions.rooms[${index}]`),
+  if (value.unitsPerFloor !== undefined) {
+    leaveOutIfUnreadable("unitsPerFloor", () => {
+      result.unitsPerFloor = readPositiveInteger(
+        value.unitsPerFloor,
+        `${path}.unitsPerFloor`,
       );
-    }
-    if (value.dimensions.foyer !== undefined) {
-      dimensions.foyer =
-        value.dimensions.foyer === null
-          ? null
-          : parseRoom(value.dimensions.foyer, `${path}.dimensions.foyer`);
-    }
-    if (value.dimensions.balconies !== undefined) {
-      if (!Array.isArray(value.dimensions.balconies)) {
-        throw new OcrContractError(
-          `${path}.dimensions.balconies must be an array`,
-        );
+    });
+  }
+  if (value.areas !== undefined) {
+    leaveOutIfUnreadable("areas", () => {
+      if (!Array.isArray(value.areas)) {
+        throw new OcrContractError(`${path}.areas must be an array`);
       }
-      dimensions.balconies = value.dimensions.balconies.map((room, index) =>
-        parseRoom(room, `${path}.dimensions.balconies[${index}]`),
+      const bases = new Set<string>();
+      result.areas = value.areas.map((area, index) => {
+        const areaPath = `${path}.areas[${index}]`;
+        if (!isRecord(area)) {
+          throw new OcrContractError(`${areaPath} must be an object`);
+        }
+        if (
+          !["carpet", "super_built_up", "built_up"].includes(String(area.basis))
+        ) {
+          throw new OcrContractError(`${areaPath}.basis is not supported`);
+        }
+        const basis = area.basis as "carpet" | "super_built_up" | "built_up";
+        if (bases.has(basis)) {
+          throw new OcrContractError(`${path}.areas contains duplicate bases`);
+        }
+        bases.add(basis);
+        return {
+          basis,
+          areaSqft: readPositiveNumber(area.areaSqft, `${areaPath}.areaSqft`),
+        };
+      });
+    });
+  }
+  if (value.dimensions !== undefined && value.dimensions !== null) {
+    try {
+      result.dimensions = parseDimensions(
+        value.dimensions,
+        `${path}.dimensions`,
       );
+    } catch (error) {
+      if (!(error instanceof OcrContractError)) throw error;
+      // Room measurements are optional detail read off a drawing. A malformed one
+      // is left out (the admin still sees the floor plan) rather than failing a
+      // whole paid run over it.
+      console.warn(`[ocr] left out unreadable dimensions: ${error.message}`);
     }
-    result.dimensions = dimensions;
   }
   return result;
 };
@@ -682,6 +739,24 @@ export class OcrAdapterError extends Error {
   }
 }
 
+const partialUsageByError = new WeakMap<object, OcrScopeUsage[]>();
+
+const rememberPartialUsage = (error: unknown, usage: OcrScopeUsage[]): void => {
+  if (typeof error === "object" && error !== null) {
+    partialUsageByError.set(error, [...usage]);
+  }
+};
+
+/**
+ * Provider requests already made when an extraction failed part-way (scopes that
+ * succeeded, plus the one whose response was unusable). Empty when none were
+ * billed. Kept beside the error, not on it, so no error type changes shape.
+ */
+export const partialUsageOf = (error: unknown): OcrScopeUsage[] =>
+  typeof error === "object" && error !== null
+    ? (partialUsageByError.get(error) ?? [])
+    : [];
+
 export interface OpenRouterOcrAdapterOptions {
   loadSourcePdf: (gcsPath: string) => Promise<Uint8Array>;
   apiKey?: string;
@@ -785,7 +860,7 @@ const createScopePrompt = (
   const sourcePages = scope.pages.map((page) => page.pageNumber);
   const scalarFields = fieldsForScope(scope, activeFields);
   const variantDetails =
-    "totalUnitsOfVariant (positive integer), unitsPerFloor (positive integer), areas [{basis: carpet|super_built_up|built_up, areaSqft: positive number}], and dimensions {rooms, foyer, balconies}; each room has name and any explicitly printed lengthFt, widthFt, or areaSqft";
+    "totalUnitsOfVariant (positive integer), unitsPerFloor (positive integer), areas [{basis: carpet|super_built_up|built_up, areaSqft: positive number}], and dimensions {rooms: [room], foyer: one room object or null (never a list; put extra foyers in rooms), balconies: [room]}; each room has name and any explicitly printed lengthFt, widthFt, or areaSqft";
   const variantOutput =
     scope.kind === "floor_plans"
       ? `"unitVariants": [{"variantName": string, "details": object, "confidence": number, "evidence": [{"pageNumber": number, "sourceSnippet": string}]}]`
@@ -1027,30 +1102,53 @@ const parseScopeResponse = (
       );
       continue;
     }
-    if (!allowedScopeKeys.has(fieldKey)) {
-      throw new OcrAdapterError(
-        "invalid_response",
-        `${fieldKey} is not allowed in scope ${scope.scopeKey}`,
+    if (
+      !allowedScopeKeys.has(fieldKey) ||
+      known.some((earlier) => earlier.fieldKey === fieldKey)
+    ) {
+      // Out of scope, or given twice: keep the first, leave this one out.
+      console.warn(
+        `[ocr] left out ${fieldKey} in scope ${scope.scopeKey}: not allowed here or repeated`,
       );
+      continue;
     }
-    known.push({
-      fieldKey,
-      value: candidate.value,
-      ...(candidate.confidence === undefined
-        ? {}
-        : {
-            confidence: readConfidence(
-              candidate.confidence,
-              `fields[${index}].confidence`,
-            ),
-          }),
-      evidence: parseEvidenceList(
-        evidence,
-        `fields[${index}].evidence`,
-        manifest,
-        scope.scopeKey,
-      ),
-    });
+    try {
+      const contract = activeFields.find(
+        (field) => field.fieldKey === fieldKey,
+      );
+      const built: OcrFieldCandidate = {
+        fieldKey,
+        value: candidate.value,
+        ...(candidate.confidence === undefined
+          ? {}
+          : {
+              confidence: readConfidence(
+                candidate.confidence,
+                `fields[${index}].confidence`,
+              ),
+            }),
+        evidence: parseEvidenceList(
+          evidence,
+          `fields[${index}].evidence`,
+          manifest,
+          scope.scopeKey,
+        ),
+      };
+      if (contract !== undefined) {
+        validateFieldValue(contract, candidate.value, `fields[${index}].value`);
+      }
+      known.push(built);
+    } catch (error) {
+      if (
+        !(error instanceof OcrContractError) &&
+        !(error instanceof OcrAdapterError)
+      ) {
+        throw error;
+      }
+      // A value that does not fit its field is left out, so the admin sees it as
+      // "not stated" and can fill it in, instead of losing the whole paid run.
+      console.warn(`[ocr] left out ${fieldKey}: ${error.message}`);
+    }
   }
 
   if (Array.isArray(response.unmappedRawEvidence)) {
@@ -1351,6 +1449,37 @@ export const createOpenRouterOcrAdapter = (
               `${request.jobId.replace(/[^a-zA-Z0-9_-]/g, "_")}.json`,
             );
 
+      // Answers a previous attempt of this same job already received.
+      const earlierResponses = new Map<string, OcrScopeCheckpoint>();
+      if (checkpointPath !== undefined) {
+        try {
+          const earlier = JSON.parse(
+            await readFile(checkpointPath, "utf8"),
+          ) as {
+            jobId?: unknown;
+            providerKey?: unknown;
+            scopes?: unknown;
+          };
+          if (
+            earlier.jobId === request.jobId &&
+            earlier.providerKey === `openrouter:${model}` &&
+            Array.isArray(earlier.scopes)
+          ) {
+            for (const entry of earlier.scopes as OcrScopeCheckpoint[]) {
+              if (
+                typeof entry?.scopeKey === "string" &&
+                Array.isArray(entry.pageNumbers) &&
+                entry.response !== undefined
+              ) {
+                earlierResponses.set(entry.scopeKey, entry);
+              }
+            }
+          }
+        } catch {
+          // No earlier checkpoint, or an unreadable one: start fresh.
+        }
+      }
+
       const saveCheckpoint = async (
         status: "extracting" | "extracted",
         result?: OcrProviderExtractionResult,
@@ -1368,82 +1497,129 @@ export const createOpenRouterOcrAdapter = (
         });
       };
 
-      for (const scope of request.manifest.scopes) {
-        if (scope.kind === "ignore") continue;
-        const scopedPdf = await createScopedPdf(
-          sourcePdf,
-          scope.pages.map((page) => page.pageNumber),
-        );
-        const stream = await callScope(scope, scopedPdf, request.activeFields);
-        if (stream.providerRequestId) {
-          providerRequestIds.push(stream.providerRequestId);
-        }
-        usage.push({
-          scopeKey: scope.scopeKey,
-          inputPdfBytes: scopedPdf.byteLength,
-          ...(stream.providerRequestId === undefined
-            ? {}
-            : { providerRequestId: stream.providerRequestId }),
-          ...stream.usage,
-        });
-        if (stream.finishReason === "length") {
-          throw new OcrAdapterError(
-            "output_length",
-            `OpenRouter exhausted the output budget for scope ${scope.scopeKey}; human re-routing is required`,
-            stream.providerRequestId,
+      try {
+        for (const scope of request.manifest.scopes) {
+          if (scope.kind === "ignore") continue;
+          const pageNumbers = scope.pages.map((page) => page.pageNumber);
+          const earlier = earlierResponses.get(scope.scopeKey);
+          if (
+            earlier !== undefined &&
+            earlier.pageNumbers.length === pageNumbers.length &&
+            earlier.pageNumbers.every((n, i) => n === pageNumbers[i])
+          ) {
+            // Already answered (and paid for) by an earlier attempt of this job.
+            try {
+              const reused = parseScopeResponse(
+                earlier.response,
+                scope,
+                request.manifest,
+                request.activeFields,
+              );
+              scopeCheckpoints.push(earlier);
+              if (earlier.providerRequestId) {
+                providerRequestIds.push(earlier.providerRequestId);
+              }
+              fields.push(...reused.fields);
+              unitVariants.push(...reused.unitVariants);
+              unmappedRawEvidence.push(...reused.unmapped);
+              continue;
+            } catch {
+              // That answer is unusable; ask again for this scope only.
+            }
+          }
+          const scopedPdf = await createScopedPdf(
+            sourcePdf,
+            scope.pages.map((page) => page.pageNumber),
           );
-        }
-        if (stream.finishReason !== "stop") {
-          throw new OcrAdapterError(
-            "invalid_response",
-            `OpenRouter ended scope ${scope.scopeKey} with finish_reason=${stream.finishReason ?? "unknown"}`,
-            stream.providerRequestId,
+          const stream = await callScope(
+            scope,
+            scopedPdf,
+            request.activeFields,
           );
-        }
-        let parsed: unknown;
-        try {
-          parsed = JSON.parse(stripCodeFence(stream.rawText));
-        } catch {
-          throw new OcrAdapterError(
-            "invalid_json",
-            `OpenRouter returned invalid JSON for scope ${scope.scopeKey}`,
-            stream.providerRequestId,
+          if (stream.providerRequestId) {
+            providerRequestIds.push(stream.providerRequestId);
+          }
+          usage.push({
+            scopeKey: scope.scopeKey,
+            inputPdfBytes: scopedPdf.byteLength,
+            ...(stream.providerRequestId === undefined
+              ? {}
+              : { providerRequestId: stream.providerRequestId }),
+            ...stream.usage,
+          });
+          if (stream.finishReason === "length") {
+            throw new OcrAdapterError(
+              "output_length",
+              `OpenRouter exhausted the output budget for scope ${scope.scopeKey}; human re-routing is required`,
+              stream.providerRequestId,
+            );
+          }
+          if (stream.finishReason !== "stop") {
+            throw new OcrAdapterError(
+              "invalid_response",
+              `OpenRouter ended scope ${scope.scopeKey} with finish_reason=${stream.finishReason ?? "unknown"}`,
+              stream.providerRequestId,
+            );
+          }
+          let parsed: unknown;
+          try {
+            parsed = JSON.parse(stripCodeFence(stream.rawText));
+          } catch {
+            throw new OcrAdapterError(
+              "invalid_json",
+              `OpenRouter returned invalid JSON for scope ${scope.scopeKey}`,
+              stream.providerRequestId,
+            );
+          }
+          assertNoCommercialData(parsed);
+          // Saved before it is validated: if the answer does not fit the contract,
+          // what was paid for is still on disk to inspect.
+          scopeCheckpoints.push({
+            scopeKey: scope.scopeKey,
+            pageNumbers,
+            ...(stream.providerRequestId === undefined
+              ? {}
+              : { providerRequestId: stream.providerRequestId }),
+            response: parsed,
+          });
+          await saveCheckpoint("extracting");
+          const scopeResult = parseScopeResponse(
+            parsed,
+            scope,
+            request.manifest,
+            request.activeFields,
           );
+          fields.push(...scopeResult.fields);
+          unitVariants.push(...scopeResult.unitVariants);
+          unmappedRawEvidence.push(...scopeResult.unmapped);
         }
-        assertNoCommercialData(parsed);
-        const scopeResult = parseScopeResponse(
-          parsed,
-          scope,
-          request.manifest,
-          request.activeFields,
-        );
-        scopeCheckpoints.push({
-          scopeKey: scope.scopeKey,
-          pageNumbers: scope.pages.map((page) => page.pageNumber),
-          ...(stream.providerRequestId === undefined
-            ? {}
-            : { providerRequestId: stream.providerRequestId }),
-          response: parsed,
-        });
-        await saveCheckpoint("extracting");
-        fields.push(...scopeResult.fields);
-        unitVariants.push(...scopeResult.unitVariants);
-        unmappedRawEvidence.push(...scopeResult.unmapped);
+      } catch (error) {
+        // Requests that were billed before this failure still belong in the usage ledger.
+        rememberPartialUsage(error, usage);
+        throw error;
       }
 
-      const extraction = validateNewPipelineExtraction(
-        {
-          origin: "new_pipeline",
-          pipelineVersion: request.pipelineVersion,
-          fieldSchemaVersion: request.fieldSchemaVersion,
-          fields,
-          unitVariants,
-        },
-        request.manifest,
-        request.activeFields,
-        request.pipelineVersion,
-        request.fieldSchemaVersion,
-      );
+      let extraction: NewPipelineExtraction;
+      try {
+        extraction = validateNewPipelineExtraction(
+          {
+            origin: "new_pipeline",
+            pipelineVersion: request.pipelineVersion,
+            fieldSchemaVersion: request.fieldSchemaVersion,
+            fields,
+            unitVariants,
+          },
+          request.manifest,
+          request.activeFields,
+          request.pipelineVersion,
+          request.fieldSchemaVersion,
+        );
+      } catch (error) {
+        // Every scope was paid for by now; record that spend even though this failed.
+        rememberPartialUsage(error, usage);
+        throw error;
+      }
+
       const result: OcrProviderExtractionResult = {
         extraction,
         unmappedRawEvidence,

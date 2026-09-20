@@ -18,6 +18,7 @@
     "db:seed": "bun run src/db/seed.ts",
     "db:seed:private": "bun run src/db/seed-private.ts",
     "db:first-admin": "bun run src/db/first-admin.ts",
+    "ocr:worker": "bun run src/db/ocr-worker.ts",
     "auth:generate": "bunx @better-auth/cli generate --output src/db/schema/auth.ts -y"
   },
   "dependencies": {

@@ -3,6 +3,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db } from "@/db";
 import { AdminPageHeader, AdminShell } from "@/components/admin/admin-shell";
+import { ExtractionStatus } from "@/components/admin/extraction-status";
+import { describeExtractionFailure } from "@/lib/ingestion/extraction-status";
 import {
   PageReview,
   type ConfirmedPageChoice,
@@ -82,6 +84,21 @@ export default async function ReviewPagesPage({
         title="Review brochure pages"
         description={`${brochure.developerName ?? "Unknown developer"} · ${brochure.pageCount} pages`}
       />
+      <div className="mb-6 empty:hidden">
+        <ExtractionStatus
+          ocrJobId={brochure.ocrJobId}
+          status={brochure.ocrJobStatus}
+          failureMessage={
+            brochure.ocrJobStatus === "failed"
+              ? describeExtractionFailure(
+                  brochure.ocrErrorCode,
+                  brochure.ocrErrorMessage,
+                )
+              : null
+          }
+          fieldsHref={`/admin/submissions/${id}`}
+        />
+      </div>
       <PageReview
         submissionId={brochure.submissionId}
         key={

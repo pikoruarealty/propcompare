@@ -16,6 +16,8 @@ export interface SubmissionBrochure {
   pageCount: number;
   ocrJobId: string;
   ocrJobStatus: string;
+  ocrErrorCode: string | null;
+  ocrErrorMessage: string | null;
   routingManifest: unknown;
 }
 
@@ -41,6 +43,8 @@ export const getSubmissionBrochure = async (
       pageCount: sourceDocuments.pageCount,
       ocrJobId: ocrExtractionJobs.id,
       ocrJobStatus: ocrExtractionJobs.status,
+      ocrErrorCode: ocrExtractionJobs.errorCode,
+      ocrErrorMessage: ocrExtractionJobs.errorMessage,
       routingManifest: ocrExtractionJobs.routingManifest,
     })
     .from(ocrExtractionJobs)

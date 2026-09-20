@@ -6,6 +6,7 @@ import {
   InviteError,
   reissueDeveloperInvite,
 } from "@/lib/developers/invites";
+import { sendDeveloperInviteEmail } from "@/lib/email/invite-email";
 import { errorResponse, internalErrorResponse } from "@/lib/properties/http";
 import { inviteErrorResponse } from "../../invite-response";
 
@@ -36,12 +37,22 @@ export const POST = async (
   try {
     const issued = await reissueDeveloperInvite(db, { developerUserId: id });
     const origin = process.env.BETTER_AUTH_URL ?? request.nextUrl.origin;
+    const inviteUrl = buildInviteUrl(origin, issued.userId, issued.token);
+    // The link is also shown on screen, so a missing or failing email service
+    // never blocks an invitation.
+    const emailed = await sendDeveloperInviteEmail(db, {
+      developerUserId: issued.developerUserId,
+      email: issued.email,
+      inviteUrl,
+      expiresAt: issued.expiresAt,
+    });
     return Response.json(
       {
         developerUserId: issued.developerUserId,
         email: issued.email,
         expiresAt: issued.expiresAt.toISOString(),
-        inviteUrl: buildInviteUrl(origin, issued.userId, issued.token),
+        inviteUrl,
+        emailed,
       },
       { headers: { "Cache-Control": "no-store" } },
     );

@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, ne } from "drizzle-orm";
 import { db } from "@/db";
 import {
   amenityCatalog,
@@ -13,6 +13,7 @@ import {
 import {
   buildSubmissionFieldCandidates,
   OcrAdapterError,
+  partialUsageOf,
   type ActiveOcrField,
   type OcrExtractionRequest,
   type OcrProviderAdapter,
@@ -31,6 +32,14 @@ export class OcrIngestionError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "OcrIngestionError";
+  }
+}
+
+/** Another worker (or an admin action) took the job first; nothing was run. */
+export class OcrJobNotClaimedError extends OcrIngestionError {
+  constructor(message: string) {
+    super(message);
+    this.name = "OcrJobNotClaimedError";
   }
 }
 
@@ -244,7 +253,7 @@ export const executeOcrExtractionJob = async (params: {
 
   if (!job) throw new OcrIngestionError(`OCR job not found: ${params.jobId}`);
   if (job.status !== "draft" && job.status !== "queued") {
-    throw new OcrIngestionError(
+    throw new OcrJobNotClaimedError(
       `OCR job must be draft or queued, received ${job.status}`,
     );
   }
@@ -259,7 +268,14 @@ export const executeOcrExtractionJob = async (params: {
       dataType: propertySchemaFields.dataType,
     })
     .from(propertySchemaFields)
-    .where(eq(propertySchemaFields.isActive, true));
+    // A legal entity is chosen by an admin from recorded entities; a brochure
+    // can name a company but cannot know which record it is.
+    .where(
+      and(
+        eq(propertySchemaFields.isActive, true),
+        ne(propertySchemaFields.dataType, "legal_entity_id"),
+      ),
+    );
   const propertyTypeRows = await db
     .select({ key: propertyTypes.key })
     .from(propertyTypes);
@@ -309,7 +325,7 @@ export const executeOcrExtractionJob = async (params: {
     )
     .returning({ id: ocrExtractionJobs.id });
   if (processingRows.length === 0) {
-    throw new OcrIngestionError("OCR job status changed before extraction");
+    throw new OcrJobNotClaimedError("OCR job status changed before extraction");
   }
 
   // Usage is recorded whether or not the run succeeds: a provider request can be
@@ -334,15 +350,41 @@ export const executeOcrExtractionJob = async (params: {
   try {
     result = await params.adapter.extract(request);
   } catch (error) {
-    if (error instanceof OcrAdapterError && error.providerRequestId) {
-      await recordAiUsage(db, [
-        {
-          ...usageBase(),
-          status: "failed",
-          providerRequestId: error.providerRequestId,
-        },
-      ]).catch(() => undefined);
+    // Bill what was actually spent: scopes that succeeded before the failure, and
+    // the request whose response was unusable (failed, but still charged).
+    const failedRequestId =
+      error instanceof OcrAdapterError ? error.providerRequestId : undefined;
+    const partial: AiUsageInput[] = partialUsageOf(error).map((entry) => ({
+      ...usageBase(),
+      status: (entry.providerRequestId !== undefined &&
+      entry.providerRequestId === failedRequestId
+        ? "failed"
+        : "succeeded") as "failed" | "succeeded",
+      scopeKey: entry.scopeKey,
+      providerRequestId: entry.providerRequestId,
+      promptTokens: entry.promptTokens,
+      completionTokens: entry.completionTokens,
+      reasoningTokens: entry.reasoningTokens,
+      costUsd: entry.costUsd,
+    }));
+    if (
+      failedRequestId !== undefined &&
+      !partial.some((entry) => entry.providerRequestId === failedRequestId)
+    ) {
+      partial.push({
+        ...usageBase(),
+        status: "failed",
+        scopeKey: undefined,
+        providerRequestId: failedRequestId,
+        promptTokens: undefined,
+        completionTokens: undefined,
+        reasoningTokens: undefined,
+        costUsd: undefined,
+      });
     }
+    await recordAiUsage(db, partial).catch((ledgerError) => {
+      console.error("Failed to record OCR usage:", ledgerError);
+    });
     const code =
       error instanceof OcrAdapterError ? error.code : "unexpected_error";
     await markJobFailed(job.id, code, String(error));
