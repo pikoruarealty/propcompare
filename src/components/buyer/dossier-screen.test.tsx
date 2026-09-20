@@ -1,4 +1,5 @@
 import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import {
   richDossierFixture,
@@ -19,6 +20,15 @@ const renderDossier = (dossier: PropertyDossier) => {
   const main = view.container.querySelector<HTMLElement>("main");
   if (main === null) throw new Error("DossierScreen rendered no main");
   return { ...view, main };
+};
+
+/** The unit type currently open in the configurations card. */
+const openVariant = (container: HTMLElement): HTMLElement => {
+  const open = container.querySelectorAll<HTMLElement>(
+    '[data-slot="unit-variant"]',
+  );
+  expect(open).toHaveLength(1);
+  return open[0];
 };
 
 const sectionOf = (container: HTMLElement, slot: string): HTMLElement => {
@@ -55,27 +65,47 @@ describe("DossierScreen — the full property", () => {
     expect(facts).toHaveTextContent("184");
   });
 
-  it("renders every unit variant", () => {
+  it("shows the unit types as one card with a tab for each, not a stack of cards", async () => {
+    const user = userEvent.setup();
     const { container } = renderDossier(richDossierFixture);
-    const variants = container.querySelectorAll('[data-slot="unit-variant"]');
 
-    expect(variants).toHaveLength(2);
-    expect(variants[0]).toHaveTextContent("Tower A — 2 BHK");
-    expect(variants[1]).toHaveTextContent("Tower B — 3 BHK");
+    expect(
+      container.querySelectorAll('[data-slot="variants-card"]'),
+    ).toHaveLength(1);
+    const tabs = screen.getAllByRole("tab");
+    expect(tabs.map((tab) => tab.textContent)).toEqual([
+      "Tower A — 2 BHK",
+      "Tower B — 3 BHK",
+    ]);
+    // The first is open, and only it is on the page.
+    expect(tabs[0]).toHaveAttribute("aria-selected", "true");
+    expect(openVariant(container)).toHaveTextContent("Tower A — 2 BHK");
+
+    await user.click(tabs[1]);
+    expect(openVariant(container)).toHaveTextContent("Tower B — 3 BHK");
   });
 
-  it("renders readable room dimensions and omits unreadable ones", () => {
+  it("needs no tabs for a single unit type", () => {
+    const { container } = renderDossier({
+      ...richDossierFixture,
+      unitVariants: richDossierFixture.unitVariants.slice(0, 1),
+    });
+
+    expect(screen.queryAllByRole("tab")).toHaveLength(0);
+    expect(openVariant(container)).toHaveTextContent("Tower A — 2 BHK");
+  });
+
+  it("renders readable room dimensions and omits unreadable ones", async () => {
+    const user = userEvent.setup();
     const { container } = renderDossier(richDossierFixture);
-    const variants = container.querySelectorAll('[data-slot="unit-variant"]');
 
     expect(
-      within(variants[0] as HTMLElement).getByText("16.5 × 12 ft"),
+      within(openVariant(container)).getByText("16.5 × 12 ft"),
     ).toBeInTheDocument();
     // The second variant published no dimensions at all.
+    await user.click(screen.getAllByRole("tab")[1]);
     expect(
-      (variants[1] as HTMLElement).querySelector(
-        '[data-slot="variant-dimensions"]',
-      ),
+      openVariant(container).querySelector('[data-slot="variant-dimensions"]'),
     ).toBeNull();
   });
 
@@ -103,21 +133,23 @@ describe("DossierScreen — the full property", () => {
 describe("DossierScreen — area bases", () => {
   it("lists every basis a variant published", () => {
     const { container } = renderDossier(richDossierFixture);
-    const first = container.querySelectorAll('[data-slot="unit-variant"]')[0]!;
-    const areas = first.querySelector('[data-slot="variant-areas"]')!;
+    const areas = openVariant(container).querySelector(
+      '[data-slot="variant-areas"]',
+    )!;
 
     expect(areas).toHaveTextContent("985 sq ft");
     expect(areas).toHaveTextContent("1,180 sq ft");
     expect(areas).toHaveTextContent("1,425 sq ft");
   });
 
-  it("states an unpublished basis rather than deriving it", () => {
+  it("states an unpublished basis rather than deriving it", async () => {
     // The second variant published carpet area only. Built-up and super
     // built-up must say so — a ratio-derived number would be indistinguishable
     // from a published fact.
+    const user = userEvent.setup();
     const { container } = renderDossier(richDossierFixture);
-    const second = container.querySelectorAll('[data-slot="unit-variant"]')[1]!;
-    const areas = second.querySelector<HTMLElement>(
+    await user.click(screen.getAllByRole("tab")[1]);
+    const areas = openVariant(container).querySelector<HTMLElement>(
       '[data-slot="variant-areas"]',
     )!;
 

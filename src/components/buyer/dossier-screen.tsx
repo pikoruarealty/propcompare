@@ -28,6 +28,7 @@ import type {
   MediaType,
   PropertyDossier,
 } from "@/lib/properties/types";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FactValue } from "./fact-value";
 import { GridRow, PageContainer, PageFrame, PageSection } from "./page-frame";
 import { BodyText, DisplayHeading, Eyebrow, TabularValue } from "./typography";
@@ -96,15 +97,60 @@ function Section({
   );
 }
 
+/**
+ * The unit types as one card with a tab each, so a property with many types is one
+ * block on the page instead of a long stack. A single type needs no tabs. Only the
+ * chosen tab's details are on the page; the tab shows the type's name in full to
+ * assistive technology and on hover, and is cut short on screen.
+ */
+/** A tab's label: the name without a trailing bracketed note ("(301 & 302)"), which
+ * the open type's heading still shows in full. */
+const tabLabel = (name: string): string =>
+  name.replace(/s*([^)]*)s*$/, "").trim() || name;
+
+function Configurations({ variants }: { variants: DossierUnitVariant[] }) {
+  return (
+    <div
+      data-slot="variants-card"
+      className="border-border bg-card overflow-hidden rounded-lg border"
+    >
+      {variants.length === 1 ? (
+        <div className="p-6">
+          <UnitVariant variant={variants[0]} />
+        </div>
+      ) : (
+        <Tabs defaultValue={variants[0].id}>
+          <TabsList aria-label="Unit types" className="px-3 pt-2">
+            {variants.map((variant) => (
+              <TabsTrigger
+                key={variant.id}
+                value={variant.id}
+                title={variant.variantName}
+                className="max-w-72"
+              >
+                <span className="truncate">
+                  {tabLabel(variant.variantName)}
+                </span>
+              </TabsTrigger>
+            ))}
+          </TabsList>
+          {variants.map((variant) => (
+            <TabsContent key={variant.id} value={variant.id} className="p-6">
+              <UnitVariant variant={variant} />
+            </TabsContent>
+          ))}
+        </Tabs>
+      )}
+    </div>
+  );
+}
+
 function UnitVariant({ variant }: { variant: DossierUnitVariant }) {
   const areas = areasByBasis(variant.areas);
   const rooms = readRoomDimensions(variant.dimensions);
 
   return (
-    <article
-      data-slot="unit-variant"
-      className="border-border bg-card flex flex-col gap-5 rounded-lg border p-6"
-    >
+    <article data-slot="unit-variant" className="flex flex-col gap-5">
       <div className="flex flex-col gap-1">
         <DisplayHeading level={3}>{variant.variantName}</DisplayHeading>
         <p className="text-muted-foreground text-sm">
@@ -486,11 +532,7 @@ export function DossierScreen({ dossier }: DossierScreenProps) {
                 No unit configurations have been published for this property.
               </BodyText>
             ) : (
-              <div className="flex flex-col gap-4">
-                {dossier.unitVariants.map((variant) => (
-                  <UnitVariant key={variant.id} variant={variant} />
-                ))}
-              </div>
+              <Configurations variants={dossier.unitVariants} />
             )}
           </Section>
 
