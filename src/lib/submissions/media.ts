@@ -1,3 +1,4 @@
+import { isWorkingStatus } from "./working-statuses";
 import { randomUUID } from "node:crypto";
 import { and, desc, eq } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
@@ -97,13 +98,10 @@ export const requireEditableSubmission = async (
       "Submission not found.",
     );
   }
-  if (
-    submission.status !== "draft" &&
-    submission.status !== "changes_requested"
-  ) {
+  if (!isWorkingStatus(submission.status)) {
     throw new SubmissionMediaError(
       "invalid_state",
-      "Only draft or changes-requested submissions can receive media.",
+      "Pictures can no longer be added: the submission is published or rejected.",
     );
   }
 };
@@ -163,10 +161,7 @@ export const addSubmissionImage = async (
           "Submission not found.",
         );
       }
-      if (
-        submission.status !== "draft" &&
-        submission.status !== "changes_requested"
-      ) {
+      if (!isWorkingStatus(submission.status)) {
         throw new SubmissionMediaError(
           "invalid_state",
           "The submission is no longer editable.",
@@ -190,8 +185,10 @@ export const addSubmissionImage = async (
           attribution,
           unitVariantName,
           displayOrder: (last?.displayOrder ?? -1) + 1,
-          isPublic: false,
-          reviewStatus: "needs_review",
+          isPublic: true,
+          reviewStatus: "confirmed",
+          reviewedBy: input.uploadedBy,
+          reviewedAt: new Date(),
         })
         .returning({ id: propertySubmissionMedia.id });
       return media;
@@ -228,10 +225,10 @@ export const reviewSubmissionMedia = async (
       "Submission not found.",
     );
   }
-  if (submission.status !== "in_review") {
+  if (!isWorkingStatus(submission.status)) {
     throw new SubmissionMediaError(
       "invalid_state",
-      "Media can only be reviewed while the submission is in review.",
+      "Pictures can only be reviewed before the submission is published or rejected.",
     );
   }
   const updated = await database

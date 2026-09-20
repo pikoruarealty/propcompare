@@ -321,7 +321,7 @@ describe("fetching a RERA record for a submission", () => {
     const submissionId = await newDraft();
     await db
       .update(propertySubmissions)
-      .set({ status: "in_review" })
+      .set({ status: "rejected" })
       .where(eq(propertySubmissions.id, submissionId));
 
     await expect(
@@ -531,7 +531,7 @@ describe("using RERA's values", () => {
     });
     await db
       .update(propertySubmissions)
-      .set({ status: "approved" })
+      .set({ status: "published" })
       .where(eq(propertySubmissions.id, submissionId));
 
     await expect(

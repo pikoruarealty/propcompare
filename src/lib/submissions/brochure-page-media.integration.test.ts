@@ -90,7 +90,7 @@ afterAll(async () => {
 });
 
 describe("addBrochurePageImage", () => {
-  it("renders the page into a private, unreviewed candidate credited to the developer", async () => {
+  it("renders the page into an approved, public candidate credited to the developer", async () => {
     const { id } = await add({ unitVariantName: " 3 BHK - A " });
     const [row] = await db
       .select()
@@ -102,8 +102,10 @@ describe("addBrochurePageImage", () => {
       sourceKind: "developer_brochure",
       caption: "Brochure page 2",
       unitVariantName: "3 BHK - A",
-      isPublic: false,
-      reviewStatus: "needs_review",
+      // Choosing a page as a picture is the admin's decision: approved and public
+      // by default, credited, and still rejectable.
+      isPublic: true,
+      reviewStatus: "confirmed",
       uploadedBy: userId,
       displayOrder: 0,
     });
@@ -190,7 +192,7 @@ describe("addBrochurePageImage", () => {
     expect(await rowsFor(submissionId)).toHaveLength(before);
   });
 
-  it("only works while the submission is editable, and only for one that has a brochure", async () => {
+  it("stops once the submission is published, and only works for one that has a brochure", async () => {
     const created = await createBrochureSubmission(
       { database: db, storage: storage() },
       { developerId, uploadedBy: userId, bytes: await makePdf(1) },
@@ -198,7 +200,7 @@ describe("addBrochurePageImage", () => {
     createdSubmissionIds.push(created.submissionId);
     await db
       .update(propertySubmissions)
-      .set({ status: "in_review" })
+      .set({ status: "published" })
       .where(eq(propertySubmissions.id, created.submissionId));
     await expect(
       addBrochurePageImage(

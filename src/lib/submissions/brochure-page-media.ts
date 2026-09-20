@@ -1,3 +1,4 @@
+import { isWorkingStatus } from "./working-statuses";
 import { and, desc, eq } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import {
@@ -103,11 +104,7 @@ export const addBrochurePageImage = async (
         .from(propertySubmissions)
         .where(eq(propertySubmissions.id, input.submissionId))
         .for("update");
-      if (
-        !submission ||
-        (submission.status !== "draft" &&
-          submission.status !== "changes_requested")
-      ) {
+      if (!submission || !isWorkingStatus(submission.status)) {
         throw new SubmissionMediaError(
           "invalid_state",
           "The submission is no longer editable.",
@@ -148,8 +145,10 @@ export const addBrochurePageImage = async (
           attribution: `Image from the ${brochure.developerName ?? "developer"} brochure`,
           unitVariantName,
           displayOrder: (last?.displayOrder ?? -1) + 1,
-          isPublic: false,
-          reviewStatus: "needs_review",
+          // Choosing a brochure page as a picture is the admin's own decision:
+          // approved and public by default, with its credit, and rejectable.
+          isPublic: true,
+          reviewStatus: "confirmed",
         })
         .returning({ id: propertySubmissionMedia.id });
       return media;

@@ -5,12 +5,17 @@ import { db } from "@/db";
 import { properties } from "@/db/schema/catalog";
 import { requireAdminRequest } from "@/lib/accounts/api-session";
 import { errorResponse, internalErrorResponse } from "@/lib/properties/http";
-import {
-  publishSubmission,
-  SubmissionPublishError,
-} from "@/lib/submissions/publisher";
+import { publishNow, PublishNowError } from "@/lib/submissions/publish-now";
+import { SubmissionPublishError } from "@/lib/submissions/publisher";
 import { SubmissionTransitionError } from "@/lib/submissions/transitions";
 
+/**
+ * `POST /api/v1/admin/submissions/{id}/publish` — an owner takes a submission from
+ * wherever it is (draft, submitted, in review or approved) to published in one step;
+ * the recorded transitions are still made. Body `{ confirmRemaining?: boolean }`:
+ * without it, values or pictures still waiting for a decision refuse the publish
+ * (409 `unconfirmed` with the counts); with it they are confirmed as they stand.
+ */
 export const POST = async (
   request: NextRequest,
   context: RouteContext<"/api/v1/admin/submissions/[id]/publish">,
@@ -28,11 +33,14 @@ export const POST = async (
     );
   }
   const { id } = await context.params;
+  const body = (await request.json().catch(() => null)) as {
+    confirmRemaining?: unknown;
+  } | null;
   try {
-    const published = await publishSubmission({
+    const published = await publishNow(db, {
       submissionId: id,
       actorUserId: session.userId,
-      actorRole: "owner",
+      confirmRemaining: body?.confirmRemaining === true,
     });
     // Buyer pages are cached; make the published change visible straight away.
     // Best effort: the property is already live either way.
@@ -51,6 +59,18 @@ export const POST = async (
       headers: { "Cache-Control": "no-store" },
     });
   } catch (cause) {
+    if (cause instanceof PublishNowError) {
+      return Response.json(
+        {
+          error: { code: cause.code, message: cause.message },
+          ...(cause.pending ? { pending: cause.pending } : {}),
+        },
+        {
+          status: cause.code === "not_found" ? 404 : 409,
+          headers: { "Cache-Control": "no-store" },
+        },
+      );
+    }
     if (
       cause instanceof SubmissionPublishError ||
       cause instanceof SubmissionTransitionError

@@ -12,6 +12,12 @@ vi.mock("@/lib/submissions/publisher", async () => {
   >("@/lib/submissions/publisher");
   return { ...actual, publishSubmission: vi.fn() };
 });
+vi.mock("@/lib/submissions/publish-now", async () => {
+  const actual = await vi.importActual<
+    typeof import("@/lib/submissions/publish-now")
+  >("@/lib/submissions/publish-now");
+  return { ...actual, publishNow: vi.fn() };
+});
 vi.mock("@/lib/submissions/reconciliation", async () => {
   const actual = await vi.importActual<
     typeof import("@/lib/submissions/reconciliation")
@@ -39,8 +45,9 @@ vi.mock("@/lib/submissions/media", async () => {
 });
 
 const { requireAdminRequest } = await import("@/lib/accounts/api-session");
-const { publishSubmission, SubmissionPublishError } =
-  await import("@/lib/submissions/publisher");
+const { SubmissionPublishError } = await import("@/lib/submissions/publisher");
+const { publishNow, PublishNowError } =
+  await import("@/lib/submissions/publish-now");
 const {
   createManualSubmission,
   editSubmissionField,
@@ -155,7 +162,7 @@ describe("admin submission routes: authentication", () => {
     expect(addSubmissionImage).not.toHaveBeenCalled();
     expect(addBrochurePageImage).not.toHaveBeenCalled();
     expect(reviewSubmissionMedia).not.toHaveBeenCalled();
-    expect(publishSubmission).not.toHaveBeenCalled();
+    expect(publishNow).not.toHaveBeenCalled();
   });
 });
 
@@ -165,28 +172,59 @@ describe("publish", () => {
     const response = await publish.POST(json({}), ctx({ id: ID }));
     expect(response.status).toBe(403);
     expect((await response.json()).error.code).toBe("owner_required");
-    expect(publishSubmission).not.toHaveBeenCalled();
+    expect(publishNow).not.toHaveBeenCalled();
   });
 
-  it("publishes as the owner and returns the result uncached", async () => {
+  it("publishes as the owner in one step and returns the result uncached", async () => {
     vi.mocked(requireAdminRequest).mockResolvedValue(owner);
-    vi.mocked(publishSubmission).mockResolvedValue({
-      propertyId: "p",
-    } as never);
+    vi.mocked(publishNow).mockResolvedValue({ propertyId: "p" } as never);
     const response = await publish.POST(json({}), ctx({ id: ID }));
     expect(response.status).toBe(200);
     expect(response.headers.get("Cache-Control")).toBe("no-store");
-    expect(publishSubmission).toHaveBeenCalledWith({
-      submissionId: ID,
-      actorUserId: "u1",
-      actorRole: "owner",
+    expect(publishNow).toHaveBeenCalledWith(
+      {},
+      {
+        submissionId: ID,
+        actorUserId: "u1",
+        confirmRemaining: false,
+      },
+    );
+  });
+
+  it("passes on the decision to confirm what is still waiting", async () => {
+    vi.mocked(requireAdminRequest).mockResolvedValue(owner);
+    vi.mocked(publishNow).mockResolvedValue({ propertyId: "p" } as never);
+    await publish.POST(json({ confirmRemaining: true }), ctx({ id: ID }));
+    expect(publishNow).toHaveBeenLastCalledWith(
+      {},
+      {
+        submissionId: ID,
+        actorUserId: "u1",
+        confirmRemaining: true,
+      },
+    );
+  });
+
+  it("refuses, with the counts, while values or pictures are still waiting for a decision", async () => {
+    vi.mocked(requireAdminRequest).mockResolvedValue(owner);
+    vi.mocked(publishNow).mockRejectedValue(
+      new PublishNowError("unconfirmed", "Some are waiting.", {
+        fields: 3,
+        pictures: 1,
+      }),
+    );
+    const response = await publish.POST(json({}), ctx({ id: ID }));
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({
+      error: { code: "unconfirmed", message: "Some are waiting." },
+      pending: { fields: 3, pictures: 1 },
     });
   });
 
   it("reports a submission that cannot be published as a conflict, not a crash", async () => {
     vi.mocked(requireAdminRequest).mockResolvedValue(owner);
-    vi.mocked(publishSubmission).mockRejectedValue(
-      new SubmissionPublishError("not approved"),
+    vi.mocked(publishNow).mockRejectedValue(
+      new SubmissionPublishError("missing a name"),
     );
     const response = await publish.POST(json({}), ctx({ id: ID }));
     expect(response.status).toBe(409);

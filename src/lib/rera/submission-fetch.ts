@@ -1,3 +1,4 @@
+import { WORKING_STATUSES } from "@/lib/submissions/working-statuses";
 import { and, desc, eq, ne, or, sql } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import {
@@ -23,7 +24,7 @@ import { getRegulatorRegistry, type RegulatorRegistry } from "./registry";
 import { RegulatorError, type RegulatorRecord } from "./types";
 
 const UUID = /^[0-9a-f-]{36}$/i;
-const EDITABLE_STATUSES = new Set(["draft", "changes_requested"]);
+const EDITABLE_STATUSES = new Set<string>(WORKING_STATUSES);
 
 export class ReraFetchError extends Error {
   constructor(
@@ -79,7 +80,7 @@ const requireEditable = (submission: SubmissionScope) => {
   if (!EDITABLE_STATUSES.has(submission.status)) {
     throw new ReraFetchError(
       "invalid_state",
-      "RERA values can only be fetched or applied while the submission is a draft or has changes requested.",
+      "RERA values can only be fetched or applied before the submission is published or rejected.",
     );
   }
 };

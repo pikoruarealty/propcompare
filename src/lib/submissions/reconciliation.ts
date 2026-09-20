@@ -1,3 +1,4 @@
+import { WORKING_STATUSES } from "./working-statuses";
 import { and, eq } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import {
@@ -25,7 +26,7 @@ import {
 } from "./validation";
 
 const UUID = /^[0-9a-f-]{36}$/i;
-const EDITABLE_STATUSES = new Set(["draft", "changes_requested"]);
+const EDITABLE_STATUSES = new Set<string>(WORKING_STATUSES);
 
 export class ReconciliationError extends Error {
   constructor(
@@ -87,7 +88,7 @@ const requireEditableSubmission = async (
   if (!EDITABLE_STATUSES.has(submission.status)) {
     throw new ReconciliationError(
       "invalid_state",
-      "Only draft or changes-requested submissions can be edited.",
+      "This submission can no longer be edited: it is published or rejected. To change a published property, start an edit of it.",
     );
   }
   return submission;
@@ -246,10 +247,10 @@ export const reviewSubmissionField = async (
       "Submission not found.",
     );
   }
-  if (submission.status !== "in_review") {
+  if (!EDITABLE_STATUSES.has(submission.status)) {
     throw new ReconciliationError(
       "invalid_state",
-      "Fields can only be reviewed while the submission is in review.",
+      "Fields can only be reviewed before the submission is published or rejected.",
     );
   }
   const updated = await database
@@ -298,10 +299,10 @@ export const confirmPendingFields = async (
         "Submission not found.",
       );
     }
-    if (submission.status !== "in_review") {
+    if (!EDITABLE_STATUSES.has(submission.status)) {
       throw new ReconciliationError(
         "invalid_state",
-        "Fields can only be reviewed while the submission is in review.",
+        "Fields can only be reviewed before the submission is published or rejected.",
       );
     }
     const updated = await tx

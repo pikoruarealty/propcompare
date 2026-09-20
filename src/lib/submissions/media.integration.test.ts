@@ -35,7 +35,10 @@ const WEBP = new Uint8Array([
 
 const storage = () => createLocalStorageAdapter({ rootDir: dir, secret: "s" });
 
-const newSubmission = async (status: "draft" | "in_review" = "draft") => {
+const newSubmission = async (
+  status:
+    "draft" | "submitted" | "in_review" | "approved" | "published" = "draft",
+) => {
   const [row] = await db
     .insert(propertySubmissions)
     .values({ developerId, source: "manual_form", status, payload: {} })
@@ -85,7 +88,7 @@ afterAll(async () => {
 });
 
 describe("addSubmissionImage", () => {
-  it("stores the image and creates a private, unreviewed candidate — never live media", async () => {
+  it("stores the image and creates an approved, public candidate credited to whoever it is credited to — live only when published", async () => {
     const id = await newSubmission();
     const { id: mediaId } = await upload(id, {
       caption: " Lobby ",
@@ -103,9 +106,12 @@ describe("addSubmissionImage", () => {
       attribution: "Photo by PropCompare",
       caption: "Lobby",
       unitVariantName: "3 BHK - A",
-      isPublic: false,
-      reviewStatus: "needs_review",
+      // An admin adding a picture is deciding to include it: approved and public
+      // by default (and still rejectable), so it is never stuck waiting for a review.
+      isPublic: true,
+      reviewStatus: "confirmed",
       uploadedBy: userId,
+      reviewedBy: userId,
       displayOrder: 0,
     });
     expect(row.gcsPath).toMatch(/^submission-media\/[0-9a-f-]{36}\.png$/);
@@ -154,9 +160,13 @@ describe("addSubmissionImage", () => {
     ).toEqual([]);
   });
 
-  it("only accepts images while the draft is editable, and for a real submission", async () => {
-    const inReview = await newSubmission("in_review");
-    await expect(upload(inReview)).rejects.toMatchObject({
+  it("accepts images at every stage before publication, and not after, and only for a real submission", async () => {
+    for (const status of ["submitted", "in_review", "approved"] as const) {
+      const working = await newSubmission(status);
+      await expect(upload(working)).resolves.toBeDefined();
+    }
+    const published = await newSubmission("published");
+    await expect(upload(published)).rejects.toMatchObject({
       code: "invalid_state",
     });
     await expect(upload(randomUUID())).rejects.toMatchObject({
@@ -169,10 +179,14 @@ describe("addSubmissionImage", () => {
 });
 
 describe("reviewSubmissionMedia", () => {
-  it("makes an image public only when it is confirmed as public, and only during review", async () => {
+  it("makes an image public only when it is confirmed as public, at any stage before publication", async () => {
     const id = await newSubmission();
     const { id: mediaId } = await upload(id);
 
+    await db
+      .update(propertySubmissions)
+      .set({ status: "published" })
+      .where(eq(propertySubmissions.id, id));
     await expect(
       reviewSubmissionMedia(db, {
         submissionId: id,
@@ -185,7 +199,7 @@ describe("reviewSubmissionMedia", () => {
 
     await db
       .update(propertySubmissions)
-      .set({ status: "in_review" })
+      .set({ status: "approved" })
       .where(eq(propertySubmissions.id, id));
     await reviewSubmissionMedia(db, {
       submissionId: id,

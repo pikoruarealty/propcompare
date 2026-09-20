@@ -187,31 +187,43 @@ describe("editSubmissionField", () => {
     expect(await fieldsOf(id)).toEqual([]);
   });
 
-  it("only edits a draft or a changes-requested submission", async () => {
+  it("edits at every stage before publication, and not after", async () => {
     const id = await newDraft();
-    await db
-      .update(propertySubmissions)
-      .set({ status: "in_review" })
-      .where(eq(propertySubmissions.id, id));
-    await expect(
-      editSubmissionField(db, {
-        submissionId: id,
-        fieldKey: "property.name",
-        value: "Late edit",
-      }),
-    ).rejects.toMatchObject({ code: "invalid_state" });
+    // Draft, waiting, in review, changes requested and approved are all workable:
+    // an admin who moved on too early can still fix things.
+    for (const status of [
+      "draft",
+      "submitted",
+      "in_review",
+      "changes_requested",
+      "approved",
+    ] as const) {
+      await db
+        .update(propertySubmissions)
+        .set({ status })
+        .where(eq(propertySubmissions.id, id));
+      await expect(
+        editSubmissionField(db, {
+          submissionId: id,
+          fieldKey: "property.name",
+          value: `Edited while ${status}`,
+        }),
+      ).resolves.toBeUndefined();
+    }
 
-    await db
-      .update(propertySubmissions)
-      .set({ status: "changes_requested" })
-      .where(eq(propertySubmissions.id, id));
-    await expect(
-      editSubmissionField(db, {
-        submissionId: id,
-        fieldKey: "property.name",
-        value: "Fixed",
-      }),
-    ).resolves.toBeUndefined();
+    for (const status of ["published", "rejected"] as const) {
+      await db
+        .update(propertySubmissions)
+        .set({ status })
+        .where(eq(propertySubmissions.id, id));
+      await expect(
+        editSubmissionField(db, {
+          submissionId: id,
+          fieldKey: "property.name",
+          value: "Too late",
+        }),
+      ).rejects.toMatchObject({ code: "invalid_state" });
+    }
 
     await expect(
       editSubmissionField(db, {
@@ -224,13 +236,17 @@ describe("editSubmissionField", () => {
 });
 
 describe("reviewSubmissionField", () => {
-  it("confirms or rejects a candidate only while the submission is in review", async () => {
+  it("confirms or rejects a candidate at any stage before publication, and not after", async () => {
     const id = await newDraft();
     await editSubmissionField(db, {
       submissionId: id,
       fieldKey: "property.name",
       value: "Reviewed Tower",
     });
+    await db
+      .update(propertySubmissions)
+      .set({ status: "published" })
+      .where(eq(propertySubmissions.id, id));
     await expect(
       reviewSubmissionField(db, {
         submissionId: id,
@@ -241,7 +257,7 @@ describe("reviewSubmissionField", () => {
 
     await db
       .update(propertySubmissions)
-      .set({ status: "in_review" })
+      .set({ status: "draft" })
       .where(eq(propertySubmissions.id, id));
     await reviewSubmissionField(db, {
       submissionId: id,
@@ -345,7 +361,7 @@ describe("transitionSubmission", () => {
 });
 
 describe("confirmPendingFields", () => {
-  it("confirms only the values still waiting, and only in review", async () => {
+  it("confirms only the values still waiting, and not once published", async () => {
     const id = await newDraft();
     await editSubmissionField(db, {
       submissionId: id,
@@ -357,6 +373,10 @@ describe("confirmPendingFields", () => {
       fieldKey: "property.city",
       value: "Ahmedabad",
     });
+    await db
+      .update(propertySubmissions)
+      .set({ status: "published" })
+      .where(eq(propertySubmissions.id, id));
     await expect(confirmPendingFields(db, id)).rejects.toMatchObject({
       code: "invalid_state",
     });
