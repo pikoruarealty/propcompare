@@ -1,24 +1,32 @@
 /**
- * Starts the brochure-extraction worker inside the app server, so `bun run dev`
- * and `bun run start` are enough to take a queued brochure through extraction.
+ * Starts the background workers inside the app server, so `bun run dev` and
+ * `bun run start` are enough to take a queued brochure through extraction.
  *
- * Skipped in tests and when `OCR_WORKER_ENABLED=false` (a web-only host that runs
- * `bun run ocr:worker` separately). The worker only ever picks up jobs an admin
- * has explicitly queued.
+ * Both are skipped in tests. The extraction worker is on unless
+ * `OCR_WORKER_ENABLED=false` (a web-only host that runs `bun run ocr:worker`
+ * separately) and only ever picks up jobs an admin has explicitly queued. The
+ * quarterly RERA refresh reads a public regulator site by itself, so it is off
+ * unless `RERA_WORKER_ENABLED=true` (or run `bun run rera:worker`).
  */
-const WORKER_KEY = Symbol.for("propcompare.ocrWorker");
+const OCR_WORKER_KEY = Symbol.for("propcompare.ocrWorker");
+const RERA_WORKER_KEY = Symbol.for("propcompare.reraWorker");
 
 export async function register(): Promise<void> {
-  if (process.env.NEXT_RUNTIME === "nodejs") {
-    if (process.env.NODE_ENV === "test") return;
-    if (process.env.OCR_WORKER_ENABLED === "false") return;
+  if (process.env.NEXT_RUNTIME !== "nodejs") return;
+  if (process.env.NODE_ENV === "test") return;
 
-    // Development reloads re-run register(); keep exactly one loop per process.
-    const globals = globalThis as unknown as Record<symbol, unknown>;
-    if (globals[WORKER_KEY]) return;
+  // Development reloads re-run register(); keep exactly one loop per process.
+  const globals = globalThis as unknown as Record<symbol, unknown>;
 
+  if (process.env.OCR_WORKER_ENABLED !== "false" && !globals[OCR_WORKER_KEY]) {
     const { startConfiguredOcrWorker } =
       await import("@/lib/ocr/worker-runtime");
-    globals[WORKER_KEY] = startConfiguredOcrWorker();
+    globals[OCR_WORKER_KEY] = startConfiguredOcrWorker();
+  }
+
+  if (process.env.RERA_WORKER_ENABLED === "true" && !globals[RERA_WORKER_KEY]) {
+    const { startConfiguredReraWorker } =
+      await import("@/lib/rera/worker-runtime");
+    globals[RERA_WORKER_KEY] = startConfiguredReraWorker();
   }
 }

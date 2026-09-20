@@ -138,9 +138,10 @@ export const editSubmissionField = async (
     submissionId: string;
     fieldKey: string;
     value: unknown;
-    /** "confirmed" for a value taken from a regulator's record; a person's own
-     * replacement is "edited" (the default). */
-    reviewStatus?: "edited" | "confirmed";
+    /** "confirmed" for a value an admin chose to take from a regulator's record;
+     * "needs_review" for one a scheduled check proposed and no person has seen; a
+     * person's own replacement is "edited" (the default). */
+    reviewStatus?: "edited" | "confirmed" | "needs_review";
   },
 ): Promise<void> => {
   const submission = await requireEditableSubmission(

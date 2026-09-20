@@ -115,9 +115,9 @@ const loadCurrentValues = async (
   return values;
 };
 
-const loadEntities = async (
+export const loadEntities = async (
   database: PostgresJsDatabase,
-  submission: SubmissionScope,
+  submission: Pick<SubmissionScope, "developerId" | "propertyId">,
 ): Promise<LegalEntityChoice[]> => {
   let developerId = submission.developerId;
   if (!developerId && submission.propertyId) {
@@ -138,7 +138,7 @@ const loadEntities = async (
   return rows;
 };
 
-const loadAmenityLabels = async (
+export const loadAmenityLabels = async (
   database: PostgresJsDatabase,
 ): Promise<Record<string, string>> =>
   Object.fromEntries(
@@ -161,7 +161,7 @@ const withDefaults = (record: RegulatorRecord): RegulatorRecord => ({
   declaredAmenityKeys: record.declaredAmenityKeys ?? [],
 });
 
-const isRecord = (value: unknown): value is RegulatorRecord =>
+export const isRegulatorRecord = (value: unknown): value is RegulatorRecord =>
   value !== null &&
   typeof value === "object" &&
   typeof (value as RegulatorRecord).registrationNumber === "string" &&
@@ -320,7 +320,9 @@ const latestSucceededJob = async (
     .orderBy(desc(reraFetchJobs.createdAt))
     .limit(1);
   const record = (job?.payload as { record?: unknown } | null)?.record;
-  return job && isRecord(record) ? { job, record: withDefaults(record) } : null;
+  return job && isRegulatorRecord(record)
+    ? { job, record: withDefaults(record) }
+    : null;
 };
 
 /** The RERA panel's state for a submission: the latest successful fetch, compared

@@ -36,7 +36,12 @@ export class EditPropertyError extends Error {
  */
 export const createEditSubmission = async (
   database: PostgresJsDatabase,
-  input: { propertyId: string; submittedBy: string },
+  input: {
+    propertyId: string;
+    /** Null for an edit the system proposes itself (a scheduled RERA check). */
+    submittedBy: string | null;
+    source?: "manual_form" | "rera_scrape";
+  },
 ): Promise<{ submissionId: string }> => {
   if (!UUID.test(input.propertyId)) {
     throw new EditPropertyError("property_not_found", "Property not found.");
@@ -72,7 +77,7 @@ export const createEditSubmission = async (
       propertyId: property.id,
       developerId: property.developerId,
       submittedBy: input.submittedBy,
-      source: "manual_form",
+      source: input.source ?? "manual_form",
       status: "draft",
       payload: {},
     })
