@@ -35,7 +35,7 @@
 
 - [x] Mark a submission as an edit when it changes a property that already exists (bound at creation, or not the property's first publication).
 - [x] Show one row per property (its newest live-track submission); rejected edits appear only under the Rejected filter; new drafts unchanged.
-- [x] Source column reads "Edit" for edits.
+- [x] ~~Source column reads "Edit" for edits.~~ Superseded after owner feedback: an "Edit" label hid that the listing was live and replaced the data source. The queue now has a Change column (New listing / Update to a live listing), the data source beneath it, and "Current listing stays live" for a draft update.
 - [x] On a submission, list the earlier versions of the same property, so the original brochure submission stays reachable.
 - [x] Tests: queue read model (integration), page/component.
 
