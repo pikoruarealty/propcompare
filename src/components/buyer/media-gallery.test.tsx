@@ -205,6 +205,38 @@ describe("MediaGallery — the pop-up carousel", () => {
     );
   });
 
+  it("starts each picture fitted: zoom does not carry over to the next one", async () => {
+    renderGallery();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Open Photo: Exterior, 1 of 3" }),
+    );
+    const dialog = screen.getByRole("dialog");
+
+    await userEvent.click(
+      within(dialog).getByRole("button", { name: "Zoom in" }),
+    );
+    expect(within(dialog).getByText("150%")).toBeInTheDocument();
+
+    await userEvent.click(
+      within(dialog).getByRole("button", { name: "Next picture" }),
+    );
+    expect(within(dialog).getByText("100%")).toBeInTheDocument();
+  });
+
+  it("keeps the arrow keys for moving between pictures while zoomed", async () => {
+    renderGallery();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Open Photo: Exterior, 1 of 3" }),
+    );
+    const dialog = screen.getByRole("dialog");
+
+    await userEvent.keyboard("+");
+    expect(within(dialog).getByText("150%")).toBeInTheDocument();
+    await userEvent.keyboard("{ArrowRight}");
+
+    expect(within(dialog).getByText("2 of 3")).toBeInTheDocument();
+  });
+
   it("disables the arrows when a section has a single picture", async () => {
     render(
       <MediaGallery

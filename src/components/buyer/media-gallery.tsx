@@ -3,6 +3,7 @@
 import * as React from "react";
 import { Dialog } from "radix-ui";
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
+import { ZoomableImage } from "./zoomable-image";
 
 /**
  * One picture, as the gallery needs it. `id` is the media id: every image is
@@ -40,7 +41,7 @@ const describe = (item: GalleryItem) =>
 /**
  * The property's pictures as expandable sections of small cards. Choosing a card
  * opens a pop-up carousel over that section's pictures (arrow keys and the
- * buttons move, Escape closes), with each picture's credit shown, because images
+ * buttons move, Escape closes, and each picture can be zoomed and panned), with each picture's credit shown, because images
  * taken from a developer's brochure are published with attribution.
  */
 export function MediaGallery({ sections }: { sections: GallerySection[] }) {
@@ -194,14 +195,11 @@ export function MediaGallery({ sections }: { sections: GallerySection[] }) {
               </Dialog.Close>
             </div>
             {current ? (
-              <div className="bg-muted flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-md">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={srcOf(current)}
-                  alt={describe(current)}
-                  className="max-h-[68vh] w-auto max-w-full object-contain"
-                />
-              </div>
+              <ZoomableImage
+                key={current.id}
+                src={srcOf(current)}
+                alt={describe(current)}
+              />
             ) : null}
             <div className="flex items-center justify-between gap-4 text-sm">
               <p className="text-muted-foreground min-w-0">
