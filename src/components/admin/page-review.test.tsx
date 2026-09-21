@@ -58,12 +58,12 @@ describe("PageReview", () => {
     );
 
     expect(
-      screen.queryByRole("button", { name: /^queue extraction$/i }),
+      screen.queryByRole("button", { name: /^read the pages$/i }),
     ).toBeNull();
     expect(container).not.toHaveTextContent(/\$|₹|cost|price/i);
 
     await user.click(
-      screen.getByRole("button", { name: /confirm page routing/i }),
+      screen.getByRole("button", { name: /save page choices/i }),
     );
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/v1/admin/ocr-jobs/job-1/routing-manifest",
@@ -75,15 +75,17 @@ describe("PageReview", () => {
       }),
     );
 
-    await user.click(
-      screen.getByRole("button", { name: /^queue extraction$/i }),
-    );
+    await user.click(screen.getByRole("button", { name: /^read the pages$/i }));
     expect(screen.getByRole("dialog")).toHaveTextContent(
-      /queue claude extraction/i,
+      /read the chosen pages/i,
+    );
+    // Plain words: no provider name, no queue, and no price.
+    expect(screen.getByRole("dialog")).not.toHaveTextContent(
+      /claude|queue|\$|₹|price/i,
     );
     await user.click(
       within(screen.getByRole("dialog")).getByRole("button", {
-        name: /^queue extraction$/i,
+        name: /^start reading$/i,
       }),
     );
     expect(fetchMock).toHaveBeenLastCalledWith(
@@ -105,9 +107,9 @@ describe("PageReview", () => {
       />,
     );
 
-    expect(screen.getByText(/routing is locked/i)).toBeVisible();
+    expect(screen.getByText(/choices are locked/i)).toBeVisible();
     expect(
-      screen.queryByRole("button", { name: /confirm page routing/i }),
+      screen.queryByRole("button", { name: /save page choices/i }),
     ).toBeNull();
     expect(screen.getByLabelText(/read as/i)).toBeDisabled();
   });

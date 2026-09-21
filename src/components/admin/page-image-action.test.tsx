@@ -62,10 +62,11 @@ describe("PageImageAction", () => {
       mediaType: "floor_plan",
       unitVariantName: "3 BHK - A",
     });
-    expect(await screen.findByRole("status")).toHaveTextContent(
-      /added to the images/i,
-    );
-    expect(screen.getByRole("link", { name: "Review it" })).toHaveAttribute(
+    const done = await screen.findByRole("status");
+    expect(done).toHaveTextContent(/added/i);
+    // One short line: the page card is narrow.
+    expect(done.className).toContain("whitespace-nowrap");
+    expect(screen.getByRole("link", { name: "Review" })).toHaveAttribute(
       "href",
       "/admin/submissions/sub-1",
     );

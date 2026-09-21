@@ -34,6 +34,10 @@ export function BrochureViewer({
   renderMeta,
   renderLightboxFooter,
 }: BrochureViewerProps) {
+  // The page around this viewer re-signs the brochure link whenever it is
+  // re-rendered. The link is only how to reach the file: the first one is kept, so
+  // a refresh never closes the document and downloads it all over again.
+  const [stableUrl] = React.useState(pdfUrl);
   const [pdf, setPdf] = React.useState<PDFDocumentProxy | null>(null);
   const [failed, setFailed] = React.useState(false);
   const [openPage, setOpenPage] = React.useState<number | null>(null);
@@ -41,7 +45,7 @@ export function BrochureViewer({
   React.useEffect(() => {
     let cancelled = false;
     let loaded: OpenedPdf | null = null;
-    openPdf(pdfUrl)
+    openPdf(stableUrl)
       .then((opened) => {
         if (cancelled) {
           void opened.destroy();
@@ -57,7 +61,7 @@ export function BrochureViewer({
       cancelled = true;
       void loaded?.destroy();
     };
-  }, [pdfUrl]);
+  }, [stableUrl]);
 
   if (failed) {
     return (

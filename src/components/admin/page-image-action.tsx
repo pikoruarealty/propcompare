@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { Dialog } from "radix-ui";
 import { ImagePlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { ImageLayout, PageSuggestion } from "@/lib/ocr/page-router";
@@ -103,84 +104,96 @@ export function PageImageAction({
   };
 
   if (added) {
+    // One short line: the page card is narrow, so it must not wrap.
     return (
-      <p className="text-xs" role="status">
-        Added to the images.{" "}
+      <p
+        className="flex items-center gap-2 text-xs whitespace-nowrap"
+        role="status"
+      >
+        <span>Added</span>
+        <span aria-hidden="true">·</span>
         <Link
           href={`/admin/submissions/${submissionId}`}
           className="underline underline-offset-4"
         >
-          Review it
+          Review
         </Link>
       </p>
     );
   }
 
-  if (!open) {
-    return (
-      <div className="flex flex-col gap-1">
-        {suggestion?.imageLayout ? (
-          <p className="text-muted-foreground text-xs">
-            {IMAGE_LAYOUT_LABEL[suggestion.imageLayout]}
-          </p>
-        ) : null}
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => setOpen(true)}
-        >
-          <ImagePlus /> Use as image
-        </Button>
-      </div>
-    );
-  }
-
   return (
-    <form
-      onSubmit={add}
-      className="border-border bg-background flex flex-col gap-3 rounded-md border p-3"
-      aria-label={`Use page ${page} as an image`}
-    >
-      <label className="flex flex-col gap-1">
-        <span className={labelClass}>It is</span>
-        <select
-          className={`${inputClass} h-9 text-sm`}
-          value={mediaType}
-          onChange={(e) => setMediaType(e.target.value as typeof mediaType)}
-        >
-          <option value="photo">A photo</option>
-          <option value="floor_plan">A floor plan</option>
-        </select>
-      </label>
-      <label className="flex flex-col gap-1">
-        <span className={labelClass}>Unit type (optional)</span>
-        <input
-          className={`${inputClass} h-9 text-sm`}
-          value={unit}
-          onChange={(e) => setUnit(e.target.value)}
-          placeholder="e.g. 3 BHK - A"
-        />
-      </label>
-      {error ? (
-        <p role="alert" className="text-destructive text-xs">
-          {error}
+    <div className="flex flex-col gap-1">
+      {suggestion?.imageLayout ? (
+        <p className="text-muted-foreground text-xs">
+          {IMAGE_LAYOUT_LABEL[suggestion.imageLayout]}
         </p>
       ) : null}
-      <div className="flex gap-2">
-        <Button type="submit" size="sm" disabled={busy}>
-          {busy ? "Adding…" : "Add image"}
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={() => setOpen(false)}
-          disabled={busy}
-        >
-          Cancel
-        </Button>
-      </div>
-    </form>
+      <Dialog.Root open={open} onOpenChange={(next) => !busy && setOpen(next)}>
+        <Dialog.Trigger asChild>
+          <Button type="button" variant="outline" size="sm">
+            <ImagePlus /> Use as image
+          </Button>
+        </Dialog.Trigger>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 z-50 bg-[color-mix(in_oklab,var(--color-ink)_55%,transparent)]" />
+          <Dialog.Content
+            aria-describedby={undefined}
+            className="bg-background fixed top-1/2 left-1/2 z-50 w-[min(calc(100vw-2rem),28rem)] -translate-x-1/2 -translate-y-1/2 rounded-lg border p-6"
+          >
+            <Dialog.Title className="font-display text-2xl">
+              Use page {page} as an image
+            </Dialog.Title>
+            <p className="text-muted-foreground mt-1 text-sm">
+              The whole page is added to this listing&rsquo;s images, credited
+              to the developer. You can review it before it goes live.
+            </p>
+            <form
+              onSubmit={add}
+              className="mt-5 flex flex-col gap-4"
+              aria-label={`Use page ${page} as an image`}
+            >
+              <label className="flex flex-col gap-1.5">
+                <span className={labelClass}>It is</span>
+                <select
+                  className={`${inputClass} h-11`}
+                  value={mediaType}
+                  onChange={(e) =>
+                    setMediaType(e.target.value as typeof mediaType)
+                  }
+                >
+                  <option value="photo">A photo</option>
+                  <option value="floor_plan">A floor plan</option>
+                </select>
+              </label>
+              <label className="flex flex-col gap-1.5">
+                <span className={labelClass}>Unit type (optional)</span>
+                <input
+                  className={`${inputClass} h-11`}
+                  value={unit}
+                  onChange={(e) => setUnit(e.target.value)}
+                  placeholder="e.g. 3 BHK - A"
+                />
+              </label>
+              {error ? (
+                <p role="alert" className="text-destructive text-sm">
+                  {error}
+                </p>
+              ) : null}
+              <div className="mt-2 flex justify-end gap-3">
+                <Dialog.Close asChild>
+                  <Button type="button" variant="outline" disabled={busy}>
+                    Cancel
+                  </Button>
+                </Dialog.Close>
+                <Button type="submit" disabled={busy}>
+                  {busy ? "Adding…" : "Add image"}
+                </Button>
+              </div>
+            </form>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
+    </div>
   );
 }

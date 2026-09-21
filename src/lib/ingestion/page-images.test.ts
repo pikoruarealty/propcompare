@@ -1,7 +1,12 @@
+import { randomBytes } from "node:crypto";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import sharp from "sharp";
 import { describe, expect, it } from "vitest";
-import { PageImageError, renderBrochurePage } from "./page-images";
+import {
+  PageImageError,
+  lightenBrochure,
+  renderBrochurePage,
+} from "./page-images";
 
 const makePdf = async () => {
   const pdf = await PDFDocument.create();
@@ -82,5 +87,54 @@ describe("renderBrochurePage", () => {
     await expect(
       renderBrochurePage(new TextEncoder().encode("not a pdf"), 1),
     ).rejects.toBeInstanceOf(PageImageError);
+  });
+});
+
+describe("lightenBrochure", () => {
+  /** A page carrying a big, incompressible picture, like a designed brochure's. */
+  const makeHeavyPdf = async () => {
+    const width = 2400;
+    const height = 1600;
+    // Random bytes: a repeating pattern would compress to almost nothing.
+    const noise = randomBytes(width * height * 3);
+    const png = await sharp(noise, {
+      raw: { width, height, channels: 3 },
+    })
+      .png({ compressionLevel: 0 })
+      .toBuffer();
+    const pdf = await PDFDocument.create();
+    const image = await pdf.embedPng(png);
+    for (const size of [
+      [842, 595],
+      [595, 842],
+    ] as const) {
+      const page = pdf.addPage([size[0], size[1]]);
+      page.drawImage(image, { x: 0, y: 0, width: size[0], height: size[1] });
+    }
+    return pdf.save();
+  };
+
+  it("keeps the same pages in the same order at a fraction of the size", async () => {
+    const heavy = await makeHeavyPdf();
+    const light = await lightenBrochure(heavy);
+
+    const source = await PDFDocument.load(heavy);
+    const lightened = await PDFDocument.load(light);
+    expect(lightened.getPageCount()).toBe(source.getPageCount());
+    // Landscape stays landscape and tall stays tall: page N is still page N.
+    const [first, second] = lightened.getPages().map((p) => p.getSize());
+    expect(first.width).toBeGreaterThan(first.height);
+    expect(second.height).toBeGreaterThan(second.width);
+    expect(light.byteLength).toBeLessThan(heavy.byteLength / 2);
+  }, 60_000);
+
+  it("draws each page no larger than the requested longest side", async () => {
+    const light = await lightenBrochure(await makePdf(), { longestSide: 800 });
+    const sizes = (await PDFDocument.load(light))
+      .getPages()
+      .map((p) => p.getSize());
+    for (const size of sizes) {
+      expect(Math.max(size.width, size.height)).toBeLessThanOrEqual(800);
+    }
   });
 });

@@ -5,15 +5,12 @@ import { db } from "@/db";
 import { AdminPageHeader, AdminShell } from "@/components/admin/admin-shell";
 import { ExtractionStatus } from "@/components/admin/extraction-status";
 import { describeExtractionFailure } from "@/lib/ingestion/extraction-status";
-import {
-  PageReview,
-  type ConfirmedPageChoice,
-} from "@/components/admin/page-review";
+import { PageReview } from "@/components/admin/page-review";
 import { requirePortalRole } from "@/lib/accounts/session";
+import { readConfirmedChoices } from "@/lib/ingestion/confirmed-choices";
 import { readStoredSuggestions } from "@/lib/ingestion/page-suggestions";
 import { getSubmissionBrochure } from "@/lib/ingestion/queries";
 import { storageAdapter } from "@/lib/storage";
-import { parseOcrRoutingManifest } from "@/lib/ocr/routing";
 
 export const metadata: Metadata = {
   title: "Review brochure pages — Admin console",
@@ -24,29 +21,6 @@ export const dynamic = "force-dynamic";
 
 /** How long the brochure link stays valid while the admin works on the pages. */
 const PDF_URL_TTL_SECONDS = 60 * 60;
-
-const readConfirmedChoices = (
-  manifest: unknown,
-  pageCount: number,
-): ConfirmedPageChoice[] | null => {
-  try {
-    const parsed = parseOcrRoutingManifest(manifest, pageCount);
-    return parsed.scopes.flatMap((scope) => {
-      const category =
-        scope.kind === "property_details"
-          ? "project_details"
-          : scope.kind === "floor_plans" || scope.kind === "unit_variant"
-            ? "floor_plan"
-            : scope.kind;
-      return scope.pages.map((page) => ({
-        pageNumber: page.pageNumber,
-        category,
-      }));
-    }) as ConfirmedPageChoice[];
-  } catch {
-    return null;
-  }
-};
 
 export default async function ReviewPagesPage({
   params,

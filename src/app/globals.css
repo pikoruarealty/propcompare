@@ -166,3 +166,13 @@
     font-variant-numeric: tabular-nums;
   }
 }
+
+/* The indeterminate bar on the admin's "reading the pages" panel. */
+@keyframes extraction-slide {
+  0% {
+    left: -33%;
+  }
+  100% {
+    left: 100%;
+  }
+}

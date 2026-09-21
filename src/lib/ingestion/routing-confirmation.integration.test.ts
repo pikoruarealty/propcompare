@@ -80,6 +80,40 @@ afterAll(async () => {
 });
 
 describe("buildConfirmedRoutingManifest", () => {
+  it("has the amenities step read project-details pages too, so a site plan that names amenities is not lost", () => {
+    const manifest = buildConfirmedRoutingManifest(
+      [
+        { pageNumber: 1, category: "ignore" },
+        { pageNumber: 2, category: "project_details" },
+        { pageNumber: 3, category: "amenities" },
+        { pageNumber: 4, category: "project_details" },
+      ],
+      4,
+    );
+    const amenities = manifest.scopes.find(
+      (scope) => scope.kind === "amenities",
+    );
+    expect(amenities?.pages.map((page) => page.pageNumber)).toEqual([2, 3, 4]);
+    // The project step keeps its own pages, and no page is listed twice in a scope.
+    const project = manifest.scopes.find(
+      (scope) => scope.kind === "property_details",
+    );
+    expect(project?.pages.map((page) => page.pageNumber)).toEqual([2, 4]);
+  });
+
+  it("gives a brochure with project pages but no amenity pages an amenities step anyway", () => {
+    const manifest = buildConfirmedRoutingManifest(
+      [
+        { pageNumber: 1, category: "project_details" },
+        { pageNumber: 2, category: "ignore" },
+      ],
+      2,
+    );
+    expect(
+      manifest.scopes.find((scope) => scope.kind === "amenities")?.pages,
+    ).toEqual([{ pageNumber: 1 }]);
+  });
+
   it("creates the one v2 scope shape from complete page choices", () => {
     expect(
       buildConfirmedRoutingManifest(
@@ -105,7 +139,8 @@ describe("buildConfirmedRoutingManifest", () => {
           scopeKey: "amenities",
           kind: "amenities",
           label: "Amenities",
-          pages: [{ pageNumber: 2 }],
+          // The amenities step also reads the project-details page.
+          pages: [{ pageNumber: 1 }, { pageNumber: 2 }],
         },
         {
           scopeKey: "floor-plans",

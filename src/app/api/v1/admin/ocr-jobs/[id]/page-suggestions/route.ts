@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
 import { db } from "@/db";
+import { lightenBrochure } from "@/lib/ingestion/page-images";
 import { requireAdminRequest } from "@/lib/accounts/api-session";
 import {
   PageSuggestionError,
@@ -46,7 +47,7 @@ export const POST = async (
       {
         database: db,
         storage: storageAdapter,
-        router: createOpenRouterPageRouter(),
+        router: createOpenRouterPageRouter({ prepare: lightenBrochure }),
       },
       {
         ocrJobId: id,

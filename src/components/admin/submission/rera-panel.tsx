@@ -221,7 +221,13 @@ export function ReraPanel({
           ) : null}
 
           <div className="border-border bg-card overflow-x-auto rounded-lg border">
-            <table className="w-full text-left text-sm">
+            <table className="w-full min-w-[44rem] table-fixed text-left text-sm">
+              <colgroup>
+                <col className="w-[22%]" />
+                <col className="w-[30%]" />
+                <col className="w-[30%]" />
+                <col className="w-[18%]" />
+              </colgroup>
               <thead>
                 <tr className="border-border border-b">
                   <th className={cn(labelClass, "p-3 font-semibold")}>Field</th>
@@ -236,12 +242,16 @@ export function ReraPanel({
               </thead>
               <tbody className="divide-border divide-y">
                 {rera.comparison.map((item) => (
-                  <tr key={item.fieldKey} data-status={item.status}>
+                  <tr
+                    key={item.fieldKey}
+                    data-status={item.status}
+                    className="align-top"
+                  >
                     <td className="p-3 font-medium">{item.label}</td>
-                    <td className="p-3">
+                    <td className="p-3 break-words">
                       {displayReraValue(item.fieldKey, item.currentValue)}
                     </td>
-                    <td className="p-3">
+                    <td className="p-3 break-words">
                       {displayReraValue(item.fieldKey, item.reraValue)}
                       {item.note ? (
                         <p className="text-muted-foreground mt-1 max-w-xs text-xs">
@@ -252,7 +262,8 @@ export function ReraPanel({
                     <td className="p-3 text-right">
                       <span
                         className={cn(
-                          "rounded-full px-2.5 py-1 text-xs font-semibold tracking-[0.06em] uppercase",
+                          // One line, one outline: a tag never wraps or doubles up.
+                          "inline-block rounded-full px-2.5 py-1 text-xs font-semibold tracking-[0.06em] whitespace-nowrap uppercase",
                           STATUS[item.status].tone,
                         )}
                       >

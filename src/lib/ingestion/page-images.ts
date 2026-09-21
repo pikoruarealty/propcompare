@@ -1,6 +1,7 @@
 import { createRequire } from "node:module";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { PDFDocument } from "pdf-lib";
 import sharp from "sharp";
 
 /**
@@ -113,6 +114,75 @@ export const renderBrochurePage = async (
     throw new PageImageError(
       "render_failed",
       `The page could not be rendered: ${(error as Error).message}`,
+    );
+  } finally {
+    await task.destroy();
+  }
+};
+
+/** The longest side of a page sent to the categorizer, in pixels. */
+export const LIGHT_LONGEST_SIDE = 1600;
+const LIGHT_JPEG_QUALITY = 72;
+
+/**
+ * A lighter copy of a brochure for the page categorizer: the same pages in the
+ * same order, each drawn to one JPEG (longest side 1600 px, so small print such
+ * as site-plan labels and spec tables stays readable) and packed into a new PDF.
+ * A designed brochure can carry 10 to 20 MB on a single page; uploading that to the
+ * provider is slow and stalls, and categorizing only needs to see what a page
+ * looks like. The original is never changed, and extraction still reads the
+ * original pages at full quality.
+ */
+export const lightenBrochure = async (
+  pdfBytes: Uint8Array,
+  options: { longestSide?: number; quality?: number } = {},
+): Promise<Uint8Array> => {
+  const longestSide = options.longestSide ?? LIGHT_LONGEST_SIDE;
+  const quality = options.quality ?? LIGHT_JPEG_QUALITY;
+  const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  const root = pdfjsRoot();
+  const task = pdfjs.getDocument({
+    data: new Uint8Array(pdfBytes),
+    standardFontDataUrl: pathToFileURL(
+      path.join(root, "standard_fonts") + path.sep,
+    ).href,
+    cMapUrl: pathToFileURL(path.join(root, "cmaps") + path.sep).href,
+    cMapPacked: true,
+  });
+  try {
+    const document = await task.promise;
+    const factory = document.canvasFactory as unknown as NodeCanvasFactory;
+    const light = await PDFDocument.create();
+    for (let number = 1; number <= document.numPages; number += 1) {
+      const page = await document.getPage(number);
+      const base = page.getViewport({ scale: 1 });
+      const viewport = page.getViewport({
+        scale: longestSide / Math.max(base.width, base.height),
+      });
+      const width = Math.max(1, Math.round(viewport.width));
+      const height = Math.max(1, Math.round(viewport.height));
+      const { canvas, context } = factory.create(width, height);
+      await page.render({
+        canvasContext: context as never,
+        canvas: canvas as never,
+        viewport,
+      }).promise;
+      // A page with transparency would otherwise come out black in a JPEG.
+      const jpeg = await sharp(canvas.toBuffer("image/png"))
+        .flatten({ background: "#ffffff" })
+        .jpeg({ quality, mozjpeg: true })
+        .toBuffer();
+      const image = await light.embedJpg(jpeg);
+      const target = light.addPage([width, height]);
+      target.drawImage(image, { x: 0, y: 0, width, height });
+      page.cleanup();
+    }
+    return await light.save();
+  } catch (error) {
+    if (error instanceof PageImageError) throw error;
+    throw new PageImageError(
+      "render_failed",
+      `The brochure could not be prepared for categorizing: ${(error as Error).message}`,
     );
   } finally {
     await task.destroy();

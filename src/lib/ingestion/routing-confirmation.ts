@@ -127,6 +127,22 @@ export const buildConfirmedRoutingManifest = (
       .sort((left, right) => left.pageNumber - right.pageNumber)
       .map((choice) => ({ pageNumber: choice.pageNumber }));
 
+  // A page can only be given one category, but a project overview or a site plan
+  // often names the amenities too (the 360 brochure prints them as labels on its
+  // site plan). So the amenities step reads the amenity pages and the
+  // project-details pages: an amenity on either is not lost, and a page that
+  // states none simply yields none.
+  const amenityPages = [
+    ...pagesFor("amenities"),
+    ...pagesFor("project_details"),
+  ]
+    .filter(
+      (page, index, all) =>
+        all.findIndex((other) => other.pageNumber === page.pageNumber) ===
+        index,
+    )
+    .sort((left, right) => left.pageNumber - right.pageNumber);
+
   const scopes = [
     ...(pagesFor("project_details").length === 0
       ? []
@@ -138,14 +154,14 @@ export const buildConfirmedRoutingManifest = (
             pages: pagesFor("project_details"),
           },
         ]),
-    ...(pagesFor("amenities").length === 0
+    ...(amenityPages.length === 0
       ? []
       : [
           {
             scopeKey: "amenities",
             kind: "amenities" as const,
             label: "Amenities",
-            pages: pagesFor("amenities"),
+            pages: amenityPages,
           },
         ]),
     ...(pagesFor("specifications").length === 0

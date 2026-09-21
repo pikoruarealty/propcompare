@@ -243,6 +243,12 @@ Do not transcribe any text, price, area, rate or other figure. Return ONLY JSON 
 {"pages":[{"page":1,"category":"other","confidence":0.9,"imagery":["exterior_render"],"imageLayout":"full_page"}]}`;
 
 export interface PageRouterOptions {
+  /**
+   * Turns the brochure into what is actually sent (the same pages, in the same
+   * order). Production passes `lightenBrochure` so no request carries the
+   * original's heavy artwork; tests send the bytes as they are.
+   */
+  prepare?: (pdfBytes: Uint8Array) => Promise<Uint8Array>;
   apiKey?: string;
   model?: string;
   endpoint?: string;
@@ -438,9 +444,10 @@ export const createOpenRouterPageRouter = (options: PageRouterOptions = {}) => {
     model,
     /** Suggests a category for every page of the brochure, in page order. */
     async route(pdfBytes: Uint8Array): Promise<PageRoutingResult> {
-      const source = await PDFDocument.load(pdfBytes, {
-        ignoreEncryption: true,
-      });
+      const source = await PDFDocument.load(
+        options.prepare ? await options.prepare(pdfBytes) : pdfBytes,
+        { ignoreEncryption: true },
+      );
       const pageNumbers = Array.from(
         { length: source.getPageCount() },
         (_, i) => i + 1,

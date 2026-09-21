@@ -23,34 +23,73 @@ describe("ExtractionStatus", () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it("refreshes itself while waiting or running, and stops when finished", () => {
-    vi.useFakeTimers();
-    const { rerender } = render(
+  it("shows a busy state in plain words while it reads", () => {
+    render(
       <ExtractionStatus
         ocrJobId="job"
         status="processing"
         failureMessage={null}
       />,
     );
-    expect(screen.getByRole("status")).toHaveTextContent(
-      "Claude is reading the confirmed pages",
+    const busy = screen.getByRole("status");
+    expect(busy).toHaveTextContent("Reading the confirmed pages");
+    expect(busy).not.toHaveTextContent(/claude|queue/i);
+    // A spinner and a moving bar, not just a line of text.
+    expect(busy.querySelector(".animate-spin")).not.toBeNull();
+  });
+
+  it("asks a small status endpoint, and refreshes the page only when the status changes", async () => {
+    vi.useFakeTimers();
+    let reported = "processing";
+    const fetchMock = vi.fn().mockImplementation(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ id: "job", status: reported }), {
+          status: 200,
+        }),
+      ),
     );
-    act(() => {
-      vi.advanceTimersByTime(4_000);
+    vi.stubGlobal("fetch", fetchMock);
+    render(
+      <ExtractionStatus
+        ocrJobId="job"
+        status="processing"
+        failureMessage={null}
+      />,
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_000);
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/v1/admin/ocr-jobs/job",
+      expect.objectContaining({ cache: "no-store" }),
+    );
+    // Still running: nothing about the page is refreshed.
+    expect(refresh).not.toHaveBeenCalled();
+
+    reported = "completed";
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_000);
     });
     expect(refresh).toHaveBeenCalledTimes(1);
+  });
 
-    rerender(
+  it("does not check at all once the run is finished", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    render(
       <ExtractionStatus
         ocrJobId="job"
         status="completed"
         failureMessage={null}
       />,
     );
-    act(() => {
-      vi.advanceTimersByTime(20_000);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30_000);
     });
-    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(refresh).not.toHaveBeenCalled();
   });
 
   it("links a finished run to its values, without any price", () => {

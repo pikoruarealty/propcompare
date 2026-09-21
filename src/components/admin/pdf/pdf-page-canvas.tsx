@@ -5,6 +5,31 @@ import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist";
 import { fitPixelRatio } from "./pdf-client";
 
 /**
+ * At most this many pages are drawn at once. A brochure can have many pages that
+ * carry 10 MB or more of artwork; drawing them all at the same moment exhausts
+ * memory and leaves "This page could not be shown". The rest wait their turn.
+ */
+const MAX_CONCURRENT_RENDERS = 2;
+let activeRenders = 0;
+const waiting: (() => void)[] = [];
+const acquireRenderSlot = (): Promise<void> =>
+  new Promise((resolve) => {
+    if (activeRenders < MAX_CONCURRENT_RENDERS) {
+      activeRenders += 1;
+      resolve();
+    } else {
+      waiting.push(() => {
+        activeRenders += 1;
+        resolve();
+      });
+    }
+  });
+const releaseRenderSlot = () => {
+  activeRenders -= 1;
+  waiting.shift()?.();
+};
+
+/**
  * Draws one PDF page to a visible canvas at a given CSS width.
  *
  * The page is only ever *displayed*: nothing here reads pixels back
@@ -69,9 +94,16 @@ export function PdfPageCanvas({
         setHeight(cssHeight);
         onSize?.({ width: cssWidth, height: cssHeight });
 
-        task = page.render({ canvas, viewport });
-        await task.promise;
-        if (!cancelled) setResult({ key, state: "ready" });
+        await acquireRenderSlot();
+        try {
+          // Something else may have taken over while this page waited its turn.
+          if (cancelled) return;
+          task = page.render({ canvas, viewport });
+          await task.promise;
+          if (!cancelled) setResult({ key, state: "ready" });
+        } finally {
+          releaseRenderSlot();
+        }
       } catch (error) {
         // A cancelled render rejects by design; only a real failure is shown.
         if (

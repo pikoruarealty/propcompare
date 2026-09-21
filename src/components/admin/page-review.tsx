@@ -3,7 +3,6 @@
 import * as React from "react";
 import { Dialog } from "radix-ui";
 import { useRouter } from "next/navigation";
-import { Sparkles } from "lucide-react";
 import { BrochureViewer } from "@/components/admin/pdf/brochure-viewer";
 import { Button } from "@/components/ui/button";
 import type { PageCategory, PageSuggestion } from "@/lib/ocr/page-router";
@@ -204,7 +203,7 @@ export function PageReview({
       }
       setRoutingConfirmed(true);
     } catch {
-      setError("Page routing could not be confirmed. Check your connection.");
+      setError("Could not save your page choices. Check your connection.");
     } finally {
       setSaving(false);
     }
@@ -221,7 +220,7 @@ export function PageReview({
         setError(
           await readError(
             response,
-            "Extraction could not be queued. Refresh and try again.",
+            "Could not start reading the pages. Refresh and try again.",
           ),
         );
         setQueueOpen(false);
@@ -230,7 +229,7 @@ export function PageReview({
       setQueueOpen(false);
       router.refresh();
     } catch {
-      setError("Extraction could not be queued. Check your connection.");
+      setError("Could not start reading the pages. Check your connection.");
       setQueueOpen(false);
     } finally {
       setQueueing(false);
@@ -251,14 +250,18 @@ export function PageReview({
       <section className="border-border bg-card flex flex-wrap items-center justify-between gap-4 rounded-lg border p-5">
         <div className="max-w-prose">
           <p className="font-display text-xl">
-            {suggestions === null
-              ? "Categorize the brochure pages"
-              : "Brochure page categories"}
+            {!editable
+              ? "Brochure pages"
+              : suggestions === null
+                ? "Categorize the brochure pages"
+                : "Brochure page categories"}
           </p>
           <p className="text-muted-foreground mt-1 text-sm">
             {editable
               ? "Check every category below. Pages you leave unselected are explicitly ignored."
-              : "Extraction is queued. The confirmed page routing is locked, but every page remains viewable."}
+              : ocrJobStatus === "queued" || ocrJobStatus === "processing"
+                ? "The pages are being read. Your page choices are locked, but you can still look at every page."
+                : "Your page choices are locked because the pages have been read. You can still look at every page."}
           </p>
         </div>
         {editable ? (
@@ -270,13 +273,25 @@ export function PageReview({
             onClick={suggest}
             disabled={running}
           >
-            <Sparkles aria-hidden="true" />
             {running
               ? "Categorizing pages…"
               : suggestions === null
                 ? "Categorize brochure pages"
                 : "Categorize again"}
           </Button>
+        ) : null}
+        {running ? (
+          <div
+            role="status"
+            className="border-primary/40 bg-tone-terracotta flex w-full items-center gap-3 rounded-md border px-4 py-3 text-sm"
+          >
+            <span
+              aria-hidden="true"
+              className="border-primary/25 border-t-primary size-5 shrink-0 animate-spin rounded-full border-[3px] motion-reduce:animate-none"
+            />
+            Looking at each page. This takes about a minute, and longer for a
+            big brochure. Keep this page open.
+          </div>
         ) : null}
       </section>
 
@@ -290,7 +305,7 @@ export function PageReview({
           role="status"
           className="border-border bg-muted rounded-lg border px-4 py-3 text-sm"
         >
-          Page routing is confirmed. Queue Claude extraction when you are ready.
+          Your page choices are saved. Read the pages when you are ready.
         </p>
       ) : null}
 
@@ -323,9 +338,11 @@ export function PageReview({
       {editable ? (
         <section className="border-border bg-card flex flex-wrap items-center justify-between gap-4 rounded-lg border p-5">
           <div className="max-w-prose">
-            <p className="font-display text-lg">1. Confirm page routing</p>
+            <p className="font-display text-lg">
+              Step 1: Save your page choices
+            </p>
             <p className="text-muted-foreground mt-1 text-sm">
-              This saves the final page choices. It does not start extraction.
+              This keeps the choices you made above. Nothing is read yet.
             </p>
           </div>
           <Button
@@ -335,10 +352,10 @@ export function PageReview({
             disabled={saving || untyped > 0}
           >
             {saving
-              ? "Confirming pages…"
+              ? "Saving…"
               : routingConfirmed
-                ? "Save routing changes"
-                : "Confirm page routing"}
+                ? "Save changes"
+                : "Save page choices"}
           </Button>
         </section>
       ) : null}
@@ -346,27 +363,28 @@ export function PageReview({
       {editable && routingConfirmed ? (
         <section className="border-border bg-card flex flex-wrap items-center justify-between gap-4 rounded-lg border p-5">
           <div className="max-w-prose">
-            <p className="font-display text-lg">2. Queue Claude extraction</p>
+            <p className="font-display text-lg">Step 2: Read the pages</p>
             <p className="text-muted-foreground mt-1 text-sm">
-              Claude will read only the confirmed pages. You can still change
-              routing before queueing.
+              Only the pages you chose are read, to fill in a draft listing. You
+              can still change your choices before you start.
             </p>
           </div>
           <Dialog.Root open={queueOpen} onOpenChange={setQueueOpen}>
             <Dialog.Trigger asChild>
               <Button type="button" size="lg">
-                Queue extraction
+                Read the pages
               </Button>
             </Dialog.Trigger>
             <Dialog.Portal>
               <Dialog.Overlay className="fixed inset-0 z-50 bg-[color-mix(in_oklab,var(--color-ink)_55%,transparent)]" />
-              <Dialog.Content className="bg-background fixed top-1/2 left-1/2 z-50 w-[min(calc(100vw-2rem),30rem)] -translate-x-1/2 -translate-y-1/2 rounded-lg border p-6 shadow-lg">
+              <Dialog.Content className="bg-background fixed top-1/2 left-1/2 z-50 w-[min(calc(100vw-2rem),30rem)] -translate-x-1/2 -translate-y-1/2 rounded-lg border p-6">
                 <Dialog.Title className="font-display text-2xl">
-                  Queue Claude extraction?
+                  Read the chosen pages?
                 </Dialog.Title>
                 <Dialog.Description className="text-muted-foreground mt-2 text-sm">
-                  Claude will read the pages you confirmed and create a draft
-                  for review. Page routing will then be locked.
+                  The pages you chose will be read to fill in a draft listing
+                  for you to review. This uses the paid reading service, and
+                  your page choices are locked while it runs.
                 </Dialog.Description>
                 <div className="mt-6 flex justify-end gap-3">
                   <Dialog.Close asChild>
@@ -375,7 +393,7 @@ export function PageReview({
                     </Button>
                   </Dialog.Close>
                   <Button type="button" onClick={queue} disabled={queueing}>
-                    {queueing ? "Queueing…" : "Queue extraction"}
+                    {queueing ? "Starting…" : "Start reading"}
                   </Button>
                 </div>
               </Dialog.Content>
