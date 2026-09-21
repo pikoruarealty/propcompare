@@ -329,3 +329,52 @@ export const shortUnitTypeName = (name: string): string => {
     .trim();
   return short === "" ? name : short;
 };
+
+/**
+ * How much of a property's record is stated: a count of stated facts over the
+ * facts the dossier can hold. It measures completeness of the record only; it says
+ * nothing about the property's quality and is not a score or a ranking, so the
+ * dossier labels it "facts stated".
+ *
+ * What counts: the project facts (possession status and date, launch date,
+ * towers, units, pincode, description), the RERA facts (registration number,
+ * land area, carpet area range, construction progress), the developer's
+ * description and website, every catalog amenity and specification that is not
+ * `not_stated` (a stated "not offered" is a stated fact), and for each unit type
+ * its BHK, layout, unit count and the three area bases.
+ */
+export const dossierFactCount = (
+  dossier: PropertyDossier,
+): { stated: number; total: number } => {
+  const project = [
+    dossier.possession.status,
+    dossier.possession.possessionDate,
+    dossier.possession.launchDate,
+    dossier.totalTowers,
+    dossier.totalUnits,
+    dossier.location.pincode,
+    dossier.description,
+    dossier.rera.registrationNumber,
+    dossier.rera.projectLandAreaSqft,
+    dossier.rera.carpetAreaRangeMinSqft ?? dossier.rera.carpetAreaRangeMaxSqft,
+    dossier.rera.constructionProgressPercent,
+    dossier.developer.description,
+    dossier.developer.website,
+  ];
+  const catalog = [...dossier.amenities, ...dossier.specifications].map(
+    (item) => item.status !== "not_stated",
+  );
+  const variants = dossier.unitVariants.flatMap((variant) => {
+    const areas = areasByBasis(variant.areas);
+    return [
+      variant.bhkType,
+      variant.layoutType,
+      variant.totalUnitsOfVariant,
+      ...AREA_BASIS_ORDER.map((basis) => areas[basis]),
+    ];
+  });
+
+  const held = (value: unknown) => value !== null && value !== undefined;
+  const all = [...project.map(held), ...catalog, ...variants.map(held)];
+  return { stated: all.filter(Boolean).length, total: all.length };
+};

@@ -22,7 +22,7 @@ export default async function LoginPage({
     <AuthShell
       icon={Smartphone}
       title="Sign in with your mobile number"
-      description="We'll text you a code. New here? Verifying your number creates your account — there is no password to remember."
+      description="We'll text you a code. New here? Verifying your number creates your account. There is no password to remember."
       footer="We use your number only to verify you and to reach you about properties you ask about."
     >
       <BuyerLoginForm returnTo={returnTo} />

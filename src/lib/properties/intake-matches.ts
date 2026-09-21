@@ -154,10 +154,10 @@ export type MatchOutcome =
  * empty when it is not.
  */
 const REJECTED_MESSAGE =
-  "That search could not be run. Your answers are still here — go back and change one, or browse the whole catalog.";
+  "That search could not be run. Your answers are still here. Go back and change one, or browse the whole catalog.";
 
 const UNREACHABLE_MESSAGE =
-  "Your matches could not be loaded just now. Nothing you entered has been lost — try again, or browse the whole catalog.";
+  "Your matches could not be loaded just now. Nothing you entered has been lost. Try again, or browse the whole catalog.";
 
 /**
  * Posts the body and returns either the result or a message. It never throws:

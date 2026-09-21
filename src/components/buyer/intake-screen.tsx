@@ -1,7 +1,7 @@
 import type { FilterOptions } from "@/lib/properties/filter-options";
 import { IntakeFlow } from "./intake-flow";
 import { PageContainer, PageFrame, PageSection } from "./page-frame";
-import { BodyText, DisplayHeading, Eyebrow } from "./typography";
+import { Accent, BodyText, DisplayHeading, Eyebrow } from "./typography";
 
 /**
  * `/intake` — the guided start.
@@ -28,11 +28,11 @@ export function IntakeScreen({ options }: IntakeScreenProps) {
         <PageSection className="flex flex-col gap-4">
           <Eyebrow>Guided start</Eyebrow>
           <DisplayHeading level={1} className="max-w-3xl">
-            Four questions, then the catalog on your terms.
+            Four questions, then the catalog <Accent>on your terms.</Accent>
           </DisplayHeading>
           <BodyText className="text-muted-foreground text-lg">
             Answer as much or as little as you like. Nothing you enter is saved
-            or sent anywhere — it stays in this browser tab, and it is gone when
+            or sent anywhere. It stays in this browser tab, and it is gone when
             you close it.
           </BodyText>
         </PageSection>

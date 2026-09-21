@@ -13,7 +13,13 @@ import type {
 import { ActiveFilterChips, BrowseFilters } from "./browse-filters";
 import { GridRow, PageContainer, PageFrame, PageSection } from "./page-frame";
 import { PropertyCard } from "./property-card";
-import { BodyText, DisplayHeading, Eyebrow, TabularValue } from "./typography";
+import {
+  Accent,
+  BodyText,
+  DisplayHeading,
+  Eyebrow,
+  TabularValue,
+} from "./typography";
 
 /**
  * The browse screen: filters, the results grid, its empty states, and
@@ -219,12 +225,17 @@ export function BrowseScreen({
            */}
           <div className="flex flex-col gap-3">
             <Eyebrow>Browse</Eyebrow>
-            <DisplayHeading level={1}>Published properties</DisplayHeading>
+            <DisplayHeading level={1}>
+              Published <Accent>properties</Accent>
+            </DisplayHeading>
             <BodyText className="text-muted-foreground">
               Every property here is published, and every fact shown is one the
-              catalog records. Prices are not part of this catalog — compare on
+              catalog records. Prices are not part of this catalog. Compare on
               configuration, location, possession, and what a developer has
               actually stated.
+            </BodyText>
+            <BodyText className="text-foreground">
+              Press Compare on up to three properties to see them side by side.
             </BodyText>
           </div>
 

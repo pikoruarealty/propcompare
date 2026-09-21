@@ -113,7 +113,7 @@ export function BrowseFilters({ params, options }: BrowseFiltersProps) {
       action={BROWSE_PATH}
       data-slot="browse-filters"
       aria-label="Filter and sort properties"
-      className="border-border bg-card flex flex-col gap-6 rounded-lg border p-6"
+      className="border-border bg-tone-sage flex flex-col gap-6 rounded-lg border p-6"
     >
       {/*
        * Page size is preserved across a filter change but has no control of its

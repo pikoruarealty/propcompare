@@ -1,8 +1,8 @@
 # Tasklist — the visual pass (image-led buyer UI) and the admin add/edit flow
 
-**Status:** admin flow built 2026-09-20 (not yet driven in a real browser); the visual pass is not started. The owner is to add 2 to 3 more properties with good pictures, and OpenRouter credit is needed for any brochure upload. See "Pending" in `PROGRESS.md`.
+**Status:** admin flow built and driven in a real browser 2026-09-21; the visual pass is built through the dossier, comparison columns and intake heading, following `docs/design/no-vibecoded-tells.v1.md`. The owner is to add 2 to 3 more properties with good pictures, and OpenRouter credit is needed for any brochure upload. See "Pending" in `PROGRESS.md`.
 **Owner:** Bhavarth
-**References:** `docs/design/visual-direction.v1.md` (findings and order), `docs/design/comparison.v1.md`, `docs/design/design.v1.md`, `docs/design/design-tokens.md`, the Stitch export `_stitch_export/stitch_propcompare_residence_concierge/`, `AGENTS.md` (comparison is the product; no price; gold only for trust)
+**References:** `docs/design/no-vibecoded-tells.v1.md` (the design language and the 30 tells), `docs/design/visual-direction.v1.md` (findings and order), `docs/design/comparison.v1.md`, `docs/design/design.v1.md`, `docs/design/design-tokens.md`, the Stitch export `_stitch_export/stitch_propcompare_residence_concierge/`, `AGENTS.md` (comparison is the product; no price; gold only for trust)
 
 ## Owner feedback this answers (2026-09-20)
 
@@ -33,23 +33,23 @@
 - [x] Version history moves to the end of the page.
 - [x] Editing and reviewing at every stage before publication (the stuck-submission bug).
 - [x] Unit, integration and component tests (119 files, 1456 tests).
-- [ ] A real-browser run of adding a property from nothing to published, and of the previously stuck submission.
+- [x] A real-browser run of adding a property from nothing to published, and of the previously stuck submission (2026-09-21).
 
 ### Visual pass (see `visual-direction.v1.md`, in this order; none started)
 
 Owner additions (2026-09-20, later): the landing page must make the visitor feel it will help them decide and lead them to compare properties side by side; its copy must not claim facts come from "developer submissions and RERA records" (they are extracted from brochures and cross-checked with RERA); the tagline "Compare homes, not brochures" is rejected (candidates in `PROGRESS.md`); the footer copy needs the same fix.
 
-- [ ] 1 Foundations: type scale, elevated cards, tonal layers, chips, icons, hero treatment, buttons.
-- [ ] 2 Landing with the split hero, tagline, featured properties, three icon cards.
-- [ ] 3 Browse cards.
-- [ ] 4 Dossier (hero, gallery mosaic, key tiles, sticky side stack, amenity icons, completeness ring).
-- [ ] 5 Comparison restyle.
-- [ ] 6 Intake and shortlist.
+- [x] 1 Foundations: type scale, elevated cards, tonal layers, chips, icons, hero treatment, buttons.
+- [x] 2 Landing with the split hero, tagline, featured properties, three icon cards.
+- [x] 3 Browse cards.
+- [x] 4 Dossier (hero, gallery mosaic, key tiles, sticky side stack, amenity icons, completeness ring).
+- [x] 5 Comparison restyle (column photographs; re-inspect with two or more real properties).
+- [~] 6 Intake heading done; step cards and the shortlist page still to do.
 - [ ] Real-browser check on at least four properties at desktop and phone width.
 
 ### Documentation
 
-- [ ] `PROGRESS.md`, `DECISIONS.md`, this tasklist.
+- [x] `PROGRESS.md`, `DECISIONS.md`, this tasklist.
 
 ## Acceptance
 

@@ -349,8 +349,17 @@ describe("DossierScreen — media, with delivery deferred", () => {
 
   it("shows pictures through the media route with their credit, never by storage path", () => {
     const { container } = renderDossier(richDossierFixture);
-    const images = [...container.querySelectorAll("img")];
+    const heroImage = container.querySelector('[data-slot="dossier-hero"] img');
+    const images = [...container.querySelectorAll("img")].filter(
+      (img) => img !== heroImage,
+    );
 
+    // The opening plate shows the primary photograph in full; the gallery shows
+    // every picture as a thumbnail.
+    const primary = richDossierFixture.media.find(
+      (item) => item.mediaType === "photo" && item.isPrimary,
+    );
+    expect(heroImage).toHaveAttribute("src", `/api/v1/media/${primary?.id}`);
     expect(images.map((img) => img.getAttribute("src"))).toEqual(
       richDossierFixture.media.map(
         (item) => `/api/v1/media/${item.id}?size=thumb`,

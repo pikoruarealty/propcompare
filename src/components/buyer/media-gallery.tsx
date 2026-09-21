@@ -116,7 +116,13 @@ export function MediaGallery({ sections }: { sections: GallerySection[] }) {
                         {group.heading}
                       </h3>
                     ) : null}
-                    <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+                    <ul
+                      className={
+                        section.fit === "cover"
+                          ? "grid grid-cols-1 gap-4 sm:grid-cols-2"
+                          : "grid grid-cols-2 gap-4 sm:grid-cols-3"
+                      }
+                    >
                       {group.items.map((item, position) => (
                         <li key={item.id} data-slot="media-item">
                           <button

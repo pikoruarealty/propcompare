@@ -152,15 +152,16 @@ function ColumnHeader({
       data-slot="compare-column-header"
       className={cn("min-w-0 px-3 py-3", hidden && "hidden md:block")}
     >
+      {column.primaryMediaId ? (
+        // A plate above each name, so the columns are recognisable at a glance.
+        // eslint-disable-next-line @next/next/no-img-element -- a served thumbnail, not a static asset
+        <img
+          src={`/api/v1/media/${column.primaryMediaId}?size=thumb`}
+          alt=""
+          className="bg-tone-deep mb-3 hidden h-20 w-full rounded-md object-cover md:block"
+        />
+      ) : null}
       <div className="flex items-start justify-between gap-2">
-        {column.primaryMediaId ? (
-          // eslint-disable-next-line @next/next/no-img-element -- a served thumbnail, not a static asset
-          <img
-            src={`/api/v1/media/${column.primaryMediaId}?size=thumb`}
-            alt=""
-            className="bg-muted hidden size-11 shrink-0 rounded object-cover md:block"
-          />
-        ) : null}
         <div className="min-w-0 flex-1">
           <Link
             href={`/properties/${column.slug}`}
@@ -454,7 +455,7 @@ export function CompareScreen({
           style={colsStyle(count)}
           className={cn(
             gridClasses,
-            "border-border bg-card sticky top-0 z-30 rounded-t-lg border-b shadow-[0_2px_8px_rgb(0_0_0/0.04)]",
+            "border-border bg-card sticky top-0 z-30 rounded-t-lg border-b",
           )}
         >
           <div className="hidden px-3 py-3 md:block" />

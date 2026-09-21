@@ -22,7 +22,7 @@ export function CompareTray() {
       <aside
         data-slot="compare-tray"
         aria-label="Properties to compare"
-        className="border-border bg-card fixed inset-x-0 bottom-0 z-40 border-t shadow-[0_-4px_16px_rgb(0_0_0/0.06)]"
+        className="border-border bg-card fixed inset-x-0 bottom-0 z-40 border-t"
       >
         <div className="mx-auto flex max-w-[var(--layout-max-width)] flex-wrap items-center gap-3 px-[var(--layout-margin-mobile)] py-3 md:px-[var(--layout-margin-desktop)]">
           <ul className="flex min-w-0 flex-1 flex-nowrap items-center gap-2 overflow-x-auto [scrollbar-width:none] sm:flex-wrap [&::-webkit-scrollbar]:hidden">

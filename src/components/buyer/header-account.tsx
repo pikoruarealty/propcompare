@@ -30,7 +30,7 @@ export function HeaderAccount() {
     return (
       <Link
         href={`/login${next}`}
-        className="text-muted-foreground hover:text-foreground text-sm transition-colors"
+        className="text-muted-foreground hover:text-foreground text-sm whitespace-nowrap transition-colors"
       >
         Sign in
       </Link>

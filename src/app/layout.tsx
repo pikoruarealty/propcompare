@@ -16,7 +16,7 @@ const plusJakartaSans = Plus_Jakarta_Sans({
 export const metadata: Metadata = {
   title: "PropCompare",
   description:
-    "Compare Ahmedabad properties side by side — evidence-backed data, not marketing copy.",
+    "Compare Ahmedabad properties side by side, with facts read from brochures and checked against RERA.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

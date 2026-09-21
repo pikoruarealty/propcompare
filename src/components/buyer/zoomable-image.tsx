@@ -247,7 +247,7 @@ export function ZoomableImage({
       />
       <div
         data-slot="zoom-controls"
-        className="border-border bg-card/90 absolute right-2 bottom-2 flex items-center gap-1 rounded-md border p-1 text-sm shadow-sm"
+        className="border-border bg-card/90 absolute right-2 bottom-2 flex items-center gap-1 rounded-md border p-1 text-sm"
       >
         <button
           type="button"

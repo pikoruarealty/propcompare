@@ -277,7 +277,7 @@ export function IntakeFlow({ options }: IntakeFlowProps) {
             <>
               <BodyText className="text-muted-foreground text-sm">
                 Choose up to {MAX_PRIORITIES}. Each one is answered from facts
-                this catalog publishes — nothing here is inferred.
+                this catalog publishes. Nothing here is inferred.
               </BodyText>
               <fieldset className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <legend className="sr-only">Your priorities</legend>
@@ -358,7 +358,7 @@ export function IntakeFlow({ options }: IntakeFlowProps) {
               <BodyText className="text-muted-foreground text-sm">
                 This is your own figure, in your own terms. PropCompare does not
                 publish prices, and nothing here will be shown as costing what
-                you set. Your range stays on this device — it is not sent
+                you set. Your range stays on this device. It is not sent
                 anywhere, and it is not part of the link to your results.
               </BodyText>
 
@@ -451,7 +451,7 @@ export function IntakeFlow({ options }: IntakeFlowProps) {
                         .join(
                           " and ",
                         )}. Your priorities and your stated range are not part of that link.`
-                  : "Your range is sent with this search so the catalog can be matched against it, and it is not saved, not written to your address bar, and not kept after you leave. Your priorities are not sent — no published fact ranks against them."}
+                  : "Your range is sent with this search so the catalog can be matched against it, and it is not saved, not written to your address bar, and not kept after you leave. Your priorities are not sent, because no published fact ranks against them."}
               </BodyText>
             </>
           ) : null}

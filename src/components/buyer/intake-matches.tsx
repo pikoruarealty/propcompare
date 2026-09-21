@@ -51,7 +51,7 @@ function SearchedSpan({ range }: { range: StatedRange }) {
     <div data-slot="searched-span" className="flex flex-col gap-2">
       <BodyText className="text-muted-foreground text-sm">
         You said {formatStatedRange(range)}. We searched a little either side of
-        that — {describeSearchedSpan(range)} — because a property just outside a
+        that ({describeSearchedSpan(range)}), because a property just outside a
         stated range is still worth seeing.
       </BodyText>
 
@@ -68,8 +68,8 @@ function SearchedSpan({ range }: { range: StatedRange }) {
           data-slot="open-top-disclosure"
           className="text-muted-foreground text-sm"
         >
-          You left the top end open, so this search has no upper limit —
-          everything published above that figure is included.
+          You left the top end open, so this search has no upper limit.
+          Everything published above that figure is included.
         </BodyText>
       ) : null}
     </div>

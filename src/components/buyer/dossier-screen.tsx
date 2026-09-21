@@ -17,6 +17,7 @@ import {
   formatAreaRange,
   formatPercent,
   formatRoomDimension,
+  dossierFactCount,
   formatSqft,
   groupByCategory,
   humaniseCategory,
@@ -34,7 +35,7 @@ import type {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CompareToggle } from "./compare-toggle";
 import { FactValue } from "./fact-value";
-import { GridRow, PageContainer, PageFrame, PageSection } from "./page-frame";
+import { PageContainer, PageFrame, PageSection } from "./page-frame";
 import { BodyText, DisplayHeading, Eyebrow, TabularValue } from "./typography";
 import { VerifiedBadge, reraVerifiedFact } from "./verified-badge";
 
@@ -69,16 +70,31 @@ const MEDIA_TYPE_LABEL: Record<MediaType, string> = {
 function Fact({
   label,
   children,
+  large,
 }: {
   label: string;
   children: React.ReactNode;
+  /** Set as a headline figure (the key-facts band) rather than running detail. */
+  large?: boolean;
 }) {
   return (
-    <div className="flex flex-col gap-1">
+    <div
+      className={
+        large
+          ? "flex flex-col gap-2 lg:px-6 lg:first:pl-0"
+          : "flex flex-col gap-1"
+      }
+    >
       <dt>
         <Eyebrow>{label}</Eyebrow>
       </dt>
-      <dd className="text-foreground text-sm">{children}</dd>
+      <dd
+        className={
+          large ? "text-foreground text-xl" : "text-foreground text-sm"
+        }
+      >
+        {children}
+      </dd>
     </div>
   );
 }
@@ -155,7 +171,10 @@ function Section({
   children: React.ReactNode;
 } & React.ComponentProps<"section">) {
   return (
-    <section className="flex flex-col gap-4" {...props}>
+    <section
+      className="border-border flex scroll-mt-24 flex-col gap-4 border-t pt-8"
+      {...props}
+    >
       <DisplayHeading level={2} className="text-3xl">
         {title}
       </DisplayHeading>
@@ -304,7 +323,11 @@ function MediaSection({
 }) {
   if (media.length === 0) {
     return (
-      <Section title="Photos and plans" data-slot="dossier-media">
+      <Section
+        title="Photos and plans"
+        id="photos-and-plans"
+        data-slot="dossier-media"
+      >
         <BodyText className="text-muted-foreground" data-slot="media-empty">
           No photos, floor plans, or other media have been published for this
           property.
@@ -371,7 +394,7 @@ function MediaSection({
           {
             key: "floor-plans",
             title: "Floor plans",
-            open: false,
+            open: true,
             fit: "contain" as const,
             groups: onlyGroup
               ? [{ heading: null, items: onlyGroup.items }]
@@ -382,7 +405,11 @@ function MediaSection({
   ];
 
   return (
-    <Section title="Photos and plans" data-slot="dossier-media">
+    <Section
+      title="Photos and plans"
+      id="photos-and-plans"
+      data-slot="dossier-media"
+    >
       {sections.length > 0 ? <MediaGallery sections={sections} /> : null}
       {documents.length > 0 ? (
         <ul className="flex flex-col gap-2">
@@ -409,11 +436,13 @@ function MediaSection({
 
 function CatalogSection({
   title,
+  id,
   slot,
   items,
   emptyMessage,
 }: {
   title: string;
+  id: string;
   slot: string;
   items: readonly {
     key: string;
@@ -426,7 +455,7 @@ function CatalogSection({
 }) {
   if (items.length === 0) {
     return (
-      <Section title={title} data-slot={slot}>
+      <Section title={title} id={id} data-slot={slot}>
         <BodyText className="text-muted-foreground">{emptyMessage}</BodyText>
       </Section>
     );
@@ -448,7 +477,7 @@ function CatalogSection({
   const unrecorded = items.filter((item) => item.status === "not_stated");
 
   return (
-    <Section title={title} data-slot={slot}>
+    <Section title={title} id={id} data-slot={slot}>
       {/*
        * No "nothing was recorded" message when every row is unrecorded: the
        * disclosure below already says so, with a count, and saying it twice
@@ -516,6 +545,17 @@ export interface DossierScreenProps {
   dossier: PropertyDossier;
 }
 
+/** The sections a reader can jump to, in page order. */
+const SECTION_LINKS = [
+  { href: "#photos-and-plans", label: "Photos and plans" },
+  { href: "#configurations", label: "Configurations" },
+  { href: "#amenities", label: "Amenities" },
+  { href: "#specifications", label: "Specifications" },
+  { href: "#rera", label: "RERA" },
+  { href: "#location", label: "Location" },
+  { href: "#developer", label: "Developer" },
+] as const;
+
 export function DossierScreen({ dossier }: DossierScreenProps) {
   const { location, possession, rera, developer } = dossier;
   const verifiedFact = reraVerifiedFact(rera);
@@ -525,6 +565,14 @@ export function DossierScreen({ dossier }: DossierScreenProps) {
     rera.carpetAreaRangeMinSqft,
     rera.carpetAreaRangeMaxSqft,
   );
+  const heroPhoto =
+    dossier.media.find((m) => m.mediaType === "photo" && m.isPrimary) ??
+    dossier.media.find((m) => m.mediaType === "photo") ??
+    null;
+  const counts = dossierFactCount(dossier);
+  const confirmedByRera =
+    rera.lastCheckedAt === null ? 0 : rera.sourcedFacts.length;
+  const overImage = heroPhoto !== null;
 
   return (
     <PageFrame>
@@ -542,201 +590,340 @@ export function DossierScreen({ dossier }: DossierScreenProps) {
       />
 
       <PageContainer>
-        <PageSection className="flex flex-col gap-12">
-          <div className="flex flex-col gap-4">
-            <Link
-              href={BROWSE_PATH}
-              className="text-muted-foreground hover:text-foreground w-fit text-sm underline underline-offset-4"
-            >
-              Back to all properties
-            </Link>
+        <div className="pt-6 pb-4">
+          <Link
+            href={BROWSE_PATH}
+            className="text-muted-foreground hover:text-foreground w-fit text-sm underline underline-offset-4"
+          >
+            Back to all properties
+          </Link>
+        </div>
 
+        {/*
+         * The opening plate: the primary photograph, large, with the name over it.
+         * A property with no photograph opens on a tonal band with the same text
+         * in ink. Nothing here states more than the facts below it.
+         */}
+        <header
+          data-slot="dossier-hero"
+          className={
+            overImage
+              ? "relative flex min-h-[26rem] items-end overflow-hidden rounded-lg md:min-h-[32rem]"
+              : "bg-tone-sage border-border rounded-lg border"
+          }
+        >
+          {heroPhoto ? (
+            <>
+              {/* eslint-disable-next-line @next/next/no-img-element -- served through the media route, never by storage path */}
+              <img
+                src={`/api/v1/media/${heroPhoto.id}`}
+                alt={`${dossier.name}, ${location.locality}`}
+                fetchPriority="high"
+                className="absolute inset-0 size-full object-cover"
+              />
+              <div
+                aria-hidden="true"
+                className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/35 to-black/5"
+              />
+            </>
+          ) : null}
+          <div
+            className={
+              overImage
+                ? "relative flex w-full flex-col gap-4 p-6 text-white md:p-10"
+                : "flex w-full flex-col gap-4 p-6 md:p-10"
+            }
+          >
             <div className="flex flex-col gap-2">
-              <Eyebrow>{dossier.propertyType.label}</Eyebrow>
-              <DisplayHeading level={1}>{dossier.name}</DisplayHeading>
-              <p className="text-muted-foreground text-base">
+              <Eyebrow className={overImage ? "text-white/80" : undefined}>
+                {dossier.propertyType.label}
+              </Eyebrow>
+              <DisplayHeading
+                level={1}
+                size="hero"
+                className={
+                  overImage
+                    ? "text-5xl text-white md:text-7xl"
+                    : "text-5xl md:text-7xl"
+                }
+              >
+                {dossier.name}
+              </DisplayHeading>
+              <p
+                className={
+                  overImage
+                    ? "text-base text-white/85"
+                    : "text-muted-foreground text-base"
+                }
+              >
                 {developer.name} · {location.locality}, {location.city}
               </p>
             </div>
-
             <div className="flex flex-wrap items-center gap-3">
               {/* Renders nothing without a registration number to assert. */}
               <VerifiedBadge fact={verifiedFact} />
               <CompareToggle
                 slug={dossier.slug}
                 name={dossier.name}
-                mediaId={
-                  dossier.media.find((media) => media.isPrimary)?.id ??
-                  dossier.media[0]?.id ??
-                  null
-                }
+                mediaId={heroPhoto?.id ?? dossier.media[0]?.id ?? null}
               />
             </div>
+          </div>
+        </header>
+        {heroPhoto?.attribution ? (
+          <p
+            data-slot="hero-credit"
+            className="text-muted-foreground pt-2 text-xs tracking-[0.08em] uppercase"
+          >
+            Photograph credit: {heroPhoto.attribution}
+          </p>
+        ) : null}
 
-            {dossier.description === null ? null : (
-              <BodyText>{dossier.description}</BodyText>
-            )}
+        {dossier.description === null ? null : (
+          <BodyText className="pt-8 text-lg leading-8">
+            {dossier.description}
+          </BodyText>
+        )}
+
+        <dl
+          data-slot="key-facts"
+          className="border-border mt-10 grid grid-cols-2 gap-x-6 gap-y-8 border-y py-8 sm:grid-cols-3 lg:grid-cols-5 lg:gap-x-0 lg:divide-x"
+        >
+          <Fact label="Possession" large>
+            <FactValue
+              value={
+                possession.status === null
+                  ? null
+                  : POSSESSION_STATUS_LABEL[possession.status]
+              }
+            />
+          </Fact>
+          <Fact label="Possession date" large>
+            <FactValue value={possessionDate} tabular />
+            <ReraSource rera={rera} fact="possession_date" />
+          </Fact>
+          <Fact label="Launched" large>
+            <FactValue value={launchDate} tabular />
+          </Fact>
+          <Fact label="Towers" large>
+            <FactValue value={dossier.totalTowers} tabular />
+          </Fact>
+          <Fact label="Units" large>
+            <FactValue value={dossier.totalUnits} tabular />
+            <ReraSource rera={rera} fact="total_units" />
+          </Fact>
+        </dl>
+
+        <PageSection className="grid grid-cols-1 gap-12 lg:grid-cols-12">
+          <div className="flex min-w-0 flex-col gap-14 lg:col-span-8">
+            <MediaSection
+              media={dossier.media}
+              unitVariants={dossier.unitVariants}
+            />
+
+            <Section
+              title="Configurations"
+              id="configurations"
+              data-slot="dossier-variants"
+            >
+              {dossier.unitVariants.length === 0 ? (
+                <BodyText className="text-muted-foreground">
+                  No unit configurations have been published for this property.
+                </BodyText>
+              ) : (
+                <Configurations variants={dossier.unitVariants} />
+              )}
+            </Section>
+
+            <CatalogSection
+              title="Amenities"
+              id="amenities"
+              slot="dossier-amenities"
+              items={dossier.amenities}
+              emptyMessage="No amenities have been recorded for this property."
+            />
+
+            <CatalogSection
+              title="Specifications"
+              id="specifications"
+              slot="dossier-specifications"
+              items={dossier.specifications}
+              emptyMessage="No specifications have been recorded for this property."
+            />
+
+            <Section title="RERA" id="rera" data-slot="dossier-rera">
+              <dl className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                {/*
+                 * `registered: false` renders as "Not stated", not as "Not
+                 * registered". The column defaults to false and no code path sets
+                 * it — the field contract records that OCR never sets RERA
+                 * verification — so false means "no registration has been
+                 * recorded here", which is not the same claim as "this project is
+                 * not registered". Asserting the latter about a real project
+                 * would be a fabricated fact of the worst kind.
+                 */}
+                <Fact label="Registration">
+                  <FactValue value={rera.registered ? "Registered" : null} />
+                </Fact>
+                <Fact label="Registration number">
+                  <FactValue value={rera.registrationNumber} tabular />
+                  <ReraSource rera={rera} fact="registration_number" />
+                </Fact>
+                <Fact label="Last verified">
+                  <FactValue
+                    value={
+                      rera.lastVerifiedAt === null
+                        ? null
+                        : rera.lastVerifiedAt.slice(0, 10)
+                    }
+                    tabular
+                  />
+                </Fact>
+                <Fact label="Project land area">
+                  <FactValue
+                    value={
+                      formatSqft(rera.projectLandAreaSqft) === null
+                        ? null
+                        : `${formatSqft(rera.projectLandAreaSqft)} sq ft`
+                    }
+                    tabular
+                  />
+                </Fact>
+                <Fact label="Carpet area range">
+                  <FactValue value={carpetRange} tabular />
+                </Fact>
+                <Fact label="Construction progress">
+                  <FactValue
+                    value={formatPercent(rera.constructionProgressPercent)}
+                    tabular
+                  />
+                  <ReraSource rera={rera} fact="construction_progress" />
+                </Fact>
+              </dl>
+            </Section>
+
+            <Section
+              title="Location"
+              id="location"
+              data-slot="dossier-location"
+            >
+              <dl className="grid grid-cols-2 gap-6 sm:grid-cols-3">
+                <Fact label="Locality">
+                  <FactValue value={location.locality} />
+                </Fact>
+                <Fact label="City">
+                  <FactValue value={location.city} />
+                </Fact>
+                <Fact label="Pincode">
+                  <FactValue value={location.pincode} tabular />
+                </Fact>
+              </dl>
+            </Section>
+
+            <Section
+              title="Developer"
+              id="developer"
+              data-slot="dossier-developer"
+            >
+              <dl className="flex flex-col gap-4">
+                <Fact label="Name">
+                  <FactValue value={developer.name} />
+                </Fact>
+                <Fact label="About">
+                  <FactValue value={developer.description} />
+                </Fact>
+                <Fact label="Website">
+                  {developer.website === null ? (
+                    <FactValue value={null} />
+                  ) : (
+                    <a
+                      href={developer.website}
+                      rel="noopener noreferrer nofollow"
+                      target="_blank"
+                      className="underline underline-offset-4"
+                    >
+                      {developer.website}
+                    </a>
+                  )}
+                </Fact>
+              </dl>
+            </Section>
           </div>
 
-          <GridRow>
-            <dl
-              data-slot="key-facts"
-              className="border-border bg-card grid grid-cols-2 gap-6 rounded-lg border p-6 sm:grid-cols-3 md:col-span-12 lg:grid-cols-5"
-            >
-              <Fact label="Possession">
-                <FactValue
-                  value={
-                    possession.status === null
-                      ? null
-                      : POSSESSION_STATUS_LABEL[possession.status]
-                  }
-                />
-              </Fact>
-              <Fact label="Possession date">
-                <FactValue value={possessionDate} tabular />
-                <ReraSource rera={rera} fact="possession_date" />
-              </Fact>
-              <Fact label="Launched">
-                <FactValue value={launchDate} tabular />
-              </Fact>
-              <Fact label="Towers">
-                <FactValue value={dossier.totalTowers} tabular />
-              </Fact>
-              <Fact label="Units">
-                <FactValue value={dossier.totalUnits} tabular />
-                <ReraSource rera={rera} fact="total_units" />
-              </Fact>
-            </dl>
-          </GridRow>
-
-          <Section title="Configurations" data-slot="dossier-variants">
-            {dossier.unitVariants.length === 0 ? (
-              <BodyText className="text-muted-foreground">
-                No unit configurations have been published for this property.
-              </BodyText>
-            ) : (
-              <Configurations variants={dossier.unitVariants} />
-            )}
-          </Section>
-
-          <CatalogSection
-            title="Amenities"
-            slot="dossier-amenities"
-            items={dossier.amenities}
-            emptyMessage="No amenities have been recorded for this property."
-          />
-
-          <CatalogSection
-            title="Specifications"
-            slot="dossier-specifications"
-            items={dossier.specifications}
-            emptyMessage="No specifications have been recorded for this property."
-          />
-
-          <MediaSection
-            media={dossier.media}
-            unitVariants={dossier.unitVariants}
-          />
-
-          <Section title="RERA" data-slot="dossier-rera">
-            <dl className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-              {/*
-               * `registered: false` renders as "Not stated", not as "Not
-               * registered". The column defaults to false and no code path sets
-               * it — the field contract records that OCR never sets RERA
-               * verification — so false means "no registration has been
-               * recorded here", which is not the same claim as "this project is
-               * not registered". Asserting the latter about a real project
-               * would be a fabricated fact of the worst kind.
-               */}
-              <Fact label="Registration">
-                <FactValue value={rera.registered ? "Registered" : null} />
-              </Fact>
-              <Fact label="Registration number">
-                <FactValue value={rera.registrationNumber} tabular />
-                <ReraSource rera={rera} fact="registration_number" />
-              </Fact>
-              <Fact label="Last verified">
-                <FactValue
-                  value={
-                    rera.lastVerifiedAt === null
-                      ? null
-                      : rera.lastVerifiedAt.slice(0, 10)
-                  }
-                  tabular
-                />
-              </Fact>
-              <Fact label="Project land area">
-                <FactValue
-                  value={
-                    formatSqft(rera.projectLandAreaSqft) === null
-                      ? null
-                      : `${formatSqft(rera.projectLandAreaSqft)} sq ft`
-                  }
-                  tabular
-                />
-              </Fact>
-              <Fact label="Carpet area range">
-                <FactValue value={carpetRange} tabular />
-              </Fact>
-              <Fact label="Construction progress">
-                <FactValue
-                  value={formatPercent(rera.constructionProgressPercent)}
-                  tabular
-                />
-                <ReraSource rera={rera} fact="construction_progress" />
-              </Fact>
-            </dl>
-          </Section>
-
-          <Section title="Location" data-slot="dossier-location">
-            <dl className="grid grid-cols-2 gap-6 sm:grid-cols-3">
-              <Fact label="Locality">
-                <FactValue value={location.locality} />
-              </Fact>
-              <Fact label="City">
-                <FactValue value={location.city} />
-              </Fact>
-              <Fact label="Pincode">
-                <FactValue value={location.pincode} tabular />
-              </Fact>
-            </dl>
-          </Section>
-
-          <Section title="Developer" data-slot="dossier-developer">
-            <dl className="flex flex-col gap-4">
-              <Fact label="Name">
-                <FactValue value={developer.name} />
-              </Fact>
-              <Fact label="About">
-                <FactValue value={developer.description} />
-              </Fact>
-              <Fact label="Website">
-                {developer.website === null ? (
-                  <FactValue value={null} />
-                ) : (
-                  <a
-                    href={developer.website}
-                    rel="noopener noreferrer nofollow"
-                    target="_blank"
-                    className="underline underline-offset-4"
-                  >
-                    {developer.website}
-                  </a>
-                )}
-              </Fact>
-            </dl>
-          </Section>
-
-          <div>
-            <Link
-              href={BROWSE_PATH}
-              className="border-border text-foreground hover:border-[var(--color-terracotta)] inline-flex items-center rounded-lg border px-4 py-2 text-sm transition-colors"
-            >
-              Back to all properties
-            </Link>
-          </div>
+          {/*
+           * The side stack: short enough to stay in view while the page scrolls.
+           * How much of the record is stated (a count, never a score), and a
+           * jump list for a long page.
+           */}
+          <aside
+            aria-label="About this record"
+            className="lg:sticky lg:top-24 lg:col-span-4 lg:self-start"
+          >
+            <div className="bg-tone-sage border-border flex flex-col gap-6 rounded-lg border p-6">
+              <div
+                data-slot="dossier-completeness"
+                className="flex flex-col gap-3"
+              >
+                <Eyebrow>Facts stated</Eyebrow>
+                <p className="font-display text-5xl leading-none">
+                  {counts.stated}
+                  <span className="text-muted-foreground text-2xl">
+                    {" "}
+                    of {counts.total}
+                  </span>
+                </p>
+                <div
+                  role="img"
+                  aria-label={`${counts.stated} of ${counts.total} facts stated`}
+                  className="bg-border h-1.5 w-full overflow-hidden rounded-full"
+                >
+                  <div
+                    className="bg-primary h-full"
+                    style={{
+                      width: `${counts.total === 0 ? 0 : (counts.stated / counts.total) * 100}%`,
+                    }}
+                  />
+                </div>
+                <p className="text-muted-foreground text-xs leading-5">
+                  How much of this record has been stated. It says nothing about
+                  the property itself.
+                  {confirmedByRera > 0
+                    ? ` ${confirmedByRera} ${
+                        confirmedByRera === 1 ? "fact matches" : "facts match"
+                      } the GujRERA record.`
+                    : ""}
+                </p>
+              </div>
+              <nav
+                aria-label="On this page"
+                className="border-border border-t pt-5"
+              >
+                <Eyebrow>On this page</Eyebrow>
+                <ul className="mt-3 flex flex-col gap-2 text-sm">
+                  {SECTION_LINKS.map((link) => (
+                    <li key={link.href}>
+                      <a
+                        href={link.href}
+                        className="text-foreground hover:text-primary underline-offset-4 hover:underline"
+                      >
+                        {link.label}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </nav>
+            </div>
+          </aside>
         </PageSection>
+
+        <div className="pb-16">
+          <Link
+            href={BROWSE_PATH}
+            className="border-border text-foreground inline-flex items-center rounded-lg border px-4 py-2 text-sm transition-colors hover:border-[var(--color-terracotta)]"
+          >
+            Back to all properties
+          </Link>
+        </div>
       </PageContainer>
     </PageFrame>
   );

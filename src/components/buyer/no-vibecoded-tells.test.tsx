@@ -23,11 +23,7 @@ import { PropertyCard } from "./property-card";
 
 const BUYER_DIR = import.meta.dirname;
 
-const LEGACY = new Set<string>([
-  "compare-screen.tsx",
-  "compare-tray.tsx",
-  "zoomable-image.tsx",
-]);
+const LEGACY = new Set<string>([]);
 
 const BANNED: { name: string; pattern: RegExp }[] = [
   {

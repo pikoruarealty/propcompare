@@ -12,6 +12,7 @@ import {
   groupByCategory,
   humaniseCategory,
   readRoomDimensions,
+  dossierFactCount,
 } from "./dossier";
 import { richDossierFixture, sparseDossierFixture } from "./fixtures";
 import { findForbiddenKeys } from "./no-price";
@@ -289,5 +290,43 @@ describe("dossierJsonLd", () => {
 
     expect(address).not.toHaveProperty("postalCode");
     expect(address.addressLocality).toBe("Ahmedabad");
+  });
+});
+
+describe("dossierFactCount", () => {
+  it("counts stated facts over the facts the dossier can hold", () => {
+    const rich = dossierFactCount(richDossierFixture);
+    const sparse = dossierFactCount(sparseDossierFixture);
+
+    expect(rich.total).toBeGreaterThan(0);
+    expect(rich.stated).toBeLessThanOrEqual(rich.total);
+    expect(rich.stated / rich.total).toBeGreaterThan(
+      sparse.stated / sparse.total,
+    );
+  });
+
+  it("counts a stated not-offered fact but not an unstated one", () => {
+    const base = {
+      ...sparseDossierFixture,
+      amenities: [],
+      specifications: [],
+    };
+    const item = (
+      status: "available" | "not_stated" | "explicitly_not_offered",
+    ) => ({
+      key: status,
+      label: status,
+      category: "x",
+      status,
+      valueText: null,
+    });
+    const none = dossierFactCount({ ...base, amenities: [item("not_stated")] });
+    const offered = dossierFactCount({
+      ...base,
+      amenities: [item("explicitly_not_offered")],
+    });
+
+    expect(offered.total).toBe(none.total);
+    expect(offered.stated).toBe(none.stated + 1);
   });
 });

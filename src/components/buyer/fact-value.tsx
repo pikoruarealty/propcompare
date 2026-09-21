@@ -31,7 +31,7 @@ export const FACT_STATUS_LABEL: Record<CatalogItemStatus, string> = {
  */
 const FACT_STATUS_TITLE: Record<CatalogItemStatus, string> = {
   available: "Stated for this property.",
-  not_stated: "Not stated for this property — the fact has not been recorded.",
+  not_stated: "Not stated for this property. The fact has not been recorded.",
   explicitly_not_offered: "Stated as not offered for this property.",
 };
 
