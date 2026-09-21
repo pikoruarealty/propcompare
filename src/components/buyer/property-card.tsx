@@ -59,32 +59,55 @@ export function PropertyCard({ property }: PropertyCardProps) {
       aria-labelledby={headingId}
       className="border-border bg-card relative flex h-full flex-col overflow-hidden rounded-lg border transition-colors focus-within:border-[var(--color-terracotta)] hover:border-[var(--color-terracotta)]"
     >
-      <div
-        data-slot="property-card-media"
-        aria-hidden={property.primaryMedia ? undefined : true}
-        className="bg-muted border-border relative aspect-[4/3] w-full overflow-hidden border-b"
-      >
-        {property.primaryMedia ? (
-          // Served through the media route (a fresh short-lived link per request),
-          // never by storage path.
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={`/api/v1/media/${property.primaryMedia.id}?size=thumb`}
-            alt={`${property.name}, ${property.locality}`}
-            loading="lazy"
-            className={
-              property.primaryMedia.mediaType === "floor_plan"
-                ? "size-full object-contain"
-                : "size-full object-cover"
-            }
-          />
+      <div className="relative">
+        <div
+          data-slot="property-card-media"
+          aria-hidden={property.primaryMedia ? undefined : true}
+          className="bg-tone-deep relative aspect-[4/3] w-full overflow-hidden"
+        >
+          {property.primaryMedia ? (
+            // Served through the media route (a fresh short-lived link per request),
+            // never by storage path.
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={`/api/v1/media/${property.primaryMedia.id}?size=thumb`}
+              alt={`${property.name}, ${property.locality}`}
+              loading="lazy"
+              className={
+                property.primaryMedia.mediaType === "floor_plan"
+                  ? "size-full object-contain"
+                  : "size-full object-cover"
+              }
+            />
+          ) : null}
+        </div>
+        {/* Beside the frame, not inside it: the frame is hidden from assistive
+          technology when there is no picture, and these are real controls and
+          facts. */}
+        {property.reraRegistered ? (
+          // A plain statement of a stored fact, not the verified badge: the badge
+          // needs the registration number as its evidence, which lives on the
+          // dossier. Never gold.
+          <span
+            data-slot="property-card-rera"
+            className="bg-card text-foreground border-border absolute top-3 left-3 rounded-full border px-2.5 py-1 text-xs font-medium"
+          >
+            RERA registered
+          </span>
         ) : null}
+        <div className="absolute right-3 bottom-3 z-10">
+          <CompareToggle
+            slug={property.slug}
+            name={property.name}
+            mediaId={property.primaryMedia?.id ?? null}
+          />
+        </div>
       </div>
 
       <div className="flex flex-1 flex-col gap-4 p-6">
         <div className="flex flex-col gap-1">
           <Eyebrow>{property.propertyType.label}</Eyebrow>
-          <DisplayHeading level={3} id={headingId}>
+          <DisplayHeading level={3} id={headingId} className="text-3xl">
             {/*
              * The name is the card's only link, stretched over the whole card
              * so the entire surface is clickable without adding a second link
@@ -106,9 +129,11 @@ export function PropertyCard({ property }: PropertyCardProps) {
           {property.locality}, {property.city}
         </p>
 
-        <dl className="mt-auto flex flex-col gap-2 text-sm">
-          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-            <dt className="text-muted-foreground">Configuration</dt>
+        <dl className="mt-auto grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+          <div className="col-span-2 flex flex-col gap-1.5">
+            <dt className="text-muted-foreground text-xs tracking-[0.08em] uppercase">
+              Configuration
+            </dt>
             <dd className="flex flex-wrap gap-1.5">
               {property.bhkTypes.length === 0 ? (
                 <FactValue status="not_stated" />
@@ -117,7 +142,7 @@ export function PropertyCard({ property }: PropertyCardProps) {
                   <span
                     key={bhk.key}
                     data-slot="property-card-bhk"
-                    className="border-border bg-accent text-accent-foreground rounded-full border px-2 py-0.5 text-xs"
+                    className="bg-tone-sage text-accent-foreground rounded-full px-2.5 py-0.5 text-xs font-medium"
                   >
                     {bhk.label}
                   </span>
@@ -126,28 +151,24 @@ export function PropertyCard({ property }: PropertyCardProps) {
             </dd>
           </div>
 
-          <div className="flex flex-wrap items-baseline gap-x-2">
-            <dt className="text-muted-foreground">Possession</dt>
+          <div className="flex flex-col gap-1.5">
+            <dt className="text-muted-foreground text-xs tracking-[0.08em] uppercase">
+              Possession
+            </dt>
             <dd>
               <FactValue value={possessionStatus} />
             </dd>
           </div>
 
-          <div className="flex flex-wrap items-baseline gap-x-2">
-            <dt className="text-muted-foreground">Possession date</dt>
+          <div className="flex flex-col gap-1.5">
+            <dt className="text-muted-foreground text-xs tracking-[0.08em] uppercase">
+              Possession date
+            </dt>
             <dd>
               <FactValue value={possessionDate} tabular />
             </dd>
           </div>
         </dl>
-
-        <div className="relative z-10">
-          <CompareToggle
-            slug={property.slug}
-            name={property.name}
-            mediaId={property.primaryMedia?.id ?? null}
-          />
-        </div>
       </div>
     </article>
   );

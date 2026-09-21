@@ -48,9 +48,9 @@
   --background: var(--color-chalk);
   --foreground: var(--color-ink);
 
-  --card: #ffffff;
+  --card: color-mix(in oklab, white 55%, var(--color-chalk));
   --card-foreground: var(--color-ink);
-  --popover: #ffffff;
+  --popover: color-mix(in oklab, white 55%, var(--color-chalk));
   --popover-foreground: var(--color-ink);
 
   --primary: var(--color-terracotta);
@@ -79,6 +79,21 @@
   --ring: var(--color-terracotta);
 
   --radius: var(--radius-standard);
+
+  /*
+   * Depth is a tonal layer plus a hairline border, never a shadow
+   * (docs/design/no-vibecoded-tells.v1.md). Tints come from the documented
+   * palette by color-mix, so no colour is introduced.
+   */
+
+  /* Tonal layers derived from the documented palette. */
+  --tone-sage: color-mix(in oklab, var(--color-sage) 10%, var(--color-chalk));
+  --tone-terracotta: color-mix(
+    in oklab,
+    var(--color-terracotta) 8%,
+    var(--color-chalk)
+  );
+  --tone-deep: color-mix(in oklab, var(--color-ink) 4%, var(--color-chalk));
 }
 
 @theme inline {
@@ -117,12 +132,16 @@
   --color-input: var(--input);
   --color-ring: var(--ring);
 
-  /* 8px standard radius per the token spec; the scale steps off it. */
   --radius-DEFAULT: var(--radius-standard);
   --radius-sm: calc(var(--radius) * 0.5);
   --radius-md: calc(var(--radius) * 0.75);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) * 1.5);
+
+  /* Tonal layers (see :root). */
+  --color-tone-sage: var(--tone-sage);
+  --color-tone-terracotta: var(--tone-terracotta);
+  --color-tone-deep: var(--tone-deep);
 }
 
 @layer base {

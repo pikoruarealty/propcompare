@@ -1,0 +1,75 @@
+# The "vibecoded" tells, and how PropCompare avoids them
+
+**Status:** active, adopted 2026-09-21 at the owner's direction. It applies to every buyer surface and to the developer and admin portals where a rule makes sense there. Read it with `visual-direction.v1.md` (what the site becomes) and `design-tokens.md` (the palette, type and 8px rhythm). Where they disagree on a detail, this file wins, because it exists to stop the generic look.
+
+A site reads as generated when it uses the same dozen defaults everyone's tools reach for. Our answer is not decoration, it is **specificity**: real photographs, real data in the shape of the real comparison, our own palette and type, plain sentences. The list below is the checklist. Each line says what we do.
+
+## The rules
+
+| #   | Tell                         | What we do                                                                                                                                                                                                                          |
+| --- | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Harsh gradients              | None as decoration. The one allowed gradient is a plain dark scrim over a photograph so text on it stays legible.                                                                                                                   |
+| 2   | Lucide icons                 | Icons only when they carry meaning a word cannot (the compare add/tick, an amenity's own glyph in the amenity grid, a close button). Never an icon in a circle above a card title. Amenity icons are an owner decision (see below). |
+| 3   | Pure white background        | The page is Chalk. Cards use a warm tonal layer derived from Chalk, not `#fff`.                                                                                                                                                     |
+| 4   | Rainbow colouring            | The documented palette only. Gold is reserved for verified badges.                                                                                                                                                                  |
+| 5   | Drop shadows                 | None. Depth is a tonal layer plus a hairline border (already the token rule: "tonal-layer shading, not heavy drop shadows").                                                                                                        |
+| 6   | Three feature cards in a row | Do not use. Explanations are set as an editorial list (numbered, one column beside a heading) or as one real product excerpt.                                                                                                       |
+| 7   | Emojis                       | Never.                                                                                                                                                                                                                              |
+| 8   | Liquid glass                 | Never. (The sticky header blurs its own background slightly so text beneath does not clash; that is the limit.)                                                                                                                     |
+| 9   | Em dashes                    | Not in buyer copy. Use a full stop, a comma or a colon.                                                                                                                                                                             |
+| 10  | Inter, Geist, Space Grotesk  | Cormorant Garamond and Plus Jakarta Sans, as documented.                                                                                                                                                                            |
+| 11  | Coloured left stripe         | Never on a card, callout or quote. Emphasis comes from type and spacing.                                                                                                                                                            |
+| 12  | Fake testimonials            | Never. No quotes, logos or counts we cannot show.                                                                                                                                                                                   |
+| 13  | Bento grids                  | Do not use. The dossier gallery is a plain mosaic of real pictures, not tiles of mixed content.                                                                                                                                     |
+| 14  | Terminal window              | Not relevant.                                                                                                                                                                                                                       |
+| 15  | "It's not X, it's Y"         | Write the claim directly. No "not a catalogue, a comparison" headlines or paired negations. A plain factual negative is fine ("no prices").                                                                                         |
+| 16  | Checkmark bullets            | No tick lists.                                                                                                                                                                                                                      |
+| 17  | Three pricing tiers          | Not relevant, and there is no price anyway.                                                                                                                                                                                         |
+| 18  | No real product demos        | Show the real thing: a real property photograph, and a real comparison excerpt built from published data, on the landing page.                                                                                                      |
+| 19  | Soft corner radius           | 8px standard (`--radius-standard`), as the tokens say. No `rounded-2xl` or larger on cards, images or panels. Full-round is for small chips only.                                                                                   |
+| 20  | Purple and black             | Not in the palette.                                                                                                                                                                                                                 |
+| 21  | No skeleton loaders          | Every buyer route that reads data gets a `loading.tsx` skeleton shaped like the page.                                                                                                                                               |
+| 22  | Radial orbs                  | Never.                                                                                                                                                                                                                              |
+| 23  | Dot grids                    | Never.                                                                                                                                                                                                                              |
+| 24  | Sparkle icons                | Never; also no "AI" branding on buyer pages.                                                                                                                                                                                        |
+| 25  | Animated arrows              | No arrows that slide or bounce. A plain arrow in a link label is allowed only when it says "go".                                                                                                                                    |
+| 26  | No terms of service          | Needed before launch: terms page linked in the footer. It must be written or reviewed by the owner's counsel; we draft the structure only.                                                                                          |
+| 27  | No privacy policy            | Needed before launch, and it must describe what we actually collect (intake answers, enquiries, phone for OTP). Same review point.                                                                                                  |
+| 28  | Hover animations             | Colour or border change on hover only. No lift, no zoom, no slide.                                                                                                                                                                  |
+| 29  | Neon colours                 | Never.                                                                                                                                                                                                                              |
+| 30  | Basic pastel colours         | Tints are derived from our own palette with `color-mix` (`--tone-*`), never generic pastels.                                                                                                                                        |
+
+## The language that replaces them: the printed dossier
+
+Removing the tells is the floor. What we build instead has one idea: **PropCompare looks like a well-set architectural monograph, not an app template.** A monograph is beautiful because of its type, its photographs, its rules and its tables, not because of widgets. Our product is a comparison, which is a table, so the table is the hero graphic and everything else is set to serve it.
+
+**1. Structure comes from rules, tone and space, not boxes.** Sections are separated by a hairline rule or a full-width tonal band (`--tone-sage`, `--tone-terracotta`, `--tone-deep`) and generous margins. Cards are used only where a thing is genuinely an object you can pick (a property, a unit type). Layouts are asymmetric: a narrow heading column beside a wide content column, as in a book.
+
+**2. Type is the decoration.** Very large Cormorant display lines, one italic terracotta word per headline, small letter-spaced capitals for labels, and big serif numerals as graphic elements (the 1, 2, 3 of a list, a unit count, a year). Tabular Plus Jakarta for every figure. There is no icon in a circle; there is a number set at 48px.
+
+**3. Photographs are plates.** Full-bleed or large, never thumbnails in a tile. Each carries a caption line in small capitals with its credit, like a figure in a monograph ("Exterior, from the brochure. Credit: Sun VN Developers LLP"). Floor plans sit uncropped on a paper-toned ground, with their unit type as the caption.
+
+**4. Data is drawn from real values.** The visual devices are ours and honest: area bars on one shared scale across the compared properties, a room-proportion drawing from actual dimensions, a segmented "31 of 45 facts stated" bar in place of a score dial, a timeline for possession dates. Nothing is drawn that a stored value does not back.
+
+**5. Depth is paper, not glass.** Layers are a tone plus a hairline border, as sheets on a desk. A sticky element (header, the compare tray) is separated by a rule.
+
+**6. Colour is ink.** Ink black for text and rules, terracotta as the single accent (links, the one italic word, the primary button), sage as the supporting tone. Gold only on verified badges. The rest is Chalk.
+
+**7. Motion is only feedback.** Focus, pressed and selected states change colour or border. Nothing moves to decorate.
+
+**8. Voice is plain.** Declarative sentences, concrete numbers, no rhetorical pairs, no exclamations. "Three BHK against three BHK" beats "seamless comparison".
+
+**9. Shape is restrained.** 8px radius, rectangular buttons, small pill chips for facts only.
+
+**10. Show the product.** The landing page carries a real published property photograph and a real excerpt of the comparison built from published data, not an illustration of a comparison.
+
+Checked against the list: this uses no shadow, gradient, glass, orb, dot grid, sparkle, emoji, decorative icon, stripe, feature-card row or bento; its personality comes from type scale, the italic accent, photographs with credits, numerals and rules.
+
+## Enforcement
+
+`src/components/buyer/no-vibecoded-tells.test.tsx` fails the build on the ones a machine can see: shadow and large-radius utilities, hover lift and zoom, coloured side stripes, em dashes and emoji in rendered buyer copy. Files that predate the rule and have not been restyled yet are listed in that test's `LEGACY` set; a file leaves the set when the visual pass reaches it, and nothing is added to it.
+
+## Open decisions for the owner
+
+- **Icons.** `visual-direction.v1.md` plans an amenity icon grid, and Stitch uses icon chips. Lucide is the specific tell. Options: draw or commission one consistent amenity set, keep a small restrained set of Lucide glyphs in the amenity grid only, or use text chips with no icons. Until decided, the amenity grid stays text.
+- **Terms and privacy.** Someone with legal standing must approve the text before launch (see `docs/production-readiness.md`).

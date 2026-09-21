@@ -28,6 +28,7 @@ When choosing what to build next, comparison comes first. A change that makes da
 - Money is always `numeric`, never `float`. Exact prices never leave the `private` schema or the single service-role matching path that reads it (see `ARCHITECTURE.md`).
 - Controlled vocabularies (amenities, specifications) go through their catalog + synonym tables — no free-text amenity/spec fields.
 - Missing data is `not_stated` or `explicitly_not_offered`, never fabricated or left ambiguously blank.
+- The buyer UI follows [docs/design/no-vibecoded-tells.v1.md](docs/design/no-vibecoded-tells.v1.md): the 30 generic-template tells to avoid, and the "printed dossier" language that replaces them (no shadows, decorative icons, feature-card rows, stripes, em dashes; 8px radius; type, photographs, rules and real data as the decoration). A test enforces the mechanical ones.
 - `--color-verified-gold` (Soft Gold) is reserved strictly for Verified/trust badges — never used decoratively. See `docs/design/design-tokens.md`.
 
 ## Commits & branches

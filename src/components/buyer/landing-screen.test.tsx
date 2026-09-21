@@ -29,7 +29,7 @@ describe("LandingScreen — calls to action", () => {
   it("routes to the browse catalog", () => {
     const { main } = renderLanding();
     const links = within(main).getAllByRole("link", {
-      name: /browse properties|see what is published/i,
+      name: /browse properties|see what is published|choose homes to compare/i,
     });
 
     expect(links.length).toBeGreaterThan(0);
@@ -69,7 +69,9 @@ describe("LandingScreen — calls to action", () => {
     const { main } = renderLanding();
 
     expect(
-      within(main).getAllByRole("link", { name: /browse/i }).length,
+      within(main).getAllByRole("link", {
+        name: /browse|choose homes|see what is published/i,
+      }).length,
     ).toBeGreaterThan(0);
     expect(main).toHaveTextContent("Intake is optional");
   });
@@ -130,13 +132,13 @@ describe("LandingScreen — claims it is allowed to make", () => {
     }
   });
 
-  it("promises no matching or shortlist, which do not exist yet", () => {
+  it("promises no shortlist or saved properties, which do not exist yet", () => {
     // Matching, saves, and comparison are Phase 3. A landing page that
     // advertised them would be describing a product that is not there.
     const { main } = renderLanding();
     const text = (main.textContent ?? "").toLowerCase();
 
-    for (const forbidden of ["shortlist", "compare side by side", "saved"]) {
+    for (const forbidden of ["shortlist", "saved properties"]) {
       expect(text).not.toContain(forbidden);
     }
   });

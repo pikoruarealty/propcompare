@@ -19,21 +19,27 @@ type DisplayLevel = 1 | 2 | 3;
  * is editorial calm, not a full type scale nobody can hold in their head.
  */
 const DISPLAY_SIZES: Record<DisplayLevel, string> = {
-  1: "text-4xl leading-tight md:text-5xl",
-  2: "text-3xl leading-tight md:text-4xl",
+  1: "text-5xl leading-[1.05] tracking-tight md:text-6xl",
+  2: "text-4xl leading-[1.1] tracking-tight md:text-5xl",
   3: "text-2xl leading-snug",
 };
+
+/** The one oversize step, for a page's opening line (the landing hero). */
+const HERO_SIZE = "text-6xl leading-[0.98] tracking-tight md:text-8xl";
 
 export interface DisplayHeadingProps extends React.ComponentProps<
   "h1" | "h2" | "h3"
 > {
   /** Heading level; also selects the size step. */
   level?: DisplayLevel;
+  /** `hero` sets the line at display scale, larger than any level. */
+  size?: "hero";
 }
 
 /** Editorial display text: page titles, section headings, property names. */
 export function DisplayHeading({
   level = 2,
+  size,
   className,
   ...props
 }: DisplayHeadingProps) {
@@ -44,7 +50,7 @@ export function DisplayHeading({
       data-typography="display"
       className={cn(
         "font-display text-foreground font-normal text-balance",
-        DISPLAY_SIZES[level],
+        size === "hero" ? HERO_SIZE : DISPLAY_SIZES[level],
         className,
       )}
       {...props}
@@ -95,6 +101,21 @@ export function TabularValue({
     <span
       data-typography="tabular"
       className={cn("data-tabular", className)}
+      {...props}
+    />
+  );
+}
+
+/**
+ * The word or phrase in a headline that carries the meaning, set in the accent
+ * colour and italic. One per headline: emphasis on everything is emphasis on
+ * nothing.
+ */
+export function Accent({ className, ...props }: React.ComponentProps<"span">) {
+  return (
+    <span
+      data-typography="accent"
+      className={cn("text-primary italic", className)}
       {...props}
     />
   );

@@ -11,13 +11,14 @@ import { PageContainer } from "./page-frame";
  */
 export function SiteFooter() {
   return (
-    <footer className="border-border bg-background border-t">
+    <footer className="border-border bg-tone-deep border-t">
       <PageContainer>
         <div className="text-muted-foreground flex flex-col gap-2 py-8 text-sm md:flex-row md:items-start md:justify-between md:gap-16">
           <p>Published property facts for Ahmedabad and Gujarat.</p>
           <p className="max-w-prose md:text-right">
-            PropCompare does not publish prices. Facts are drawn from developer
-            submissions and RERA records, and are reviewed before publication.
+            PropCompare does not publish prices. Facts are read from developers’
+            brochures, cross-checked against the RERA register, and reviewed
+            before publication.
           </p>
         </div>
       </PageContainer>

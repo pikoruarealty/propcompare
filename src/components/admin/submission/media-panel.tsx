@@ -219,7 +219,11 @@ export function MediaPanel({
         </div>
       ) : null}
 
-      <h3 className="font-display text-xl">Pictures proposed in this edit</h3>
+      <h3 className="font-display text-xl">
+        {published.length > 0
+          ? "Pictures proposed in this edit"
+          : "Pictures for this listing"}
+      </h3>
       {media.length === 0 ? (
         <p className="border-border bg-card text-muted-foreground rounded-lg border p-6 text-sm">
           No images yet.
@@ -269,14 +273,17 @@ export function MediaPanel({
                 </p>
                 {reviewable ? (
                   <div className="flex flex-wrap gap-2 pt-1">
-                    <Button
-                      type="button"
-                      size="sm"
-                      disabled={pending}
-                      onClick={() => onReview(item.id, "confirmed", true)}
-                    >
-                      Approve
-                    </Button>
+                    {item.reviewStatus === "confirmed" &&
+                    item.isPublic ? null : (
+                      <Button
+                        type="button"
+                        size="sm"
+                        disabled={pending}
+                        onClick={() => onReview(item.id, "confirmed", true)}
+                      >
+                        Approve
+                      </Button>
+                    )}
                     <Button
                       type="button"
                       variant="outline"
