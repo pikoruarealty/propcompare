@@ -9,8 +9,8 @@ import { BodyText, DisplayHeading } from "@/components/buyer/typography";
  * the form. It follows the unlock-gate screen in the Stitch export — no
  * illustration, no marketing, one task.
  *
- * The panel uses the documented tonal layer (white on chalk with a 1px border
- * and a 4% ink lift), not a heavy shadow.
+ * The panel is the documented tonal layer: a card tone on chalk with a 1px
+ * border and flat depth (docs/design/no-vibecoded-tells.v1.md).
  */
 export function AuthShell({
   icon: Icon,
@@ -36,7 +36,7 @@ export function AuthShell({
 
       <section
         aria-labelledby="auth-heading"
-        className="border-border bg-card w-full max-w-md rounded-lg border p-8 shadow-[0_4px_20px_color-mix(in_oklab,var(--color-ink)_4%,transparent)]"
+        className="border-border bg-card w-full max-w-md rounded-lg border p-8"
       >
         <div className="flex flex-col items-center text-center">
           <span

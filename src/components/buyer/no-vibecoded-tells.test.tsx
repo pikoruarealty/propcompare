@@ -28,8 +28,7 @@ const LEGACY = new Set<string>([]);
 const BANNED: { name: string; pattern: RegExp }[] = [
   {
     name: "a drop shadow",
-    pattern:
-      /(?<![\w-])(?:hover:|focus:)?shadow(?:-(?!none)[\w[\]/.,()_-]+)?(?=[\s"'`])/,
+    pattern: /(?<![\w-])(?:hover:|focus:)?shadow(?:-(?!none)\S+)?(?=[\s"'`])/,
   },
   { name: "a corner radius above 12px", pattern: /rounded-(?:2xl|3xl)/ },
   {
@@ -47,12 +46,17 @@ const BANNED: { name: string; pattern: RegExp }[] = [
   },
 ];
 
-const sources = readdirSync(BUYER_DIR)
-  .filter((name) => /\.tsx$/.test(name) && !/\.test\.tsx$/.test(name))
-  .map((name) => ({
-    name,
-    text: readFileSync(path.join(BUYER_DIR, name), "utf8"),
-  }));
+/** The buyer components and the sign-in screens a buyer sees. */
+const SCANNED_DIRS = [BUYER_DIR, path.resolve(BUYER_DIR, "../auth")];
+
+const sources = SCANNED_DIRS.flatMap((dir) =>
+  readdirSync(dir)
+    .filter((name) => /\.tsx$/.test(name) && !/\.test\.tsx$/.test(name))
+    .map((name) => ({
+      name,
+      text: readFileSync(path.join(dir, name), "utf8"),
+    })),
+);
 
 const violations = (text: string) =>
   BANNED.filter(({ pattern }) => pattern.test(text)).map(({ name }) => name);

@@ -42,6 +42,7 @@ export type ApiErrorCode =
   | "unit_variant_not_found"
   | "saved_property_not_found"
   | "comparison_not_found"
+  | "enquiry_not_found"
   | "media_not_found"
   | "unauthenticated"
   | "phone_not_verified"

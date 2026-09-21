@@ -204,6 +204,29 @@ describe("POST /api/v1/comparisons", () => {
     expect(body.items[1].displayOrder).toBe(1);
     expect(findForbiddenKeys(body)).toEqual([]);
   });
+
+  it("returns the comparison already saved when the same one is saved again, in any order", async () => {
+    const items = [
+      { propertyId: propertyBId },
+      { propertyId: propertyAId, unitVariantId: propertyAVariantId },
+    ];
+    const first = await (await POST(request(buyerCookie, { items }))).json();
+    const again = await (
+      await POST(request(buyerCookie, { items: [...items].reverse() }))
+    ).json();
+
+    expect(again.id).toBe(first.id);
+    const list = await (
+      await GET(
+        new NextRequest("http://localhost/api/v1/comparisons", {
+          headers: { cookie: buyerCookie },
+        }),
+      )
+    ).json();
+    expect(
+      list.data.filter((c: { id: string }) => c.id === first.id),
+    ).toHaveLength(1);
+  });
 });
 
 describe("GET /api/v1/comparisons", () => {

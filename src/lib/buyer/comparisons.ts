@@ -142,6 +142,21 @@ export const createComparison = async (
     }
   }
 
+  // Saving the same comparison again (the same properties and unit types, in any
+  // order) returns the one already saved instead of adding a duplicate.
+  const signature = (
+    list: { propertyId: string; unitVariantId?: string | null }[],
+  ) =>
+    list
+      .map((item) => `${item.propertyId}~${item.unitVariantId ?? ""}`)
+      .sort()
+      .join("|");
+  const wanted = signature(items);
+  const already = (await listComparisons(db, userId)).find(
+    (comparison) => signature(comparison.items) === wanted,
+  );
+  if (already) return already;
+
   const result = await db.transaction(async (tx) => {
     const [comparison] = await tx
       .insert(comparisons)

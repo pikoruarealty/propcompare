@@ -79,6 +79,8 @@ Phases 2A and 2B run in parallel once Phase 1 lands, so both developers are work
 
 **Status (Deep's piece): the intake→matches wiring is complete 2026-09-18** ([its tasklist](tasklists/2026-09-18-intake-matches-ui.md)). `/intake`'s summary step now POSTs the stated range and renders matched properties in place — inside `/intake`, because no mechanism available today could carry the range to a separate address. The slider's "₹5 crore or more" sends `maxUnbounded: true` and is resolved against the catalog's own maximum, so the open end is genuinely open; the interim ceiling this slice shipped with lasted only until Bhavarth's contract change landed the same day. The remaining UI slices (comparison, saved properties, the OTP gate, enquiry submission) are now unblocked — all four routes exist as of 2026-09-18 — and each needs its own tasklist before implementation.
 
+**Status update 2026-09-21:** comparison slices 2 and 3 (room by room, floor plans, focus chips, saved comparisons, `/saved`), Save on the dossier, the enquiry form with the phone unlock, and the admin enquiry inbox are built ([tasklist](tasklists/2026-09-21-phase-3-buyer-flows.md)). Held for the owner: the pre-login intake cookie, report a problem / claim a listing, and comparison analytics (slice 4). Phase 3 is therefore not fully closed.
+
 **Acceptance:** a buyer can browse, get intake-matched results from the inclusive ±20% private budget-range matcher (no price ever rendered), compare, save, unlock a dossier via OTP, and submit an enquiry — end to end on real data.
 
 ---

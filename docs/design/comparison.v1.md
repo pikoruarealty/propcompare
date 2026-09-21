@@ -52,6 +52,6 @@ Everything below applies those, then goes further where our data lets us.
 ## Slices
 
 1. **Core** (this slice): selection tray, `/compare`, like-for-like unit type matching, grouped rows, summary block, size bars, provenance, sticky header, phone two-up.
-2. **Depth:** room-by-room comparison, floor plans side by side.
-3. **Personal:** focus chips from intake priorities, saved comparisons and the shortlist page (uses the existing routes, needs sign-in), shareable and printable brief.
+2. **Depth:** room-by-room comparison, floor plans side by side. **Built 2026-09-21.** Rooms are read as a kind from their published names (bedroom, living, kitchen, foyer, balcony, toilet), shown as stated and largest first, with no area computed from the sides; a room whose name does not clearly say what it is is left out, never guessed.
+3. **Personal:** focus chips from intake priorities, saved comparisons and the shortlist page (uses the existing routes, needs sign-in), shareable and printable brief. **Built 2026-09-21 except the printable brief.** The chips only reorder groups and the summary; they are in the address (`f=`) and start from the priorities guided intake leaves in the tab (never the stated range). Saving the same comparison twice returns the one saved. The shortlist is `/saved`.
 4. **Insight:** comparison behaviour as a developer-analytics signal, aggregated and price-free (see the developer analytics decision, 2026-09-19).

@@ -14,6 +14,7 @@ export const BUYER_NAV = [
   { href: "/properties", label: "Browse properties" },
   { href: "/intake", label: "Guided start" },
   { href: "/compare", label: "Compare" },
+  { href: "/saved", label: "Saved" },
 ] as const;
 
 export function SiteHeader() {

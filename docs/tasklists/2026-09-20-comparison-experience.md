@@ -1,6 +1,6 @@
 # Tasklist — the comparison experience (the product's core)
 
-**Status:** slice 1 built and verified 2026-09-20 (owner's decisions after seeing it: at most three properties; switch a property's unit type inside the table; sections collapsible); slices 2 to 4 not started
+**Status:** slice 1 built and verified 2026-09-20 (owner's decisions after seeing it: at most three properties; switch a property's unit type inside the table; sections collapsible); slices 2 and 3 built 2026-09-21 (see `2026-09-21-phase-3-buyer-flows.md`; the printable brief is not built); slice 4 (analytics) deferred, it needs a schema change and a privacy position
 **Owner:** Bhavarth (Deep is not developing; this was Deep's Phase 3 item and never had a screen)
 **Branch:** `task/phase-2a-completion` (buyer UI; to be merged with the phase)
 **References:** `docs/design/comparison.v1.md` (the specification), `docs/design/design.v1.md`, `docs/app-flows/buyer.md` (steps 5 and 6), `docs/product/prd.v1.md`, `docs/api/api-spec.v1.md` (`GET, POST /api/v1/comparisons`), the Stitch screens `comparison_the_decision_brief`, `comparison_story_high_fidelity_trade_offs`, `mobile_consideration_set_high_fidelity`, `DECISIONS.md` 2026-09-20 (comparison is the product)
@@ -28,7 +28,7 @@ The comparison API (`src/lib/buyer/comparisons.ts`) stores a signed-in buyer's c
 
 ### Documentation
 
-- [ ] `AGENTS.md`, `docs/product/prd.v1.md`, `docs/roadmap.md`, `DECISIONS.md`, `PROGRESS.md`, this tasklist; `docs/app-flows/buyer.md` and the api-spec note that comparing needs no sign-in.
+- [x] `AGENTS.md`, `docs/product/prd.v1.md`, `docs/roadmap.md`, `DECISIONS.md`, `PROGRESS.md`, this tasklist; `docs/app-flows/buyer.md` and the api-spec note that comparing needs no sign-in.
 
 ### Later slices
 

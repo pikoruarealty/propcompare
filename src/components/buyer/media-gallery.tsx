@@ -187,7 +187,7 @@ export function MediaGallery({ sections }: { sections: GallerySection[] }) {
               if (event.key === "ArrowRight") move(1);
               if (event.key === "ArrowLeft") move(-1);
             }}
-            className="bg-card fixed top-1/2 left-1/2 z-50 flex max-h-[92vh] w-[calc(100%-1.5rem)] max-w-4xl -translate-x-1/2 -translate-y-1/2 flex-col gap-3 rounded-lg border p-4 shadow-[0_4px_20px_color-mix(in_oklab,var(--color-ink)_20%,transparent)]"
+            className="bg-card fixed top-1/2 left-1/2 z-50 flex max-h-[92vh] w-[calc(100%-1.5rem)] max-w-4xl -translate-x-1/2 -translate-y-1/2 flex-col gap-3 rounded-lg border p-4"
           >
             <div className="flex items-start justify-between gap-4">
               <Dialog.Title className="font-display text-xl">
