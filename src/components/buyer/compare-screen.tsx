@@ -386,6 +386,13 @@ function ColumnHeader({
           <p className="text-muted-foreground truncate text-xs">
             {column.locality}, {column.city}
           </p>
+          <Link
+            href={`/developer/${column.developerId}`}
+            data-slot="compare-developer"
+            className="text-muted-foreground block truncate text-xs underline underline-offset-4"
+          >
+            {column.developerName}
+          </Link>
         </div>
         <button
           type="button"

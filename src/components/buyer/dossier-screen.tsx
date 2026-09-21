@@ -34,6 +34,7 @@ import type {
 } from "@/lib/properties/types";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CompareToggle } from "./compare-toggle";
+import { developerHref } from "./developer-screen";
 import { EnquiryForm } from "./enquiry-form";
 import { SavePropertyButton } from "./save-property-button";
 import { FactValue } from "./fact-value";
@@ -659,7 +660,13 @@ export function DossierScreen({ dossier }: DossierScreenProps) {
                     : "text-muted-foreground text-base"
                 }
               >
-                {developer.name} · {location.locality}, {location.city}
+                <Link
+                  href={developerHref(developer.id)}
+                  className="underline underline-offset-4"
+                >
+                  {developer.name}
+                </Link>{" "}
+                · {location.locality}, {location.city}
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-3">
@@ -831,7 +838,15 @@ export function DossierScreen({ dossier }: DossierScreenProps) {
             >
               <dl className="flex flex-col gap-4">
                 <Fact label="Name">
-                  <FactValue value={developer.name} />
+                  <Link
+                    href={developerHref(developer.id)}
+                    className="underline underline-offset-4"
+                  >
+                    {developer.name}
+                  </Link>{" "}
+                  <span className="text-muted-foreground">
+                    (all their published projects)
+                  </span>
                 </Fact>
                 <Fact label="About">
                   <FactValue value={developer.description} />

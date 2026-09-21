@@ -31,6 +31,12 @@
 - [x] Admin inbox `/admin/enquiries` and `PATCH /api/v1/admin/enquiries/{id}`: newest first, property, unit type, message, who to contact, status new / contacted / closed.
 - [x] Sign-in with the dev OTP, save, enquiry and saved comparison driven in a real browser; the inbox showed the enquiry and its status changed.
 
+### Developer identity (names are not unique)
+
+- [x] A public profile at `/developer/{id}` (singular; `/developers` is the portal): the developer as stated and their listed projects only, no legal-entity or promoter data. A malformed id is a 404. Real-database test.
+- [x] The developer's name links to it in the dossier (hero and Developer section) and under each column of a comparison, so two same-named developers can be told apart by their projects. Cards keep the name as text because the whole card is already one link.
+- [ ] Not done: the developer's brochure-sourced narrative (Amaris has one) is not shown; the profile shows the stated description only, so About reads "Not stated" until an owner decides which text a buyer should see.
+
 ### Documentation
 
 - [x] `docs/api/api-spec.v1.md`, `docs/design/comparison.v1.md`, `docs/tasklists/2026-09-20-comparison-experience.md`, `docs/roadmap.md`, `DECISIONS.md`, `PROGRESS.md`.

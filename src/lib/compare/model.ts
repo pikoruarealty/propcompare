@@ -107,6 +107,7 @@ export interface CompareColumn {
   name: string;
   locality: string;
   city: string;
+  developerId: string;
   developerName: string;
   reraRegistered: boolean;
   registrationNumber: string | null;
@@ -455,6 +456,7 @@ export const buildComparison = (
     name: dossier.name,
     locality: dossier.location.locality,
     city: dossier.location.city,
+    developerId: dossier.developer.id,
     developerName: dossier.developer.name,
     reraRegistered: dossier.rera.registered,
     registrationNumber: dossier.rera.registrationNumber,
