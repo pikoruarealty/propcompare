@@ -71,5 +71,5 @@ Checked against the list: this uses no shadow, gradient, glass, orb, dot grid, s
 
 ## Open decisions for the owner
 
-- **Icons.** `visual-direction.v1.md` plans an amenity icon grid, and Stitch uses icon chips. Lucide is the specific tell. Options: draw or commission one consistent amenity set, keep a small restrained set of Lucide glyphs in the amenity grid only, or use text chips with no icons. Until decided, the amenity grid stays text.
-- **Terms and privacy.** Someone with legal standing must approve the text before launch (see `docs/production-readiness.md`).
+- **Icons (decided 2026-09-21: amenity icons are fine).** `visual-direction.v1.md` plans an amenity icon grid, and Stitch uses icon chips. Lucide is the specific tell. Options: draw or commission one consistent amenity set, keep a small restrained set of Lucide glyphs in the amenity grid only, or use text chips with no icons. Until decided, the amenity grid stays text.
+- **Terms and privacy (decided 2026-09-21: deferred).** To be written when development is complete and just before deployment, with the owner's counsel; tracked in `docs/production-readiness.md`.

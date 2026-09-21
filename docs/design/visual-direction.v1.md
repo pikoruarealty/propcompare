@@ -1,6 +1,6 @@
 # Visual direction — why our UI reads as a document, and how it becomes a website
 
-**Status:** active, with details superseded by [no-vibecoded-tells.v1.md](no-vibecoded-tells.v1.md) (no shadows, no decorative icons, no feature-card rows, provisional tagline "Choose the right home, side by side."). Written 2026-09-20 at the owner's direction, after comparing the running site with the Stitch export (`_stitch_export/stitch_propcompare_residence_concierge/`). This is about **look and feel only**: composition, imagery, typography, depth and iconography. Content and data types are ours, not Stitch's (no price, no score; see "What replaces what" below).
+**Status:** active, with details superseded by [no-vibecoded-tells.v1.md](no-vibecoded-tells.v1.md) (no shadows, no decorative icons, no feature-card rows, tagline "The right home is a comparison away." chosen by the owner 2026-09-21). Written 2026-09-20 at the owner's direction, after comparing the running site with the Stitch export (`_stitch_export/stitch_propcompare_residence_concierge/`). This is about **look and feel only**: composition, imagery, typography, depth and iconography. Content and data types are ours, not Stitch's (no price, no score; see "What replaces what" below).
 
 ## What we did wrong (measured against the Stitch screens)
 

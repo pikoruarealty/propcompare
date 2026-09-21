@@ -104,7 +104,7 @@ export function LandingScreen({ recent }: LandingScreenProps) {
           <div className="flex flex-col gap-6 lg:col-span-7">
             <Eyebrow className="text-primary">Ahmedabad and Gujarat</Eyebrow>
             <DisplayHeading level={1} size="hero">
-              Choose the right home, <Accent>side by side.</Accent>
+              The right home is <Accent>a comparison away.</Accent>
             </DisplayHeading>
             <BodyText className="text-muted-foreground max-w-xl text-lg leading-8">
               Put two or three homes next to each other and see what actually

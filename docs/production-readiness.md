@@ -41,6 +41,7 @@ Last updated: 2026-09-21 (first property live, legal entities)
 - [ ] **Backups and restore test** for Postgres and the storage bucket; retention policy for source documents and OCR checkpoints (`OCR_CHECKPOINT_DIR` is local disk today).
 - [ ] **Logging and monitoring:** error tracking, uptime check, and a review that no log line carries a phone number, OTP, or exact price.
 - [ ] **CI runs green on GitHub** with the new Postgres service (added 2026-09-19; not yet observed passing).
+- [ ] **Terms of service and privacy policy** (owner decision 2026-09-21: written when development is complete, just before deployment, with counsel). The privacy policy must describe what is actually collected (intake answers, enquiries, phone numbers for OTP, saved properties, analytics); link both from the footer; the signup and enquiry forms must reference them.
 - [ ] **Content security policy and security headers.**
 - [x] **Buyer gallery thumbnails** (done 2026-09-20): cards load a 480 px WebP made on first request. Before production, decide where the derived files live and how they are cleaned up if a picture is replaced (they sit beside the original).
 - [x] **Removing an amenity or a unit type, and unlisting or soft-deleting a property** (done 2026-09-20, schema v8). Owner review of the publish-logic change is still asked for.
