@@ -1,5 +1,6 @@
 import "dotenv/config";
 import { randomUUID } from "node:crypto";
+import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { db } from "@/db";
 import { developers, properties } from "@/db/schema/catalog";
@@ -35,12 +36,18 @@ describe("getPublicDeveloper", () => {
     expect(await getPublicDeveloper(db, randomUUID())).toBeNull();
   });
 
-  it("is a developer with no listed project, when there are none", async () => {
-    const all = await db.select({ id: developers.id }).from(developers);
-    const results = await Promise.all(
-      all.map((row) => getPublicDeveloper(db, row.id)),
-    );
-    // Every profile is readable; those without a published project list none.
-    expect(results.every((r) => r !== null)).toBe(true);
+  it("shows a developer with no published project as having none", async () => {
+    // Its own developer, so other test files creating and deleting developers at
+    // the same moment cannot affect the result.
+    const [created] = await db
+      .insert(developers)
+      .values({ name: `Profile test ${randomUUID()}` })
+      .returning({ id: developers.id });
+    try {
+      const developer = await getPublicDeveloper(db, created.id);
+      expect(developer?.properties).toEqual([]);
+    } finally {
+      await db.delete(developers).where(eq(developers.id, created.id));
+    }
   });
 });
