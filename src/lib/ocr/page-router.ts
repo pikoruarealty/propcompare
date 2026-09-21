@@ -117,7 +117,7 @@ const DEFAULT_ENDPOINT = "https://openrouter.ai/api/v1/chat/completions";
 export const DEFAULT_ROUTER_MODEL = "google/gemini-2.5-flash";
 const DEFAULT_WINDOW_BYTE_BUDGET = 12 * 1024 * 1024;
 const MAX_WINDOW_PAGES = 40;
-const DEFAULT_TIMEOUT_MS = 4 * 60 * 1000;
+const DEFAULT_TIMEOUT_MS = 2 * 60 * 1000;
 
 const isRecord = (v: unknown): v is Record<string, unknown> =>
   typeof v === "object" && v !== null && !Array.isArray(v);
@@ -362,7 +362,10 @@ export const createOpenRouterPageRouter = (options: PageRouterOptions = {}) => {
         const timedOut =
           error instanceof Error &&
           (error.name === "TimeoutError" || error.name === "AbortError");
-        if (attempt === 0 && !timedOut) {
+        // A stall is retried once like any other transient failure: a window that
+        // hangs on the provider's side usually answers the second time, and
+        // failing the whole run for it wastes the windows already paid for.
+        if (attempt === 0) {
           await new Promise((r) => setTimeout(r, retryDelayMs));
           continue;
         }

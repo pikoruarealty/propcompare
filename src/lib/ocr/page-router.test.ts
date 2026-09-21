@@ -262,6 +262,38 @@ describe("createOpenRouterPageRouter", () => {
     });
   });
 
+  it("retries a stalled request once, and reports a timeout only if it stalls again", async () => {
+    const stall = () => {
+      const error = new Error("The operation timed out.");
+      error.name = "TimeoutError";
+      return Promise.reject(error);
+    };
+    const recovers = vi
+      .fn()
+      .mockImplementationOnce(stall)
+      .mockResolvedValueOnce(
+        reply([{ page: 1, category: "other", confidence: 0.5, imagery: [] }]),
+      );
+    const router = createOpenRouterPageRouter({
+      apiKey: "k",
+      fetch: recovers as unknown as typeof fetch,
+      retryDelayMs: 0,
+    });
+    expect((await router.route(await makePdf(1))).suggestions).toHaveLength(1);
+    expect(recovers).toHaveBeenCalledTimes(2);
+
+    const alwaysStalls = vi.fn().mockImplementation(stall);
+    const stuck = createOpenRouterPageRouter({
+      apiKey: "k",
+      fetch: alwaysStalls as unknown as typeof fetch,
+      retryDelayMs: 0,
+    });
+    await expect(stuck.route(await makePdf(1))).rejects.toMatchObject({
+      code: "request_timeout",
+    });
+    expect(alwaysStalls).toHaveBeenCalledTimes(2);
+  });
+
   it("reports an empty provider balance distinctly and does not retry it", async () => {
     const broke = vi
       .fn()

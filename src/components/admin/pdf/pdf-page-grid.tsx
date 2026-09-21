@@ -33,7 +33,12 @@ function LazyMount({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <div ref={ref} style={{ minHeight: Math.round(THUMB_WIDTH * 1.4) }}>
+    // Space is held only until the page is drawn; after that the frame takes the
+    // page's own shape (a landscape page is not padded out to a portrait one).
+    <div
+      ref={ref}
+      style={visible ? undefined : { minHeight: Math.round(THUMB_WIDTH * 1.4) }}
+    >
       {visible ? children : null}
     </div>
   );
