@@ -7,6 +7,7 @@ import {
   PageSection,
 } from "@/components/buyer/page-frame";
 import { MAX_COMPARED } from "@/lib/compare/model";
+import { parseFocus } from "@/lib/compare/focus";
 import { assertNoExcludedData } from "@/lib/properties/no-price";
 import { getPublishedPropertyBySlug } from "@/lib/properties/queries";
 import type { PropertyDossier } from "@/lib/properties/types";
@@ -37,9 +38,13 @@ const first = (value: string | string[] | undefined): string =>
 export default async function ComparePage({
   searchParams,
 }: {
-  searchParams: Promise<{ p?: string | string[]; v?: string | string[] }>;
+  searchParams: Promise<{
+    p?: string | string[];
+    v?: string | string[];
+    f?: string | string[];
+  }>;
 }) {
-  const { p, v } = await searchParams;
+  const { p, v, f } = await searchParams;
 
   const slugs = [
     ...new Set(
@@ -81,6 +86,7 @@ export default async function ComparePage({
             <CompareScreen
               dossiers={assertNoExcludedData(found)}
               requested={requested}
+              focus={parseFocus(first(f))}
             />
           ) : (
             <CompareEmpty found={found.length} />

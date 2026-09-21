@@ -6,7 +6,10 @@ import {
   AREA_BASIS_LABEL,
   AREA_BASIS_ORDER,
   areasByBasis,
+  formatRoomDimension,
+  type RoomDimension,
   formatSqft,
+  readRoomDimensions,
   shortUnitTypeName,
 } from "@/lib/properties/dossier";
 import type {
@@ -72,6 +75,7 @@ export interface CompareRow {
 export type GroupKey =
   | "timeline"
   | "unit_type"
+  | "rooms"
   | "project"
   | "amenities"
   | "specifications"
@@ -90,7 +94,15 @@ export interface VariantOption {
   bhkLabel: string | null;
 }
 
+export interface FloorPlanRef {
+  id: string;
+  caption: string | null;
+  attribution: string | null;
+}
+
 export interface CompareColumn {
+  /** The property's id, for saving a comparison. */
+  propertyId: string;
   slug: string;
   name: string;
   locality: string;
@@ -103,6 +115,8 @@ export interface CompareColumn {
   /** The unit type this column compares, or null if the property has none. */
   variant: VariantOption | null;
   variants: VariantOption[];
+  /** The floor plans published for the unit type this column compares. */
+  floorPlans: FloorPlanRef[];
   /** How the unit type was chosen. */
   variantChosenBy: "requested" | "bhk" | "area" | "first" | "none";
 }
@@ -374,6 +388,55 @@ const progressText = (value: string | null): string | null => {
   return Number.isFinite(number) ? `${Math.round(number * 10) / 10}%` : null;
 };
 
+/* ------------------------------------------------------------------ */
+/* Rooms, compared by kind                                             */
+/* ------------------------------------------------------------------ */
+
+export type RoomKind =
+  "bedroom" | "living" | "kitchen" | "foyer" | "toilet" | "balcony";
+
+/**
+ * A published room name, read as a kind of room. Only a name that clearly says
+ * what the room is gets a kind; anything else (a duct, a store, a puja) is left
+ * out of the room-by-room rows, never guessed. Toilets and dressing rooms are
+ * tested first because "Master dress / toilet" also contains "master".
+ */
+export const roomKind = (name: string): RoomKind | null => {
+  const n = name.toLowerCase();
+  if (/\b(toi|toilet|wc|wash ?room|bath|powder)/.test(n)) return "toilet";
+  if (/dress/.test(n)) return null;
+  if (/bed\s*room|\bbed\b|master/.test(n) && !/servant|ser\./.test(n)) {
+    return "bedroom";
+  }
+  if (/living|drawing|dining|family|lounge/.test(n)) return "living";
+  if (/kitchen|pantry/.test(n)) return "kitchen";
+  if (/foyer|vestibule|entry|entrance|lobby/.test(n)) return "foyer";
+  if (/balcon|terrace|deck|sit.?out|verandah/.test(n)) return "balcony";
+  return null;
+};
+
+const ROOM_ROWS: { kind: RoomKind; label: string; count: boolean }[] = [
+  { kind: "bedroom", label: "Bedrooms", count: true },
+  { kind: "living", label: "Living, drawing and dining", count: false },
+  { kind: "kitchen", label: "Kitchen", count: false },
+  { kind: "foyer", label: "Foyer and vestibule", count: false },
+  { kind: "balcony", label: "Balconies and terraces", count: true },
+  { kind: "toilet", label: "Toilets", count: true },
+];
+
+/**
+ * The rooms of one kind as published: sizes as stated (length × width, feet),
+ * largest first, with the count where several rooms share a row. A room's area is
+ * never computed from its sides.
+ */
+const roomsText = (rooms: RoomDimension[], withCount: boolean): string => {
+  const sorted = [...rooms].sort(
+    (a, b) => b.lengthFt * b.widthFt - a.lengthFt * a.widthFt,
+  );
+  const sizes = sorted.map((room) => formatRoomDimension(room)).join("; ");
+  return withCount && sorted.length > 1 ? `${sorted.length}: ${sizes}` : sizes;
+};
+
 const plural = (count: number, one: string, many = `${one}s`) =>
   `${count} ${count === 1 ? one : many}`;
 
@@ -387,6 +450,7 @@ export const buildComparison = (
   const chosen = chooseUnitTypes(dossiers, requested);
 
   const columns: CompareColumn[] = dossiers.map((dossier, i) => ({
+    propertyId: dossier.id,
     slug: dossier.slug,
     name: dossier.name,
     locality: dossier.location.locality,
@@ -400,6 +464,19 @@ export const buildComparison = (
       dossier.media[0]?.id ??
       null,
     variant: chosen[i].variant ? optionOf(chosen[i].variant) : null,
+    floorPlans: chosen[i].variant
+      ? dossier.media
+          .filter(
+            (media) =>
+              media.mediaType === "floor_plan" &&
+              media.unitVariantId === chosen[i].variant?.id,
+          )
+          .map((media) => ({
+            id: media.id,
+            caption: media.caption,
+            attribution: media.attribution,
+          }))
+      : [],
     variants: dossier.unitVariants.map(optionOf),
     variantChosenBy: chosen[i].by,
   }));
@@ -491,6 +568,20 @@ export const buildComparison = (
     ),
   );
   groups.push({ key: "unit_type", title: "The unit type", rows: unitRows });
+
+  groups.push({
+    key: "rooms",
+    title: "Room by room",
+    rows: ROOM_ROWS.map(({ kind, label, count }) =>
+      row(`rooms_${kind}`, label, (_d, v) => {
+        const rooms = v ? readRoomDimensions(v.dimensions) : null;
+        if (rooms === null) return textCell(null);
+        const ofKind = rooms.filter((room) => roomKind(room.name) === kind);
+        if (ofKind.length === 0) return textCell(null);
+        return textCell(roomsText(ofKind, count));
+      }),
+    ),
+  });
 
   groups.push({
     key: "project",
@@ -592,7 +683,12 @@ export const buildComparison = (
         candidate.cells.some((cell) => cell.state !== "not_stated"),
       ),
     }))
-    .filter((group) => group.rows.length > 0);
+    .filter(
+      (group) =>
+        group.rows.length > 0 ||
+        // Floor plans are drawn beside the rows, so a plan alone keeps the group.
+        (group.key === "rooms" && columns.some((c) => c.floorPlans.length > 0)),
+    );
 
   return {
     columns,

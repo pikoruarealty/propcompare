@@ -207,9 +207,12 @@ export const readRoomDimensions = (
   return readable.length === 0 ? null : readable;
 };
 
-/** `16.5 × 12 ft` — the multiplication sign, not a letter x. */
+/** A stored side in feet, shown to at most two decimals (16'5" is stored as 16.4167). */
+const feet = (value: number): number => Math.round(value * 100) / 100;
+
+/** `16.5 × 12 ft`, with the multiplication sign rather than a letter x. */
 export const formatRoomDimension = (room: RoomDimension): string =>
-  `${room.lengthFt} × ${room.widthFt} ft`;
+  `${feet(room.lengthFt)} × ${feet(room.widthFt)} ft`;
 
 /** The distinct BHK types across a dossier's variants, for summaries. */
 export const dossierBhkLabels = (

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { INTAKE_PRIORITIES_KEY } from "@/lib/compare/focus";
 import Link from "next/link";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -195,6 +196,19 @@ export function IntakeFlow({ options }: IntakeFlowProps) {
 
   // A component unmounted mid-request should not leave one running.
   useEffect(() => abandonRequest, [abandonRequest]);
+
+  // Leave the priorities (never the stated range) in this tab for the comparison
+  // page to start its focus chips from.
+  useEffect(() => {
+    try {
+      window.sessionStorage.setItem(
+        INTAKE_PRIORITIES_KEY,
+        JSON.stringify(answers.priorities),
+      );
+    } catch {
+      // No storage: the comparison simply starts with no chips chosen.
+    }
+  }, [answers.priorities]);
 
   const step = INTAKE_STEPS[stepIndex];
   const isSummary = step.id === "summary";

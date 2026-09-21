@@ -407,3 +407,22 @@ describe("what a comparison never carries", () => {
     expect(buildComparison([property("a")]).columns).toHaveLength(1);
   });
 });
+
+describe("room by room", () => {
+  it("reads a published room name as a kind, and leaves unclear names out", async () => {
+    const { roomKind } = await import("./model");
+    expect(roomKind("Master Bedroom - 1")).toBe("bedroom");
+    expect(roomKind("BED ROOM")).toBe("bedroom");
+    expect(roomKind("Drawing / Living / Dining")).toBe("living");
+    expect(roomKind("FAMILY ROOM")).toBe("living");
+    expect(roomKind("Kitchen")).toBe("kitchen");
+    expect(roomKind("VESTIBULE")).toBe("foyer");
+    expect(roomKind("COVERED TERRACE")).toBe("balcony");
+    // Toilets are tested before "master", so a master toilet is not a bedroom.
+    expect(roomKind("M. Dress / Toilet-1")).toBe("toilet");
+    expect(roomKind("SER. TOI.")).toBe("toilet");
+    expect(roomKind("Servant Room")).toBeNull();
+    expect(roomKind("DUCT")).toBeNull();
+    expect(roomKind("PUJA")).toBeNull();
+  });
+});

@@ -330,3 +330,14 @@ describe("dossierFactCount", () => {
     expect(offered.stated).toBe(none.stated + 1);
   });
 });
+
+describe("formatRoomDimension", () => {
+  it("shows at most two decimals of a stored side", () => {
+    expect(
+      formatRoomDimension({ name: "Bedroom", lengthFt: 16.4167, widthFt: 12 }),
+    ).toBe("16.42 × 12 ft");
+    expect(
+      formatRoomDimension({ name: "Living", lengthFt: 16.5, widthFt: 12 }),
+    ).toBe("16.5 × 12 ft");
+  });
+});

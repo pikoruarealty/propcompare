@@ -3,9 +3,19 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { Dialog } from "radix-ui";
 import { ChevronDown, Link2, X } from "lucide-react";
 import { compareAddress, useCompareSelection } from "@/lib/compare/selection";
 import { buildComparison } from "@/lib/compare/model";
+import {
+  FOCUS_OPTIONS,
+  INTAKE_PRIORITIES_KEY,
+  focusFromPriorities,
+  orderGroups,
+  orderSummary,
+  type FocusKey,
+} from "@/lib/compare/focus";
+import { authClient } from "@/lib/auth-client";
 import type {
   CompareCell,
   CompareColumn,
@@ -14,6 +24,7 @@ import type {
 import type { PropertyDossier } from "@/lib/properties/types";
 import { cn } from "@/lib/utils";
 import { VerifiedBadge, reraVerifiedFact } from "./verified-badge";
+import { ZoomableImage } from "./zoomable-image";
 
 /**
  * The comparison itself (specification: `docs/design/comparison.v1.md`). It draws
@@ -35,6 +46,15 @@ const subscribeToPhoneWidth = (listener: () => void) => {
   const query = window.matchMedia?.(PHONE_QUERY);
   query?.addEventListener("change", listener);
   return () => query?.removeEventListener("change", listener);
+};
+
+const subscribeToNothing = () => () => {};
+const readCarriedPriorities = (): string => {
+  try {
+    return window.sessionStorage.getItem(INTAKE_PRIORITIES_KEY) ?? "";
+  } catch {
+    return "";
+  }
 };
 
 const gridClasses =
@@ -128,6 +148,200 @@ function Row({
         <Cell key={i} cell={cell} hidden={!visible.includes(i)} />
       ))}
     </div>
+  );
+}
+
+/**
+ * Each property's floor plan for the unit type it is compared on, side by side.
+ * A plan opens in the zoomable viewer with its credit. A property with no plan
+ * for that unit type says so; nothing is substituted from another type.
+ */
+function FloorPlanRow({
+  columns,
+  visible,
+}: {
+  columns: CompareColumn[];
+  visible: number[];
+}) {
+  const [open, setOpen] = React.useState<{
+    column: CompareColumn;
+    index: number;
+  } | null>(null);
+  const plan = open ? open.column.floorPlans[open.index] : undefined;
+  const label = open
+    ? `${open.column.name}, ${open.column.variant?.shortName ?? "floor plan"}`
+    : "";
+
+  return (
+    <div
+      role="row"
+      data-slot="compare-plan-row"
+      style={colsStyle(columns.length)}
+      className={cn(gridClasses, "border-border border-b")}
+    >
+      <div className="text-muted-foreground col-span-2 px-3 pt-2.5 text-xs md:col-span-1 md:py-2.5 md:text-sm">
+        Floor plan
+      </div>
+      {columns.map((column, i) => (
+        <div
+          key={column.slug}
+          data-slot="compare-cell"
+          className={cn(
+            "min-w-0 px-3 pt-1 pb-3 md:py-2.5",
+            !visible.includes(i) && "hidden md:block",
+          )}
+        >
+          {column.floorPlans.length === 0 ? (
+            <span
+              className="text-muted-foreground text-sm italic"
+              title="No floor plan has been published for this unit type."
+            >
+              Not stated
+            </span>
+          ) : (
+            <ul className="flex flex-wrap gap-2">
+              {column.floorPlans.map((item, index) => (
+                <li key={item.id}>
+                  <button
+                    type="button"
+                    onClick={() => setOpen({ column, index })}
+                    aria-label={`Open the floor plan for ${column.name}, ${index + 1} of ${column.floorPlans.length}`}
+                    className="border-border bg-tone-deep focus-visible:ring-ring block h-28 w-24 overflow-hidden rounded-md border focus-visible:ring-2 focus-visible:outline-none"
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element -- a served thumbnail, not a static asset */}
+                    <img
+                      src={`/api/v1/media/${item.id}?size=thumb`}
+                      alt=""
+                      loading="lazy"
+                      className="size-full object-contain"
+                    />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      ))}
+      <Dialog.Root
+        open={plan !== undefined}
+        onOpenChange={(next) => {
+          if (!next) setOpen(null);
+        }}
+      >
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 z-50 bg-[color-mix(in_oklab,var(--color-ink)_75%,transparent)]" />
+          <Dialog.Content
+            data-slot="plan-lightbox"
+            aria-describedby={undefined}
+            className="bg-card fixed top-1/2 left-1/2 z-50 flex max-h-[92vh] w-[calc(100%-1.5rem)] max-w-4xl -translate-x-1/2 -translate-y-1/2 flex-col gap-3 rounded-lg border p-4"
+          >
+            <div className="flex items-start justify-between gap-4">
+              <Dialog.Title className="font-display text-xl">
+                {label}
+              </Dialog.Title>
+              <Dialog.Close
+                aria-label="Close"
+                className="text-muted-foreground hover:text-foreground rounded-md p-1"
+              >
+                <X className="size-5" aria-hidden="true" />
+              </Dialog.Close>
+            </div>
+            {plan ? (
+              <ZoomableImage
+                key={plan.id}
+                src={`/api/v1/media/${plan.id}`}
+                alt={label}
+              />
+            ) : null}
+            {plan?.attribution ? (
+              <p className="text-muted-foreground text-sm">
+                Credit: {plan.attribution}
+              </p>
+            ) : null}
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
+    </div>
+  );
+}
+
+/**
+ * Saving a comparison is the one part of comparing that needs an account. Signed
+ * out, it is a link to sign in that returns to this comparison; signed in, it
+ * stores the properties and unit types on screen (`POST /api/v1/comparisons`).
+ */
+function SaveComparisonButton({ columns }: { columns: CompareColumn[] }) {
+  const { data: session, isPending } = authClient.useSession();
+  const [state, setState] = React.useState<
+    "idle" | "saving" | "saved" | "error"
+  >("idle");
+  if (isPending) return null;
+  const buttonClass =
+    "border-border hover:border-primary inline-flex h-10 items-center rounded-md border px-4 text-sm font-medium";
+
+  if (!session) {
+    const here =
+      typeof window === "undefined"
+        ? "/compare"
+        : window.location.pathname + window.location.search;
+    return (
+      <Link
+        href={`/login?next=${encodeURIComponent(here)}`}
+        data-slot="save-comparison"
+        className={buttonClass}
+      >
+        Sign in to save this comparison
+      </Link>
+    );
+  }
+  if (state === "saved") {
+    return (
+      <span data-slot="save-comparison" role="status" className="text-sm">
+        Saved.{" "}
+        <Link
+          href="/saved"
+          className="text-primary underline underline-offset-4"
+        >
+          See your saved list
+        </Link>
+      </span>
+    );
+  }
+  const save = async () => {
+    setState("saving");
+    try {
+      const response = await fetch("/api/v1/comparisons", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          items: columns.map((column) => ({
+            propertyId: column.propertyId,
+            ...(column.variant ? { unitVariantId: column.variant.id } : {}),
+          })),
+        }),
+      });
+      setState(response.ok ? "saved" : "error");
+    } catch {
+      setState("error");
+    }
+  };
+  return (
+    <span className="inline-flex items-center gap-3">
+      <button
+        type="button"
+        data-slot="save-comparison"
+        disabled={state === "saving"}
+        onClick={save}
+        className={buttonClass}
+      >
+        {state === "saving" ? "Saving…" : "Save this comparison"}
+      </button>
+      {state === "error" ? (
+        <span role="alert" className="text-destructive text-sm">
+          Could not save. Try again.
+        </span>
+      ) : null}
+    </span>
   );
 }
 
@@ -253,10 +467,13 @@ function ColumnHeader({
 export function CompareScreen({
   dossiers: initialDossiers,
   requested: initialRequested,
+  focus: initialFocus = [],
 }: {
   dossiers: PropertyDossier[];
   /** The unit type the address asked for, by slug. */
   requested: Record<string, string>;
+  /** The focus chips the address asked for. */
+  focus?: FocusKey[];
 }) {
   const router = useRouter();
   const selection = useCompareSelection();
@@ -269,6 +486,29 @@ export function CompareScreen({
     () => buildComparison(dossiers, requested),
     [dossiers, requested],
   );
+  // With no focus in the address, start from what guided intake said mattered:
+  // only the priorities (never the stated range), kept in this tab. Read as an
+  // external store so the server's first render and the browser's agree.
+  const carriedRaw = React.useSyncExternalStore(
+    subscribeToNothing,
+    readCarriedPriorities,
+    () => "",
+  );
+  const carried = React.useMemo(() => {
+    try {
+      const priorities: unknown = carriedRaw ? JSON.parse(carriedRaw) : [];
+      return Array.isArray(priorities)
+        ? focusFromPriorities(
+            priorities.filter((p): p is string => typeof p === "string"),
+          )
+        : [];
+    } catch {
+      return [];
+    }
+  }, [carriedRaw]);
+  const [chosenFocus, setFocus] = React.useState<FocusKey[] | null>(null);
+  const focus =
+    chosenFocus ?? (initialFocus.length > 0 ? initialFocus : carried);
   const [pair, setPair] = React.useState<[number, number]>([0, 1]);
   const [copied, setCopied] = React.useState(false);
   // A section's open state is the person's own choice if they made one, else the
@@ -312,6 +552,7 @@ export function CompareScreen({
   const address = (
     nextSlugs: string[],
     nextRequested: Record<string, string>,
+    nextFocus: FocusKey[] = focus,
   ) => {
     const params = new URLSearchParams();
     params.set("p", nextSlugs.join(","));
@@ -319,6 +560,7 @@ export function CompareScreen({
       .filter((slug) => nextRequested[slug])
       .map((slug) => `${slug}~${nextRequested[slug]}`);
     if (chosen.length > 0) params.set("v", chosen.join(","));
+    if (nextFocus.length > 0) params.set("f", nextFocus.join(","));
     return `/compare?${params.toString().replace(/%2C/g, ",").replace(/%7E/g, "~")}`;
   };
 
@@ -338,8 +580,23 @@ export function CompareScreen({
     window.history.replaceState(null, "", address(slugs, next));
   };
 
+  const toggleFocus = (key: FocusKey) => {
+    const next = FOCUS_OPTIONS.map((option) => option.key).filter((k) =>
+      k === key ? !focus.includes(k) : focus.includes(k),
+    );
+    setFocus(next);
+    window.history.replaceState(null, "", address(slugs, requested, next));
+  };
+
   const visible = count <= 2 ? [...slugs.keys()] : pair;
-  const shownGroups = model.groups;
+  const shownGroups = React.useMemo(
+    () => orderGroups(model.groups, focus),
+    [model.groups, focus],
+  );
+  const summary = React.useMemo(
+    () => orderSummary(model.summary, model.groups, focus),
+    [model.summary, model.groups, focus],
+  );
 
   const allOpen = shownGroups.every((group) => isOpen(group.key));
 
@@ -366,14 +623,42 @@ export function CompareScreen({
             gives up.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={copy}
-          className="border-border hover:border-primary inline-flex h-10 items-center gap-2 rounded-md border px-4 text-sm font-medium"
-        >
-          <Link2 className="size-4" aria-hidden="true" />
-          {copied ? "Link copied" : "Copy link"}
-        </button>
+        <div className="flex flex-wrap items-center gap-3">
+          <SaveComparisonButton columns={model.columns} />
+          <button
+            type="button"
+            onClick={copy}
+            className="border-border hover:border-primary inline-flex h-10 items-center gap-2 rounded-md border px-4 text-sm font-medium"
+          >
+            <Link2 className="size-4" aria-hidden="true" />
+            {copied ? "Link copied" : "Copy link"}
+          </button>
+        </div>
+      </div>
+
+      <div
+        role="group"
+        aria-label="What matters most to you"
+        data-slot="compare-focus"
+        className="flex flex-wrap items-center gap-2"
+      >
+        <span className="text-muted-foreground text-sm">Bring to the top</span>
+        {FOCUS_OPTIONS.map((option) => (
+          <button
+            key={option.key}
+            type="button"
+            aria-pressed={focus.includes(option.key)}
+            onClick={() => toggleFocus(option.key)}
+            className={cn(
+              "focus-visible:ring-ring rounded-full border px-3 py-1 text-sm transition-colors focus-visible:ring-2 focus-visible:outline-none",
+              focus.includes(option.key)
+                ? "border-primary bg-primary text-primary-foreground"
+                : "border-border bg-card hover:border-primary",
+            )}
+          >
+            {option.label}
+          </button>
+        ))}
       </div>
 
       <section
@@ -384,9 +669,9 @@ export function CompareScreen({
         <h2 id="compare-summary-heading" className="font-display text-2xl">
           What changes between these choices
         </h2>
-        {model.summary.length > 0 ? (
+        {summary.length > 0 ? (
           <ul className="mt-3 flex flex-col gap-2 text-base">
-            {model.summary.map((line) => (
+            {summary.map((line) => (
               <li key={line.rowKey} data-slot="compare-summary-line">
                 {line.text}
               </li>
@@ -514,6 +799,9 @@ export function CompareScreen({
                 </h2>
                 {open ? (
                   <div id={`compare-group-${group.key}`}>
+                    {group.key === "rooms" ? (
+                      <FloorPlanRow columns={model.columns} visible={visible} />
+                    ) : null}
                     {group.rows.map((row) => (
                       <Row
                         key={row.key}
@@ -547,7 +835,7 @@ export function CompareEmpty({ found }: { found: number }) {
       <p className="text-muted-foreground max-w-prose">
         {found === 1
           ? "Add at least one more property to compare it against."
-          : "Pick two to four properties with the Compare button on a property card or page, and see what really differs between them: the same unit type, side by side, with what is stated and what is not."}
+          : "Pick two or three properties with the Compare button on a property card or page, and see what really differs between them: the same unit type, side by side, with what is stated and what is not."}
       </p>
       {items.length >= 2 ? (
         <Link

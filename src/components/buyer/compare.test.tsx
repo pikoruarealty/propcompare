@@ -307,3 +307,55 @@ describe("the comparison screen", () => {
     expect(screen.getByLabelText("Second property")).toBeInTheDocument();
   });
 });
+
+describe("room by room and floor plans", () => {
+  const withPlan = () => {
+    const [a, b] = two();
+    const variantId = buildComparison([a, b]).columns[0].variant?.id;
+    const plan = {
+      id: "pppppppp-1111-4111-8111-pppppppppppp",
+      mediaType: "floor_plan" as const,
+      gcsPath: "private/path.webp",
+      caption: null,
+      unitVariantId: variantId ?? null,
+      isPrimary: false,
+      attribution: "Credit line",
+    };
+    return [
+      { ...a, media: [...a.media, plan] },
+      { ...b, media: [] },
+    ];
+  };
+
+  it("lists rooms by kind, largest first, with the sizes as stated", () => {
+    const [a, b] = two();
+    const model = buildComparison([a, b]);
+    const rooms = model.groups.find((g) => g.key === "rooms");
+    const living = rooms?.rows.find((r) => r.key === "rooms_living");
+
+    expect(living?.cells[0].text).toContain("16.5 × 12 ft");
+    expect(rooms?.rows.find((r) => r.key === "rooms_bedroom")).toBeDefined();
+  });
+
+  it("shows each property's floor plan for the compared unit type, and says so when there is none", () => {
+    const [a, b] = withPlan();
+    render(<CompareScreen dossiers={[a, b]} requested={{}} />);
+
+    const row = document.querySelector('[data-slot="compare-plan-row"]');
+    expect(row).not.toBeNull();
+    // Alpha has a plan for its unit type; Beta has none and says so.
+    expect(
+      within(row as HTMLElement).getAllByRole("button", {
+        name: /Open the floor plan for Alpha Heights/,
+      }),
+    ).toHaveLength(
+      a.media.filter(
+        (m) =>
+          m.mediaType === "floor_plan" &&
+          m.unitVariantId === a.unitVariants[0].id,
+      ).length,
+    );
+    expect(row).toHaveTextContent("Not stated");
+    expect(row?.innerHTML).not.toContain("private/path.webp");
+  });
+});

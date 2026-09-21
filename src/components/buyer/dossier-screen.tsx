@@ -34,6 +34,8 @@ import type {
 } from "@/lib/properties/types";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CompareToggle } from "./compare-toggle";
+import { EnquiryForm } from "./enquiry-form";
+import { SavePropertyButton } from "./save-property-button";
 import { FactValue } from "./fact-value";
 import { PageContainer, PageFrame, PageSection } from "./page-frame";
 import { BodyText, DisplayHeading, Eyebrow, TabularValue } from "./typography";
@@ -554,6 +556,7 @@ const SECTION_LINKS = [
   { href: "#rera", label: "RERA" },
   { href: "#location", label: "Location" },
   { href: "#developer", label: "Developer" },
+  { href: "#enquiry", label: "Ask about this property" },
 ] as const;
 
 export function DossierScreen({ dossier }: DossierScreenProps) {
@@ -667,6 +670,7 @@ export function DossierScreen({ dossier }: DossierScreenProps) {
                 name={dossier.name}
                 mediaId={heroPhoto?.id ?? dossier.media[0]?.id ?? null}
               />
+              <SavePropertyButton propertyId={dossier.id} slug={dossier.slug} />
             </div>
           </div>
         </header>
@@ -847,6 +851,22 @@ export function DossierScreen({ dossier }: DossierScreenProps) {
                   )}
                 </Fact>
               </dl>
+            </Section>
+
+            <Section
+              title="Ask about this property"
+              id="enquiry"
+              data-slot="dossier-enquiry"
+            >
+              <EnquiryForm
+                propertyId={dossier.id}
+                slug={dossier.slug}
+                propertyName={dossier.name}
+                unitTypes={dossier.unitVariants.map((variant) => ({
+                  id: variant.id,
+                  name: variant.variantName,
+                }))}
+              />
             </Section>
           </div>
 
