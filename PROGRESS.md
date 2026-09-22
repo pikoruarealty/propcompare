@@ -1,5 +1,13 @@
 # Progress
 
+## 2026-09-22 (late night, 3) - "Report a problem" placeholder on every dossier
+
+**Done (`docs/tasklists/2026-09-22-report-a-problem-placeholder.md`):** the second of the four 2026-09-22-approved items. A "Report a problem with this listing" link now sits beside "Back to all properties" at the foot of every dossier — the placement the 2026-09-20 media-rights decision already committed to (attribution plus a takedown route, ahead of developer consent). It opens a dialog stating plainly that a way to send a report is coming and that nothing is sent, saved, or recorded yet — exact scope as approved: no table, no storage, no contact address invented ahead of one being chosen.
+
+**Verified:** typecheck, lint, format:check, and the full suite (133 files, 1589 tests, including a test asserting the dialog never calls `fetch`); a real-browser check on a live dossier (`the-kimana-towers`) confirmed the link, the dialog, and its exact copy.
+
+**Not done:** the other two items from the same approval (comparison analytics, schema v11 for `unit_variant_amenities`) and the two router follow-ups remain queued.
+
 ## 2026-09-22 (late night, 2) - Major flow pivot: intake is the front door, not a nav item; comparison locks its detail behind phone sign-in
 
 **Done, owner direction given directly mid-session (`DECISIONS.md`, `AGENTS.md`, `docs/design/comparison.v1.md`, `docs/app-flows/buyer.md` all updated in the same change; tasklist `docs/tasklists/2026-09-22-intake-first-landing-and-comparison-gate.md`):** this reverses the 2026-09-20 "no sign-in to compare" rule, which was written directly into `AGENTS.md`'s own comparison paragraph, not only the design doc — both were updated together so neither silently contradicts the other. **Phase 1:** `/intake` is off `BUYER_NAV`; the landing hero's primary call to action is "Tell us what you're looking for" → `/intake`, with "Browse everything instead" as the secondary path; the stale "No sign-in to compare." line is gone. **Phase 2:** `/compare` still needs no account to reach or to see the column identity (photo, name, locality, developer, chosen unit type) and the differences-first summary; every row group beneath them (Possession and timeline, the unit type's own detail, Room by room, The project, Amenities, Specifications, RERA) now renders locked — a real row label beside skeleton blocks — until the buyer signs in, with exactly one embedded phone-OTP prompt shown once, not per group. The unlock is a plain session check (the same one `SaveComparisonButton` already used), not the separate `dossier_unlocks` table. Intake's results already let a buyer open a dossier or add straight to a comparison (`CompareToggle` on `PropertyCard`), so nothing needed to change there.

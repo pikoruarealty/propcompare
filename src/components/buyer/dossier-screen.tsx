@@ -36,6 +36,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CompareToggle } from "./compare-toggle";
 import { developerHref } from "./developer-screen";
 import { EnquiryForm } from "./enquiry-form";
+import { ReportProblemLink } from "./report-problem-link";
 import { SavePropertyButton } from "./save-property-button";
 import { FactValue } from "./fact-value";
 import { PageContainer, PageFrame, PageSection } from "./page-frame";
@@ -951,13 +952,14 @@ export function DossierScreen({ dossier }: DossierScreenProps) {
           </aside>
         </PageSection>
 
-        <div className="pb-16">
+        <div className="flex flex-wrap items-center gap-6 pb-16">
           <Link
             href={BROWSE_PATH}
             className="border-border text-foreground inline-flex items-center rounded-lg border px-4 py-2 text-sm transition-colors hover:border-[var(--color-terracotta)]"
           >
             Back to all properties
           </Link>
+          <ReportProblemLink />
         </div>
       </PageContainer>
     </PageFrame>
