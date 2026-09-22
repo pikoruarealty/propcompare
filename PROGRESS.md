@@ -1,5 +1,15 @@
 # Progress
 
+## 2026-09-22 (evening) - Router prompt tweaked so single-facility amenity spreads are no longer missed
+
+**Done:** `src/lib/ocr/page-router.ts`'s prompt now explicitly classifies a full-page single-facility marketing spread (one photo, captioned with a facility name, no list of other amenities) as an amenities page, not marketing imagery, and asks for a short caption naming the facility, the same mechanism already used for floor plans. Prompt-only; no paid call was made.
+
+**Not done, proposed for later:** having the router directly match a simple single-facility spread's caption against the amenity catalog/synonyms, skipping a second extraction call for that page (the owner's idea, mid-session) — a real cost saving since the router already reads every page once, but it needs the catalog/synonym match wired in properly and a page listing several amenities together still needs the real extraction pass either way.
+
+**Verified:** typecheck, lint, prettier, the full suite (129 files, 1542 tests).
+
+**Next:** the approved paid categorization test on a fresh upload of the 360 brochure, to measure this prompt against the categories already confirmed — needs your go-ahead again since the prompt has changed since you approved it.
+
 ## 2026-09-22 (later still) - Maruti 360's floor plans are live, matched from the brochure's own captions; a second structural gap fixed on the way
 
 **Done:** the last of the seven comparison-review findings is closed. The owner pointed out the floor-plan pages print their own unit-identifying caption at the bottom, and asked why matching wasn't done from that — turns out the router already asks the model for exactly this caption, it just gets thrown away the moment page routing is confirmed (never persisted past the draft stage; proposed as a follow-up, not built this round, see `DECISIONS.md`). Read three screenshots the owner sent to get the exact captions for pages 21, 24 and 27; the other 7 of 10 follow directly or by elimination (the count and sequence leave exactly one slot each, matching the six `unit_variants` already on record). Attached all ten brochure pages to their exact unit type via "Use as image" and published.
