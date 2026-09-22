@@ -1,19 +1,23 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { INTAKE_PRIORITIES_KEY } from "@/lib/compare/focus";
 import Link from "next/link";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { authClient } from "@/lib/auth-client";
 import { BROWSE_PATH, FILTER_LABEL } from "@/lib/properties/browse";
 import type { FilterOptions } from "@/lib/properties/filter-options";
 import {
   matchRequestBody,
   requestMatches,
 } from "@/lib/properties/intake-matches";
+import { consumePendingIntakeClaim } from "@/lib/properties/pending-intake-claim";
 import {
   DEFAULT_STATED_RANGE,
   EMPTY_ANSWERS,
+  INTAKE_PATH,
   INTAKE_STEPS,
   type IntakeAnswers,
   MAX_PRIORITIES,
@@ -42,9 +46,17 @@ import { BodyText, DisplayHeading, Eyebrow } from "./typography";
  * answer on the device and out of all three. Recorded in DECISIONS.md
  * (2026-09-07).
  *
- * Nothing here is persisted. `POST /api/v1/intake-sessions` is not built and
- * will not be — pre-login capture goes through a cookie instead, which is
- * deferred (DECISIONS.md 2026-09-18) — so no intake session is ever created.
+ * Nothing here is persisted by default. `POST /api/v1/intake-sessions` is not
+ * built and will not be. The one exception is explicit and opt-in: on the
+ * summary step, a buyer who is not signed in and has stated anything sees
+ * "Sign in to keep this search" — choosing it, and only choosing it, posts
+ * the current answers to `POST /api/v1/buyer/intake-handoff`, which sets a
+ * narrowly-scoped cookie (never a database write on its own). On sign-in,
+ * `BuyerLoginForm` claims it into one `buyer_intake_sessions` row and hands
+ * the answers back; this component then reapplies them here as an editable
+ * starting point (never locked in), via a one-shot in-memory handoff
+ * (`consumePendingIntakeClaim`). See DECISIONS.md 2026-09-18 and 2026-09-22,
+ * and `docs/tasklists/2026-09-18-pre-login-intake-cookie.md`.
  *
  * The flow now has two endings, and which one the buyer gets depends on whether
  * they stated a range:
@@ -177,9 +189,17 @@ export interface IntakeFlowProps {
 }
 
 export function IntakeFlow({ options }: IntakeFlowProps) {
+  const router = useRouter();
+  const { data: session } = authClient.useSession();
+  const signedIn = Boolean(session);
+
   const [stepIndex, setStepIndex] = useState(0);
   const [answers, setAnswers] = useState<IntakeAnswers>(EMPTY_ANSWERS);
   const [match, setMatch] = useState<MatchViewState>({ status: "idle" });
+  /** True for one render after a claimed pre-login search is reapplied. */
+  const [hydratedFromClaim, setHydratedFromClaim] = useState(false);
+  const [savingSearch, setSavingSearch] = useState(false);
+  const claimedOnce = useRef(false);
 
   /**
    * The in-flight request, so a superseded one can be abandoned. Without this,
@@ -221,18 +241,25 @@ export function IntakeFlow({ options }: IntakeFlowProps) {
   const update = (patch: Partial<IntakeAnswers>) => {
     abandonRequest();
     setMatch({ status: "idle" });
+    setHydratedFromClaim(false);
     setAnswers((current) => ({ ...current, ...patch }));
   };
 
   const restart = () => {
     abandonRequest();
     setMatch({ status: "idle" });
+    setHydratedFromClaim(false);
     setAnswers(EMPTY_ANSWERS);
     setStepIndex(0);
   };
 
-  const runMatch = async (page: number) => {
-    const body = matchRequestBody(answers, page);
+  /**
+   * `answersOverride` exists for the claim-hydration effect below: it fires
+   * once, right after `setAnswers`, and a `setState` result is not readable
+   * from the same tick, so it cannot rely on the `answers` closure yet.
+   */
+  const runMatch = async (page: number, answersOverride?: IntakeAnswers) => {
+    const body = matchRequestBody(answersOverride ?? answers, page);
     // Unreachable from the UI — the action only renders with a stated range —
     // but the type says this can be null, and a thrown assertion here would
     // take the buyer's answers down with it.
@@ -255,6 +282,55 @@ export function IntakeFlow({ options }: IntakeFlowProps) {
         ? { status: "ready", result: outcome.result }
         : { status: "failed", message: outcome.message },
     );
+  };
+
+  /**
+   * Consumes the one-shot in-memory claim handoff, once, on mount. Guarded by
+   * a ref rather than left to run only from an empty dependency array,
+   * because `consumePendingIntakeClaim` clears what it reads — a second call
+   * (development Strict Mode double-invokes effects) would read `null` and
+   * silently discard a real claim if this only relied on `[]`.
+   *
+   * This has to be an effect rather than a `useState` lazy initializer: a
+   * lazy initializer would also run during this client component's server
+   * render, and the module-level relay it reads (`pending-intake-claim.ts`)
+   * is a real browser-only value set by `BuyerLoginForm` after a `fetch` —
+   * reading it on the server would read nothing and defeat the point.
+   */
+  /* eslint-disable react-hooks/set-state-in-effect -- synchronising a
+     one-shot external (browser-only, module-level) handoff on mount, not
+     derived render state. */
+  useEffect(() => {
+    if (claimedOnce.current) return;
+    claimedOnce.current = true;
+    const claimed = consumePendingIntakeClaim();
+    if (claimed === null) return;
+    setAnswers(claimed);
+    setStepIndex(INTAKE_STEPS.length - 1);
+    setHydratedFromClaim(true);
+    if (claimed.statedRange !== null) void runMatch(1, claimed);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
+  /**
+   * The buyer's own explicit choice to keep this search across signing in —
+   * never triggered by anything else. Best-effort: sign-in must proceed even
+   * if the cookie could not be set.
+   */
+  const signInToKeepSearch = async () => {
+    setSavingSearch(true);
+    try {
+      await fetch("/api/v1/buyer/intake-handoff", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(answers),
+      });
+    } catch {
+      // Nothing kept; sign-in still proceeds.
+    } finally {
+      router.push(`/login?next=${encodeURIComponent(INTAKE_PATH)}`);
+    }
   };
 
   const carried = handoffParams(answers);
@@ -280,6 +356,16 @@ export function IntakeFlow({ options }: IntakeFlowProps) {
           Skip this and browse everything
         </Link>
       </div>
+
+      {hydratedFromClaim ? (
+        <BodyText
+          data-slot="intake-resumed"
+          className="text-muted-foreground text-sm"
+        >
+          Welcome back. We kept the search you started before signing in.
+          Nothing is locked in, so change anything below.
+        </BodyText>
+      ) : null}
 
       <div className={CARD_CLASS}>
         <div className="flex flex-col gap-5">
@@ -467,6 +553,27 @@ export function IntakeFlow({ options }: IntakeFlowProps) {
                         )}. Your priorities and your stated range are not part of that link.`
                   : "Your range is sent with this search so the catalog can be matched against it, and it is not saved, not written to your address bar, and not kept after you leave. Your priorities are not sent, because no published fact ranks against them."}
               </BodyText>
+
+              {!signedIn && hasAnyAnswer(answers) ? (
+                <div className="border-border flex flex-col items-start gap-2 border-t pt-5">
+                  <BodyText className="text-muted-foreground text-sm">
+                    Sign in and we will keep what you just told us, so you do
+                    not have to state it again. Nothing is locked in: you can
+                    still change any answer afterward.
+                  </BodyText>
+                  <button
+                    type="button"
+                    data-slot="intake-keep-search"
+                    disabled={savingSearch}
+                    onClick={() => void signInToKeepSearch()}
+                    className="text-foreground hover:text-[var(--color-terracotta)] text-sm underline underline-offset-4 disabled:opacity-50"
+                  >
+                    {savingSearch
+                      ? "Signing in…"
+                      : "Sign in to keep this search"}
+                  </button>
+                </div>
+              ) : null}
             </>
           ) : null}
         </div>

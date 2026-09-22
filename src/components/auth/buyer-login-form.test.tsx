@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { sendOtp, verify, updateUser, changeEmail, replace, refresh } =
   vi.hoisted(() => ({
@@ -40,6 +40,10 @@ beforeEach(() => {
   });
   updateUser.mockResolvedValue({ data: {}, error: null });
   changeEmail.mockResolvedValue({ data: {}, error: null });
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
 });
 
 describe("BuyerLoginForm", () => {
@@ -97,6 +101,50 @@ describe("BuyerLoginForm", () => {
     await waitFor(() =>
       expect(replace).toHaveBeenCalledWith("/properties/west-park"),
     );
+  });
+
+  it("claims the pre-login intake handoff right before returning the buyer", async () => {
+    const fetchMock = vi.fn<
+      (url: string, init?: RequestInit) => Promise<Response>
+    >(async () => Response.json({ data: null }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const user = userEvent.setup();
+    render(<BuyerLoginForm returnTo="/intake" />);
+    await enterPhone(user);
+    await user.type(
+      await screen.findByLabelText(/verification code/i),
+      "123456",
+    );
+    await user.click(
+      screen.getByRole("button", { name: /verify and continue/i }),
+    );
+
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/intake"));
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/v1/buyer/intake-handoff/claim",
+      { method: "POST" },
+    );
+  });
+
+  it("still returns the buyer even when the claim call fails", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => Promise.reject(new Error("network down"))),
+    );
+
+    const user = userEvent.setup();
+    render(<BuyerLoginForm returnTo="/intake" />);
+    await enterPhone(user);
+    await user.type(
+      await screen.findByLabelText(/verification code/i),
+      "123456",
+    );
+    await user.click(
+      screen.getByRole("button", { name: /verify and continue/i }),
+    );
+
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/intake"));
   });
 
   it("allows a retry after a wrong code, keeping the destination", async () => {

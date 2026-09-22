@@ -7,6 +7,15 @@
 
 import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } from "@/lib/properties/types";
 import type { ApiErrorCode } from "@/lib/properties/http";
+import {
+  MAX_PRIORITIES,
+  PRIORITY_KEYS,
+  RANGE_MAX_LAKH,
+  RANGE_MIN_LAKH,
+  type IntakeAnswers,
+  type PriorityKey,
+  type StatedRange,
+} from "@/lib/properties/intake";
 import type { ComparisonItemInput } from "./comparisons";
 import type { CreateEnquiryInput } from "./enquiries";
 
@@ -214,4 +223,116 @@ export const parseEnquiryBody = (body: unknown): ParsedEnquiryBody => {
       ...(message === undefined ? {} : { message }),
     },
   };
+};
+
+// --- intake handoff ---------------------------------------------------
+
+/**
+ * Shared by `POST /api/v1/buyer/intake-handoff` (setting the cookie). Every
+ * field is required but nullable — `IntakeAnswers` names an unanswered
+ * question with `null`/`[]` rather than an absent key, so a caller cannot
+ * omit a field and have it silently read as "not stated" when it might
+ * simply have been forgotten.
+ */
+const INTAKE_HANDOFF_BODY_KEYS = new Set([
+  "priorities",
+  "bhk",
+  "city",
+  "statedRange",
+]);
+const STATED_RANGE_KEYS = new Set(["fromLakh", "toLakh"]);
+
+export type ParsedIntakeHandoffBody =
+  { ok: true; answers: IntakeAnswers } | ParseFailure;
+
+const readNullableString = (
+  record: Record<string, unknown>,
+  name: string,
+): string | null | ParseFailure => {
+  if (!(name in record)) {
+    return failure(`${name} is required (use null when not stated).`);
+  }
+  const value = record[name];
+  if (value === null) return null;
+  if (typeof value !== "string" || value.trim() === "") {
+    return failure(`${name} must be a non-empty string or null.`);
+  }
+  return value;
+};
+
+const readStatedRange = (
+  record: Record<string, unknown>,
+): StatedRange | null | ParseFailure => {
+  if (!("statedRange" in record)) {
+    return failure("statedRange is required (use null when not stated).");
+  }
+  const value = record.statedRange;
+  if (value === null) return null;
+  const rangeRecord = asRecord(value);
+  if (isFailure(rangeRecord)) {
+    return failure("statedRange must be an object or null.");
+  }
+  for (const key of Object.keys(rangeRecord)) {
+    if (!STATED_RANGE_KEYS.has(key)) {
+      return failure(`Unknown field "statedRange.${key}".`);
+    }
+  }
+  const { fromLakh, toLakh } = rangeRecord;
+  if (
+    typeof fromLakh !== "number" ||
+    !Number.isFinite(fromLakh) ||
+    typeof toLakh !== "number" ||
+    !Number.isFinite(toLakh) ||
+    fromLakh < RANGE_MIN_LAKH ||
+    toLakh > RANGE_MAX_LAKH ||
+    fromLakh > toLakh
+  ) {
+    return failure(
+      `statedRange must have fromLakh/toLakh between ${RANGE_MIN_LAKH} and ${RANGE_MAX_LAKH}, with fromLakh <= toLakh.`,
+    );
+  }
+  return { fromLakh, toLakh };
+};
+
+const readPriorities = (
+  record: Record<string, unknown>,
+): PriorityKey[] | ParseFailure => {
+  if (!("priorities" in record)) {
+    return failure("priorities is required (use [] when nothing was chosen).");
+  }
+  const value = record.priorities;
+  if (!Array.isArray(value) || value.length > MAX_PRIORITIES) {
+    return failure(
+      `priorities must be an array of at most ${MAX_PRIORITIES} known keys.`,
+    );
+  }
+  for (const entry of value) {
+    if (
+      typeof entry !== "string" ||
+      !(PRIORITY_KEYS as readonly string[]).includes(entry)
+    ) {
+      return failure("priorities must only contain known priority keys.");
+    }
+  }
+  return value as PriorityKey[];
+};
+
+export const parseIntakeHandoffBody = (
+  body: unknown,
+): ParsedIntakeHandoffBody => {
+  const record = asRecord(body);
+  if (isFailure(record)) return record;
+  const keyFailure = assertKnownKeys(record, INTAKE_HANDOFF_BODY_KEYS);
+  if (keyFailure) return keyFailure;
+
+  const priorities = readPriorities(record);
+  if (isFailure(priorities)) return priorities;
+  const bhk = readNullableString(record, "bhk");
+  if (isFailure(bhk)) return bhk;
+  const city = readNullableString(record, "city");
+  if (isFailure(city)) return city;
+  const statedRange = readStatedRange(record);
+  if (isFailure(statedRange)) return statedRange;
+
+  return { ok: true, answers: { priorities, bhk, city, statedRange } };
 };

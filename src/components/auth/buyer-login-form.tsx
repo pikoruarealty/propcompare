@@ -10,6 +10,8 @@ import {
   isPlaceholderName,
 } from "@/lib/accounts/buyer-name";
 import { normaliseIndianMobile } from "@/lib/accounts/phone";
+import type { IntakeAnswers } from "@/lib/properties/intake";
+import { setPendingIntakeClaim } from "@/lib/properties/pending-intake-claim";
 import { AuthField } from "./auth-field";
 
 const OTP_LENGTH = 6;
@@ -37,6 +39,11 @@ const CODE_ERROR =
  * expired code keeps the buyer on the code step with the same destination and
  * lets them retry — nothing is recorded as an unlock until the verified session
  * exists (docs/app-flows/buyer.md, exception paths).
+ *
+ * Right before the final redirect (skipping the name step, or after it),
+ * `claimIntakeHandoff` claims the pre-login intake handoff cookie if the
+ * buyer chose "Sign in to keep this search" on `/intake` — see
+ * `docs/tasklists/2026-09-18-pre-login-intake-cookie.md`.
  */
 export function BuyerLoginForm({ returnTo }: { returnTo: string }) {
   const router = useRouter();
@@ -51,6 +58,26 @@ export function BuyerLoginForm({ returnTo }: { returnTo: string }) {
   const [error, setError] = React.useState<string | null>(null);
   const [notice, setNotice] = React.useState<string | null>(null);
   const [pending, setPending] = React.useState(false);
+
+  /**
+   * Claims the pre-login intake handoff cookie, if the buyer chose "Sign in
+   * to keep this search" before landing here. Best-effort: a buyer who signs
+   * in without ever choosing that gets `{ data: null }` and nothing happens;
+   * a network failure here must never block sign-in itself, since the answers
+   * that would have been kept are, at worst, lost — not a broken login.
+   */
+  const claimIntakeHandoff = async (): Promise<void> => {
+    try {
+      const response = await fetch("/api/v1/buyer/intake-handoff/claim", {
+        method: "POST",
+      });
+      if (!response.ok) return;
+      const body = (await response.json()) as { data: IntakeAnswers | null };
+      if (body.data !== null) setPendingIntakeClaim(body.data);
+    } catch {
+      // Nothing to keep; sign-in still succeeds.
+    }
+  };
 
   const sendCode = async (number: string): Promise<boolean> => {
     setPending(true);
@@ -110,6 +137,7 @@ export function BuyerLoginForm({ returnTo }: { returnTo: string }) {
         setStep("name");
         return;
       }
+      await claimIntakeHandoff();
       router.replace(returnTo);
       router.refresh();
     } catch {
@@ -145,6 +173,7 @@ export function BuyerLoginForm({ returnTo }: { returnTo: string }) {
           return;
         }
       }
+      await claimIntakeHandoff();
       router.replace(returnTo);
       router.refresh();
     } catch {

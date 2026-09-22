@@ -776,7 +776,10 @@ export const buyerIntakeSessions = pgTable(
     desiredBhkTypeId: uuid("desired_bhk_type_id").references(() => bhkTypes.id),
     budgetMinInr: numeric("budget_min_inr"),
     budgetMaxInr: numeric("budget_max_inr"),
-    city: text("city").notNull(),
+    // Nullable (schema v10): the intake city question is optional ("No
+    // preference"), and a buyer can state a range or configuration without
+    // ever answering it. See docs/schema/schema.v10.md.
+    city: text("city"),
     ...timestamps(),
   },
   (table) => [index("buyer_intake_sessions_user_id_idx").on(table.userId)],
