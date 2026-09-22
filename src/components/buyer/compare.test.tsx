@@ -14,6 +14,14 @@ vi.mock("next/navigation", () => ({
   usePathname: () => currentPath,
 }));
 
+// This file is about the comparison's *data* — what rows say, how they're
+// shaded, how unit-type switching and section collapsing work — none of
+// which that content-locking behind sign-in (`DECISIONS.md` 2026-09-22) is
+// its concern. Signed in throughout, so the real rows render exactly as
+// before; the lock itself has its own tests in `compare-screen.test.tsx`.
+const { useSession } = vi.hoisted(() => ({ useSession: vi.fn() }));
+vi.mock("@/lib/auth-client", () => ({ authClient: { useSession } }));
+
 const two = () => {
   const a = { ...richDossierFixture, slug: "a", name: "Alpha Heights" };
   const b = {
@@ -39,6 +47,10 @@ beforeEach(() => {
   window.localStorage.clear();
   push.mockReset();
   currentPath = "/";
+  useSession.mockReturnValue({
+    data: { user: { id: "test-buyer" } },
+    isPending: false,
+  });
 });
 
 describe("the Compare toggle and the tray", () => {

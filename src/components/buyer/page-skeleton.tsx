@@ -8,7 +8,9 @@ import { PageContainer, PageFrame, PageSection } from "./page-frame";
  * the loading state itself, not decoration, and stops for people who ask for
  * reduced motion.
  */
-function Block({ className }: { className?: string }) {
+/** Exported for any other screen that needs the same tonal loading block —
+ * currently also the locked comparison row groups (`compare-screen.tsx`). */
+export function Block({ className }: { className?: string }) {
   return (
     <div
       aria-hidden="true"

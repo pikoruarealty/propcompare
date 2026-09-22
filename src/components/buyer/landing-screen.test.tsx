@@ -1,15 +1,18 @@
 import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { propertyListFixture } from "@/lib/properties/fixtures";
+import { INTAKE_PATH } from "@/lib/properties/intake";
 import type { PropertySummary } from "@/lib/properties/types";
 import { LandingScreen } from "./landing-screen";
 import { BUYER_NAV } from "./site-header";
 
 /**
- * The landing page's job is to route a visitor into browse or guided intake,
- * and to say enough about the catalog that its deliberate gaps do not read as
- * defects. These tests cover both: that the calls to action go where they
- * should, and that the page makes no claim the catalog cannot support.
+ * The landing page's job is to lead a visitor into guided intake — the site's
+ * front door (owner direction, `DECISIONS.md` 2026-09-22; intake is
+ * deliberately not a `BUYER_NAV` entry any more) — while still offering a
+ * direct path to the whole catalog for a visitor who does not want it. These
+ * tests cover both: that the calls to action go where they should, and that
+ * the page makes no claim the catalog cannot support.
  *
  * Most of them render an empty catalog, which is both the honest default and
  * the state the page shipped in for the whole of step 7. The recent-properties
@@ -23,34 +26,38 @@ const renderLanding = (recent: PropertySummary[] = []) => {
   return { ...view, main };
 };
 
-const [BROWSE_NAV, INTAKE_NAV] = BUYER_NAV;
+const [BROWSE_NAV] = BUYER_NAV;
 
 describe("LandingScreen — calls to action", () => {
-  it("routes to the browse catalog", () => {
+  it("leads with guided intake as the front door", () => {
     const { main } = renderLanding();
     const links = within(main).getAllByRole("link", {
-      name: /browse properties|see what is published|choose homes to compare/i,
+      name: /tell us what you.re looking for/i,
     });
 
     expect(links.length).toBeGreaterThan(0);
     for (const link of links) {
-      expect(link).toHaveAttribute("href", "/properties");
+      expect(link).toHaveAttribute("href", INTAKE_PATH);
     }
   });
 
-  it("routes to guided intake", () => {
+  it("still offers a direct path to the whole catalog", () => {
     const { main } = renderLanding();
-    const links = within(main).getAllByRole("link", { name: /guided start/i });
+    const links = within(main).getAllByRole("link", {
+      name: /browse everything instead|see what is published/i,
+    });
 
     expect(links.length).toBeGreaterThan(0);
     for (const link of links) {
-      expect(link).toHaveAttribute("href", "/intake");
+      expect(link).toHaveAttribute("href", BROWSE_NAV.href);
     }
   });
 
-  it("sends visitors to the destinations the header already names", () => {
-    // The landing page and the header take their hrefs from one `BUYER_NAV`,
-    // so a route that moves cannot leave one of them pointing at the old path.
+  it("sends the browse links to the destination the header already names", () => {
+    // The landing page and the header take the browse href from one
+    // `BUYER_NAV`, so a route that moves cannot leave one of them pointing at
+    // the old path. Intake is deliberately not in `BUYER_NAV` any more, so it
+    // is not part of this guarantee.
     const { main } = renderLanding();
     const hrefs = new Set(
       within(main)
@@ -59,21 +66,6 @@ describe("LandingScreen — calls to action", () => {
     );
 
     expect(hrefs).toContain(BROWSE_NAV.href);
-    expect(hrefs).toContain(INTAKE_NAV.href);
-  });
-
-  it("offers both paths, since intake is optional", () => {
-    // The buyer flow is explicit that a visitor may browse immediately and that
-    // intake is optional. A landing that funnelled everyone through intake
-    // would contradict it.
-    const { main } = renderLanding();
-
-    expect(
-      within(main).getAllByRole("link", {
-        name: /browse|choose homes|see what is published/i,
-      }).length,
-    ).toBeGreaterThan(0);
-    expect(main).toHaveTextContent("Intake is optional");
   });
 });
 

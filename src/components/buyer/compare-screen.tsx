@@ -23,6 +23,8 @@ import type {
 } from "@/lib/compare/model";
 import type { PropertyDossier } from "@/lib/properties/types";
 import { cn } from "@/lib/utils";
+import { BuyerLoginForm } from "@/components/auth/buyer-login-form";
+import { Block } from "./page-skeleton";
 import { VerifiedBadge, reraVerifiedFact } from "./verified-badge";
 import { ZoomableImage } from "./zoomable-image";
 
@@ -266,6 +268,67 @@ function FloorPlanRow({
 }
 
 /**
+ * A locked row: the real label (a row's name is not the fact it protects),
+ * skeleton blocks where its values would be. Same grid shape as `Row`, so
+ * signing in swaps the row's contents without the table reflowing.
+ * `docs/design/no-vibecoded-tells.v1.md` rule 21: a tonal `Block`, the single
+ * pulse, nothing decorative.
+ */
+function LockedRow({ label, count }: { label: string; count: number }) {
+  return (
+    <div
+      role="row"
+      data-slot="compare-row-locked"
+      style={colsStyle(count)}
+      className={cn(gridClasses, "border-border border-b last:border-b-0")}
+    >
+      <div className="text-muted-foreground col-span-2 px-3 pt-2.5 text-xs md:col-span-1 md:py-2.5 md:text-sm">
+        {label}
+      </div>
+      {Array.from({ length: count }, (_, i) => (
+        <div key={i} className="min-w-0 px-3 pt-1 pb-2.5 md:py-2.5">
+          <Block className="h-4 w-4/5" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * Shown once, above the locked sections, never once per group — a buyer who
+ * has already decided not to sign in does not need to be asked seven times.
+ * Embeds the same phone-OTP form used everywhere else a buyer signs in
+ * (`BuyerLoginForm`), rather than sending them off `/compare` to a separate
+ * page and back.
+ */
+function ComparisonSignInPrompt() {
+  const here =
+    typeof window === "undefined"
+      ? "/compare"
+      : window.location.pathname + window.location.search;
+  return (
+    <div
+      data-slot="compare-sign-in"
+      className="border-border bg-card flex flex-col gap-4 border-b p-6"
+    >
+      <div className="flex flex-col gap-1">
+        <h2 className="font-display text-xl">
+          Sign in to see the rest of this comparison
+        </h2>
+        <p className="text-muted-foreground text-sm">
+          What each property is and how they differ at a glance is above.
+          Possession, rooms, amenities, specifications and RERA detail unlock
+          with your phone number — no email, no password.
+        </p>
+      </div>
+      <div className="max-w-sm">
+        <BuyerLoginForm returnTo={here} />
+      </div>
+    </div>
+  );
+}
+
+/**
  * Saving a comparison is the one part of comparing that needs an account. Signed
  * out, it is a link to sign in that returns to this comparison; signed in, it
  * stores the properties and unit types on screen (`POST /api/v1/comparisons`).
@@ -484,6 +547,14 @@ export function CompareScreen({
 }) {
   const router = useRouter();
   const selection = useCompareSelection();
+  // The column identity block and the summary are open to everyone; the row
+  // groups below them lock until there is a session (owner direction,
+  // `DECISIONS.md` 2026-09-22 — supersedes the earlier "no sign-in to
+  // compare" rule). A plain session check, the same one `SaveComparisonButton`
+  // already makes — not the separate `dossier_unlocks` table, which records a
+  // different fact (a phone-verified unlock against one property).
+  const { data: session } = authClient.useSession();
+  const signedIn = Boolean(session);
   // The properties and the chosen unit types live here, so switching a unit type
   // or dropping a property redraws the table at once; the address follows.
   const [dossiers, setDossiers] = React.useState(initialDossiers);
@@ -762,6 +833,10 @@ export function CompareScreen({
           ))}
         </div>
 
+        {!signedIn && shownGroups.length > 0 ? (
+          <ComparisonSignInPrompt />
+        ) : null}
+
         {shownGroups.length === 0 ? (
           <p className="text-muted-foreground p-6 text-sm">
             Nothing is stated for these properties yet.
@@ -775,6 +850,7 @@ export function CompareScreen({
                 data-slot="compare-group"
                 data-group={group.key}
                 data-open={open}
+                data-locked={!signedIn}
               >
                 <h2>
                   <button
@@ -797,17 +873,37 @@ export function CompareScreen({
                 </h2>
                 {open ? (
                   <div id={`compare-group-${group.key}`}>
-                    {group.key === "rooms" ? (
-                      <FloorPlanRow columns={model.columns} visible={visible} />
-                    ) : null}
-                    {group.rows.map((row) => (
-                      <Row
-                        key={row.key}
-                        row={row}
-                        count={count}
-                        visible={visible}
-                      />
-                    ))}
+                    {!signedIn ? (
+                      <>
+                        {group.key === "rooms" ? (
+                          <LockedRow label="Floor plan" count={count} />
+                        ) : null}
+                        {group.rows.map((row) => (
+                          <LockedRow
+                            key={row.key}
+                            label={row.label}
+                            count={count}
+                          />
+                        ))}
+                      </>
+                    ) : (
+                      <>
+                        {group.key === "rooms" ? (
+                          <FloorPlanRow
+                            columns={model.columns}
+                            visible={visible}
+                          />
+                        ) : null}
+                        {group.rows.map((row) => (
+                          <Row
+                            key={row.key}
+                            row={row}
+                            count={count}
+                            visible={visible}
+                          />
+                        ))}
+                      </>
+                    )}
                   </div>
                 ) : null}
               </section>
