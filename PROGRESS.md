@@ -1,5 +1,32 @@
 # Progress
 
+## 2026-09-22 (night) - Session handoff: branches merged to `main`, a git-history incident fixed, the paid test run, four items approved
+
+**START HERE for the next session.** Read `AGENTS.md` first, then this entry in full, then `DECISIONS.md`'s last four entries (the git-trailer incident, the four approvals, the paid test result, the router prompt tweak) and the two comparison tasklists from today (`docs/tasklists/2026-09-22-comparison-review-fixes.md`, `docs/tasklists/2026-09-22-field-contract-gap.md`).
+
+**Branches, cleaned up as the owner asked.** `main` now contains everything through today (Phases 0, 1, 2A, 2B and Phase 3 to date) and is pushed to `origin/main`. Every other local branch (`task/lookup-catalog-data`, `task/phase-1-data-layer`, `task/phase-2a-ocr-foundation`, `task/phase-3-budget-range-matching`, `task/schema-v5-brochure-fields`, `task/ocr-provider-selection`, `task/ocr-provider-integration`, `task/phase-2a-completion`) was already an ancestor of that history, so nothing else needed merging; they're stale pointers now, left alone rather than deleted. **Current work branch: `task/phase-3-completion`**, off the clean `main` — this is the one to keep working on and the one that should stay unmerged until its own phase closes.
+
+**A real incident, fixed, worth reading once:** merging to `main` put 9 old commits from a 2026-09-18 session on GitHub for the first time, and they carried a `Co-Authored-By: Claude` trailer — a direct violation of `AGENTS.md`'s "never add an AI agent as co-author" rule, missed because commit trailers were never checked before the push. The owner caught it from GitHub's Contributors panel. Fixed with the owner's explicit go-ahead: a `git filter-branch` message-only rewrite across all 122 commits on `main`, then a force-push. Verified against `origin/main` directly, not GitHub's Contributors panel (a separately cached feature that visibly lagged the fix). Full account in `DECISIONS.md`. **Lesson saved to project memory: check commit trailers before pushing any range with commits from outside the current session.**
+
+**Approved, 2026-09-22, clear to build without asking again:**
+
+1. The pre-login intake cookie (defaults already recorded 2026-09-21).
+2. Report a problem: placeholder only (dialog/page saying the contact email is coming; no table, no storage).
+3. Comparison analytics: an events table (no user id, no IP, no price).
+4. Schema v10: `unit_variant_amenities` (private amenities per unit type — penthouse pools, etc.). This is a schema change; write its own tasklist and follow the schema-doc-bump convention (`docs/schema/schema.v10.md`) before touching migrations.
+
+**The approved paid categorization test: run, and the result.** Fresh upload of the Maruti 360 brochure, one "Categorize brochure pages" run ($0.0076, `google/gemini-2.5-flash`). Amenity pages found went from 1 to 10 — 4 of the 5 marketing spreads named in the original finding are now caught (pages 11, 13, 14, 15); page 17 is still miscategorized as `other` and needs a direct look, not an assumption the fix covers it. Floor-plan captions on pages 20–29 matched exactly, unaffected. The test submission (`a3e786e9-239e-4b0b-a750-532c663ed0e0`) is left in the database as a draft, per the owner's standing instruction not to delete paid-run results — it was not taken further (no extraction, no publish; Maruti 360's live data is already good from its original run). Full account in `DECISIONS.md`.
+
+**What's next, in the order the owner set:**
+
+1. **Remaining Phase 3 items and schema v10** (approved above): the intake cookie, report-a-problem placeholder, comparison analytics, and schema v10 (private unit-level amenities — extraction field, publish write, dossier and comparison "Private amenities" row). Each needs its own scoped tasklist per `AGENTS.md` before code.
+2. **While working in Phase 3, also build the two follow-ups from today's router work** (not built yet, both discussed and scoped in `DECISIONS.md`'s 2026-09-22 entries):
+   - Persist the router's floor-plan/amenity `caption` past page-routing confirmation (`OcrRoutedPage.label` already exists and is unused; thread it through `buildConfirmedRoutingManifest` → `readConfirmedChoices` → `PageImageAction`'s default) so "Use as image" pre-fills the right unit type or amenity indefinitely, not just in the original confirm-pages session — this is exactly what went wrong with Maruti 360's floor plans before today's fix.
+   - Have the router match a simple single-facility amenity spread's content directly against the amenity catalog/synonyms (not the page's own marketing tagline text, which the 2026-09-22 paid test showed is not usable as-is) to skip a second, paid extraction call for that page. Needs prompt work to get the model to name the facility, not just permit a caption.
+3. **After Phase 3 (+ schema v10) is closed:** the UI and user-flow refinement round the owner asked for.
+
+**Also still open, not blocking, lower priority:** the 80-unit figure on Amaris, a legal entity for Adani, Adani's About text, Kimana's penthouse layout type ("Not stated"), paid re-runs of Amaris and Kimana under the unit-aware pipeline, and the field-contract audit's `property.launch_date` staying unfilled on all three live properties until a brochure is re-run (RERA does not state it; see `docs/tasklists/2026-09-22-field-contract-gap.md`).
+
 ## 2026-09-22 (evening) - Router prompt tweaked so single-facility amenity spreads are no longer missed
 
 **Done:** `src/lib/ocr/page-router.ts`'s prompt now explicitly classifies a full-page single-facility marketing spread (one photo, captioned with a facility name, no list of other amenities) as an amenities page, not marketing imagery, and asks for a short caption naming the facility, the same mechanism already used for floor plans. Prompt-only; no paid call was made.
