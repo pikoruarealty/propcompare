@@ -136,6 +136,7 @@ Full published dossier for one property, resolved by `properties.slug`.
     "sourcedFacts": ["registration_number" | "construction_progress" | "possession_date" | "total_units"]
   },
   "totalTowers": 0 | null,
+  "totalFloors": 0 | null,
   "totalUnits": 0 | null,
   "unitVariants": [
     {

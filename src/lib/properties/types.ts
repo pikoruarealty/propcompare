@@ -182,6 +182,7 @@ export interface PropertyDossier {
   possession: DossierPossession;
   rera: DossierRera;
   totalTowers: number | null;
+  totalFloors: number | null;
   totalUnits: number | null;
   unitVariants: DossierUnitVariant[];
   amenities: DossierAmenity[];

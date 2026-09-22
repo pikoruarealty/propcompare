@@ -8,7 +8,11 @@ import { CompareToggle } from "./compare-toggle";
 import { CompareTray } from "./compare-tray";
 
 const push = vi.fn();
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }));
+let currentPath = "/";
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push }),
+  usePathname: () => currentPath,
+}));
 
 const two = () => {
   const a = { ...richDossierFixture, slug: "a", name: "Alpha Heights" };
@@ -34,6 +38,7 @@ const two = () => {
 beforeEach(() => {
   window.localStorage.clear();
   push.mockReset();
+  currentPath = "/";
 });
 
 describe("the Compare toggle and the tray", () => {
@@ -72,6 +77,19 @@ describe("the Compare toggle and the tray", () => {
     expect(
       JSON.parse(window.localStorage.getItem("propcompare.compare.v1")!),
     ).toHaveLength(2);
+  });
+
+  it("stays off the comparison page itself, which already shows the same properties", () => {
+    currentPath = "/compare";
+    window.localStorage.setItem(
+      "propcompare.compare.v1",
+      JSON.stringify([
+        { slug: "a", name: "Alpha Heights", mediaId: null },
+        { slug: "b", name: "Beta Residency", mediaId: null },
+      ]),
+    );
+    render(<CompareTray />);
+    expect(screen.queryByRole("complementary")).toBeNull();
   });
 
   it("removes a property, and the tray goes away with the last one", async () => {

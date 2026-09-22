@@ -165,6 +165,9 @@ export interface RoomDimension {
   name: string;
   lengthFt: number;
   widthFt: number;
+  /** The room's own printed area, when the brochure stated one directly,
+   * distinct from the sides. `null` when only the sides were published. */
+  areaSqft?: number | null;
 }
 
 const isFiniteNumber = (value: unknown): value is number =>
@@ -197,11 +200,19 @@ export const readRoomDimensions = (
   for (const room of rooms) {
     if (room === null || typeof room !== "object") continue;
 
-    const { name, lengthFt, widthFt } = room as Record<string, unknown>;
+    const { name, lengthFt, widthFt, areaSqft } = room as Record<
+      string,
+      unknown
+    >;
     if (typeof name !== "string" || name.trim() === "") continue;
     if (!isFiniteNumber(lengthFt) || !isFiniteNumber(widthFt)) continue;
 
-    readable.push({ name: name.trim(), lengthFt, widthFt });
+    readable.push({
+      name: name.trim(),
+      lengthFt,
+      widthFt,
+      areaSqft: isFiniteNumber(areaSqft) ? areaSqft : null,
+    });
   }
 
   return readable.length === 0 ? null : readable;
@@ -210,9 +221,28 @@ export const readRoomDimensions = (
 /** A stored side in feet, shown to at most two decimals (16'5" is stored as 16.4167). */
 const feet = (value: number): number => Math.round(value * 100) / 100;
 
-/** `16.5 × 12 ft`, with the multiplication sign rather than a letter x. */
-export const formatRoomDimension = (room: RoomDimension): string =>
-  `${feet(room.lengthFt)} × ${feet(room.widthFt)} ft`;
+/**
+ * `16.5 × 12 ft, 198 sq ft`, with the multiplication sign rather than a
+ * letter x. The area beside the sides is the room's own printed area when
+ * the brochure stated one; otherwise it is the sides multiplied together,
+ * rounded to the nearest square foot and labelled as calculated. This is a
+ * deliberate, narrow exception to "an area basis is never derived from
+ * another" (`DECISIONS.md`, 2026-09-22): it applies to a single room's own
+ * area from its own two sides, never to carpet, built-up or super built-up
+ * area, which are never derived from each other or from room sizes.
+ */
+export const formatRoomDimension = (room: RoomDimension): string => {
+  const size = `${feet(room.lengthFt)} × ${feet(room.widthFt)} ft`;
+  const stated = room.areaSqft ?? null;
+  if (stated !== null) {
+    const area = formatSqft(String(stated));
+    return area === null ? size : `${size}, ${area} sq ft`;
+  }
+  const computed = formatSqft(String(Math.round(room.lengthFt * room.widthFt)));
+  return computed === null
+    ? size
+    : `${size}, ${computed} sq ft (calculated from the sides)`;
+};
 
 /** The distinct BHK types across a dossier's variants, for summaries. */
 export const dossierBhkLabels = (
@@ -340,7 +370,7 @@ export const shortUnitTypeName = (name: string): string => {
  * dossier labels it "facts stated".
  *
  * What counts: the project facts (possession status and date, launch date,
- * towers, units, pincode, description), the RERA facts (registration number,
+ * towers, floors, units, pincode, description), the RERA facts (registration number,
  * land area, carpet area range, construction progress), the developer's
  * description and website, every catalog amenity and specification that is not
  * `not_stated` (a stated "not offered" is a stated fact), and for each unit type
@@ -354,6 +384,7 @@ export const dossierFactCount = (
     dossier.possession.possessionDate,
     dossier.possession.launchDate,
     dossier.totalTowers,
+    dossier.totalFloors,
     dossier.totalUnits,
     dossier.location.pincode,
     dossier.description,

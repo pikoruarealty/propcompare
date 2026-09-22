@@ -6,6 +6,7 @@ import {
   AREA_BASIS_LABEL,
   AREA_BASIS_ORDER,
   areasByBasis,
+  formatAreaRange,
   formatRoomDimension,
   type RoomDimension,
   formatSqft,
@@ -15,6 +16,7 @@ import {
 import type {
   CatalogItemStatus,
   DossierUnitVariant,
+  PossessionStatus,
   PropertyDossier,
 } from "@/lib/properties/types";
 import type { ReraSourcedFact } from "@/lib/properties/rera-source";
@@ -141,6 +143,35 @@ const carpetOf = (variant: DossierUnitVariant): number | null => {
   const value = areasByBasis(variant.areas).carpet;
   const number = value === null ? NaN : Number(value);
   return Number.isFinite(number) ? number : null;
+};
+
+/**
+ * The floor plans to show for the unit type a column compares: the ones
+ * published tied to that exact type, or, when none were tied to it, the
+ * plans published tied to no unit type at all (a brochure's plan pages that
+ * were never assigned to one). A plan tied to a *different* type is never
+ * substituted, so a property with no plan for the chosen type still says so
+ * honestly rather than showing the wrong one.
+ */
+const floorPlansFor = (
+  dossier: PropertyDossier,
+  variantId: string | null,
+): FloorPlanRef[] => {
+  if (variantId === null) return [];
+  const isPlan = (media: PropertyDossier["media"][number]) =>
+    media.mediaType === "floor_plan";
+  const tied = dossier.media.filter(
+    (media) => isPlan(media) && media.unitVariantId === variantId,
+  );
+  const untied = dossier.media.filter(
+    (media) => isPlan(media) && media.unitVariantId === null,
+  );
+  const plans = tied.length > 0 ? tied : untied;
+  return plans.map((media) => ({
+    id: media.id,
+    caption: media.caption,
+    attribution: media.attribution,
+  }));
 };
 
 const optionOf = (variant: DossierUnitVariant): VariantOption => ({
@@ -416,30 +447,71 @@ export const roomKind = (name: string): RoomKind | null => {
   return null;
 };
 
-const ROOM_ROWS: { kind: RoomKind; label: string; count: boolean }[] = [
-  { kind: "bedroom", label: "Bedrooms", count: true },
-  { kind: "living", label: "Living, drawing and dining", count: false },
-  { kind: "kitchen", label: "Kitchen", count: false },
-  { kind: "foyer", label: "Foyer and vestibule", count: false },
-  { kind: "balcony", label: "Balconies and terraces", count: true },
-  { kind: "toilet", label: "Toilets", count: true },
+const ROOM_ROWS: { kind: RoomKind; label: string }[] = [
+  { kind: "bedroom", label: "Bedrooms" },
+  { kind: "living", label: "Living, drawing and dining" },
+  { kind: "kitchen", label: "Kitchen" },
+  { kind: "foyer", label: "Foyer and vestibule" },
+  { kind: "balcony", label: "Balconies and terraces" },
+  { kind: "toilet", label: "Toilets" },
 ];
 
+const bySize = (a: RoomDimension, b: RoomDimension) =>
+  b.lengthFt * b.widthFt - a.lengthFt * a.widthFt;
+
 /**
- * The rooms of one kind as published: sizes as stated (length × width, feet),
- * largest first, with the count where several rooms share a row. A room's area is
- * never computed from its sides.
+ * The rooms of one kind as published, one per line (largest first): sides as
+ * stated, each beside its own area (its printed area, or the sides multiplied
+ * together and labelled as calculated — `formatRoomDimension`). Lines render
+ * with `white-space: pre-line` in the screen, so a room row is never one long
+ * semicolon-joined line.
  */
-const roomsText = (rooms: RoomDimension[], withCount: boolean): string => {
-  const sorted = [...rooms].sort(
-    (a, b) => b.lengthFt * b.widthFt - a.lengthFt * a.widthFt,
-  );
-  const sizes = sorted.map((room) => formatRoomDimension(room)).join("; ");
-  return withCount && sorted.length > 1 ? `${sorted.length}: ${sizes}` : sizes;
-};
+const roomsText = (rooms: RoomDimension[]): string =>
+  [...rooms]
+    .sort(bySize)
+    .map((room) => formatRoomDimension(room))
+    .join("\n");
+
+/**
+ * Rooms whose name does not clearly say what kind of room it is (a dress, a
+ * store, a puja, a servant room, a duct) are never guessed into one of the
+ * kinds above, but they are still published facts, so they get their own row,
+ * named as printed, rather than being silently dropped.
+ */
+const otherRoomsText = (rooms: RoomDimension[]): string =>
+  [...rooms]
+    .sort(bySize)
+    .map((room) => `${room.name}: ${formatRoomDimension(room)}`)
+    .join("\n");
 
 const plural = (count: number, one: string, many = `${one}s`) =>
   `${count} ${count === 1 ? one : many}`;
+
+/**
+ * Possession status is filled in when nobody confirmed one but RERA's declared
+ * progress is on record, using the same rule the admin RERA panel already
+ * states and labels as derived (`src/lib/rera/mapping.ts`): progress under 100
+ * is under construction, 100 is ready to move. A confirmed status always wins;
+ * this only fills a genuine gap, never overrides a stated value, and is never
+ * marked as something the regulator itself said (`sourced` stays false for it,
+ * as `DECISIONS.md` 2026-09-20 already requires).
+ */
+const displayPossessionStatus = (
+  dossier: PropertyDossier,
+): PossessionStatus | null => {
+  if (dossier.possession.status !== null) return dossier.possession.status;
+  const progress = Number(dossier.rera.constructionProgressPercent);
+  if (!Number.isFinite(progress)) return null;
+  return progress >= 100 ? "ready_to_move" : "under_construction";
+};
+
+/**
+ * A property with a registration number on record is registered, whether or
+ * not the `rera_registered` flag was separately confirmed: the number is the
+ * fact, the flag is bookkeeping that can lag it.
+ */
+const displayReraRegistered = (dossier: PropertyDossier): boolean =>
+  dossier.rera.registered || dossier.rera.registrationNumber !== null;
 
 export const buildComparison = (
   dossiers: PropertyDossier[],
@@ -458,7 +530,7 @@ export const buildComparison = (
     city: dossier.location.city,
     developerId: dossier.developer.id,
     developerName: dossier.developer.name,
-    reraRegistered: dossier.rera.registered,
+    reraRegistered: displayReraRegistered(dossier),
     registrationNumber: dossier.rera.registrationNumber,
     regulatorCheckedOn: shortDate(dossier.rera.lastCheckedAt),
     primaryMediaId:
@@ -466,19 +538,7 @@ export const buildComparison = (
       dossier.media[0]?.id ??
       null,
     variant: chosen[i].variant ? optionOf(chosen[i].variant) : null,
-    floorPlans: chosen[i].variant
-      ? dossier.media
-          .filter(
-            (media) =>
-              media.mediaType === "floor_plan" &&
-              media.unitVariantId === chosen[i].variant?.id,
-          )
-          .map((media) => ({
-            id: media.id,
-            caption: media.caption,
-            attribution: media.attribution,
-          }))
-      : [],
+    floorPlans: floorPlansFor(dossier, chosen[i].variant?.id ?? null),
     variants: dossier.unitVariants.map(optionOf),
     variantChosenBy: chosen[i].by,
   }));
@@ -505,13 +565,10 @@ export const buildComparison = (
     key: "timeline",
     title: "Possession and timeline",
     rows: [
-      row("possession_status", "Possession", (d) =>
-        textCell(
-          d.possession.status
-            ? POSSESSION_STATUS_LABEL[d.possession.status]
-            : null,
-        ),
-      ),
+      row("possession_status", "Possession", (d) => {
+        const status = displayPossessionStatus(d);
+        return textCell(status ? POSSESSION_STATUS_LABEL[status] : null);
+      }),
       row("possession_date", "Possession date", (d) =>
         textCell(
           formatPossessionDate(d.possession.possessionDate),
@@ -574,15 +631,26 @@ export const buildComparison = (
   groups.push({
     key: "rooms",
     title: "Room by room",
-    rows: ROOM_ROWS.map(({ kind, label, count }) =>
-      row(`rooms_${kind}`, label, (_d, v) => {
+    rows: [
+      ...ROOM_ROWS.map(({ kind, label }) =>
+        row(`rooms_${kind}`, label, (_d, v) => {
+          const rooms = v ? readRoomDimensions(v.dimensions) : null;
+          if (rooms === null) return textCell(null);
+          const ofKind = rooms.filter((room) => roomKind(room.name) === kind);
+          if (ofKind.length === 0) return textCell(null);
+          return textCell(roomsText(ofKind));
+        }),
+      ),
+      row("rooms_other", "Other rooms", (_d, v) => {
         const rooms = v ? readRoomDimensions(v.dimensions) : null;
         if (rooms === null) return textCell(null);
-        const ofKind = rooms.filter((room) => roomKind(room.name) === kind);
-        if (ofKind.length === 0) return textCell(null);
-        return textCell(roomsText(ofKind, count));
+        const unclassified = rooms.filter(
+          (room) => roomKind(room.name) === null,
+        );
+        if (unclassified.length === 0) return textCell(null);
+        return textCell(otherRoomsText(unclassified));
       }),
-    ),
+    ],
   });
 
   groups.push({
@@ -591,10 +659,19 @@ export const buildComparison = (
     rows: [
       row("property_type", "Type", (d) => textCell(d.propertyType.label)),
       row("developer", "Developer", (d) => textCell(d.developer.name)),
+      row("locality", "Locality", (d) => textCell(d.location.locality)),
+      row("city", "City", (d) => textCell(d.location.city)),
+      row("pincode", "Pincode", (d) => textCell(d.location.pincode)),
       row("towers", "Towers", (d) =>
         numberCell(
           d.totalTowers,
           d.totalTowers === null ? null : String(d.totalTowers),
+        ),
+      ),
+      row("floors", "Floors", (d) =>
+        numberCell(
+          d.totalFloors,
+          d.totalFloors === null ? null : String(d.totalFloors),
         ),
       ),
       row("total_units", "Units in the project", (d) =>
@@ -669,10 +746,22 @@ export const buildComparison = (
     title: "RERA",
     rows: [
       row("rera_registration", "Registration", (d) =>
-        textCell(d.rera.registered ? "Registered" : null),
+        textCell(displayReraRegistered(d) ? "Registered" : null),
       ),
       row("rera_number", "Registration number", (d) =>
         textCell(d.rera.registrationNumber, sourced(d, "registration_number")),
+      ),
+      row("rera_land_area", "Registered land area", (d) => {
+        const text = formatSqft(d.rera.projectLandAreaSqft);
+        return textCell(text === null ? null : `${text} sq ft`);
+      }),
+      row("rera_carpet_range", "RERA carpet area range", (d) =>
+        textCell(
+          formatAreaRange(
+            d.rera.carpetAreaRangeMinSqft,
+            d.rera.carpetAreaRangeMaxSqft,
+          ),
+        ),
       ),
     ],
   });

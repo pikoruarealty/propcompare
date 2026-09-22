@@ -135,7 +135,19 @@ describe("readRoomDimensions", () => {
       rooms: [{ name: "Living", lengthFt: 16.5, widthFt: 12 }],
     });
 
-    expect(rooms).toEqual([{ name: "Living", lengthFt: 16.5, widthFt: 12 }]);
+    expect(rooms).toEqual([
+      { name: "Living", lengthFt: 16.5, widthFt: 12, areaSqft: null },
+    ]);
+  });
+
+  it("reads a room's own printed area alongside its sides", () => {
+    const rooms = readRoomDimensions({
+      rooms: [{ name: "Living", lengthFt: 16.5, widthFt: 12, areaSqft: 200 }],
+    });
+
+    expect(rooms).toEqual([
+      { name: "Living", lengthFt: 16.5, widthFt: 12, areaSqft: 200 },
+    ]);
   });
 
   it("returns null when nothing was published", () => {
@@ -175,15 +187,28 @@ describe("readRoomDimensions", () => {
       ],
     });
 
-    expect(rooms).toEqual([{ name: "Living", lengthFt: 16, widthFt: 12 }]);
+    expect(rooms).toEqual([
+      { name: "Living", lengthFt: 16, widthFt: 12, areaSqft: null },
+    ]);
   });
 });
 
 describe("formatRoomDimension", () => {
-  it("uses a multiplication sign, not a letter", () => {
+  it("uses a multiplication sign, not a letter, and the sides' own area when nothing was printed", () => {
     expect(
       formatRoomDimension({ name: "Living", lengthFt: 16.5, widthFt: 12 }),
-    ).toBe("16.5 × 12 ft");
+    ).toBe("16.5 × 12 ft, 198 sq ft (calculated from the sides)");
+  });
+
+  it("prefers a room's own printed area over one calculated from its sides", () => {
+    expect(
+      formatRoomDimension({
+        name: "Living",
+        lengthFt: 16.5,
+        widthFt: 12,
+        areaSqft: 200,
+      }),
+    ).toBe("16.5 × 12 ft, 200 sq ft");
   });
 });
 
@@ -335,9 +360,9 @@ describe("formatRoomDimension", () => {
   it("shows at most two decimals of a stored side", () => {
     expect(
       formatRoomDimension({ name: "Bedroom", lengthFt: 16.4167, widthFt: 12 }),
-    ).toBe("16.42 × 12 ft");
+    ).toBe("16.42 × 12 ft, 197 sq ft (calculated from the sides)");
     expect(
       formatRoomDimension({ name: "Living", lengthFt: 16.5, widthFt: 12 }),
-    ).toBe("16.5 × 12 ft");
+    ).toBe("16.5 × 12 ft, 198 sq ft (calculated from the sides)");
   });
 });

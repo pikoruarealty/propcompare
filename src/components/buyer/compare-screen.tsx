@@ -87,7 +87,7 @@ function Cell({ cell, hidden }: { cell: CompareCell; hidden: boolean }) {
         </span>
       ) : (
         <>
-          <span className="data-tabular">{cell.text}</span>
+          <span className="data-tabular whitespace-pre-line">{cell.text}</span>
           {cell.largest ? (
             <span className="text-muted-foreground ml-2 text-xs">largest</span>
           ) : null}
@@ -769,9 +769,6 @@ export function CompareScreen({
         ) : (
           shownGroups.map((group) => {
             const open = isOpen(group.key);
-            const differing = group.rows.filter(
-              (row) => row.status === "differs",
-            ).length;
             return (
               <section
                 key={group.key}
@@ -784,24 +781,18 @@ export function CompareScreen({
                     type="button"
                     aria-expanded={open}
                     aria-controls={`compare-group-${group.key}`}
+                    aria-label={`${group.title} section`}
                     onClick={() => toggleGroup(group.key)}
                     className="bg-muted text-muted-foreground border-border hover:text-foreground focus-visible:ring-ring flex w-full items-center justify-between gap-3 border-y px-3 py-2.5 text-left text-xs font-semibold tracking-[0.08em] uppercase focus-visible:ring-2 focus-visible:outline-none"
                   >
-                    <span>{group.title}</span>
-                    <span className="flex items-center gap-3 font-sans font-normal tracking-normal normal-case">
-                      <span data-slot="compare-group-count">
-                        {differing > 0
-                          ? `${differing} ${differing === 1 ? "differs" : "differ"}`
-                          : `${group.rows.length} ${group.rows.length === 1 ? "fact" : "facts"}`}
-                      </span>
-                      <ChevronDown
-                        aria-hidden="true"
-                        className={cn(
-                          "size-4 transition-transform",
-                          open && "rotate-180",
-                        )}
-                      />
-                    </span>
+                    <span aria-hidden="true">{group.title}</span>
+                    <ChevronDown
+                      aria-hidden="true"
+                      className={cn(
+                        "size-4 transition-transform",
+                        open && "rotate-180",
+                      )}
+                    />
                   </button>
                 </h2>
                 {open ? (

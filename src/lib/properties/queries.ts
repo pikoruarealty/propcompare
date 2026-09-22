@@ -445,6 +445,7 @@ export const getPublishedPropertyBySlug = async (
       reraConstructionProgressPercent:
         properties.reraConstructionProgressPercent,
       totalTowers: properties.totalTowers,
+      totalFloors: properties.totalFloors,
       totalUnits: properties.totalUnits,
       propertyTypeKey: propertyTypes.key,
       propertyTypeLabel: propertyTypes.label,
@@ -643,6 +644,7 @@ export const getPublishedPropertyBySlug = async (
       }),
     },
     totalTowers: row.totalTowers ?? null,
+    totalFloors: row.totalFloors ?? null,
     totalUnits: row.totalUnits ?? null,
     unitVariants: unitVariantList,
     amenities,

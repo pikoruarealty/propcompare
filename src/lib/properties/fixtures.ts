@@ -114,6 +114,7 @@ export const richDossierFixture: PropertyDossier = {
     sourcedFacts: ["registration_number", "construction_progress"],
   },
   totalTowers: 2,
+  totalFloors: 14,
   totalUnits: 184,
   unitVariants: [
     {
@@ -124,8 +125,9 @@ export const richDossierFixture: PropertyDossier = {
       totalUnitsOfVariant: 96,
       dimensions: {
         rooms: [
-          { name: "Living", lengthFt: 16.5, widthFt: 12 },
+          { name: "Living", lengthFt: 16.5, widthFt: 12, areaSqft: 200 },
           { name: "Master bedroom", lengthFt: 12, widthFt: 11 },
+          { name: "Store", lengthFt: 5, widthFt: 4 },
         ],
       },
       areas: [
@@ -247,6 +249,7 @@ export const sparseDossierFixture: PropertyDossier = {
     sourcedFacts: [],
   },
   totalTowers: null,
+  totalFloors: null,
   totalUnits: null,
   unitVariants: [
     {

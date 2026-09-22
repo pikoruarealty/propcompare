@@ -100,7 +100,7 @@ describe("DossierScreen — the full property", () => {
     const { container } = renderDossier(richDossierFixture);
 
     expect(
-      within(openVariant(container)).getByText("16.5 × 12 ft"),
+      within(openVariant(container)).getByText("16.5 × 12 ft, 200 sq ft"),
     ).toBeInTheDocument();
     // The second variant published no dimensions at all.
     await user.click(screen.getAllByRole("tab")[1]);

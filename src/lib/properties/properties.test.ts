@@ -162,6 +162,7 @@ describe("dossier fixtures match the dossier contract", () => {
     "possession",
     "rera",
     "totalTowers",
+    "totalFloors",
     "totalUnits",
     "unitVariants",
     "amenities",
