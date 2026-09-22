@@ -1,5 +1,15 @@
 # Progress
 
+## 2026-09-22 (later still) - Maruti 360's floor plans are live, matched from the brochure's own captions; a second structural gap fixed on the way
+
+**Done:** the last of the seven comparison-review findings is closed. The owner pointed out the floor-plan pages print their own unit-identifying caption at the bottom, and asked why matching wasn't done from that — turns out the router already asks the model for exactly this caption, it just gets thrown away the moment page routing is confirmed (never persisted past the draft stage; proposed as a follow-up, not built this round, see `DECISIONS.md`). Read three screenshots the owner sent to get the exact captions for pages 21, 24 and 27; the other 7 of 10 follow directly or by elimination (the count and sequence leave exactly one slot each, matching the six `unit_variants` already on record). Attached all ten brochure pages to their exact unit type via "Use as image" and published.
+
+**A second gap found on the way:** there was no way to add brochure pictures to an edit of an _already-published_ property at all — the pages screen requires the submission being edited to own an OCR job, and a fresh "Edit this property" submission never has one. Fixed (`src/lib/ingestion/queries.ts`): it now falls back to the same property's most recent brochure from an earlier submission, the same cross-submission pattern already used for RERA checks. This was blocking, not just for Maruti 360 — any already-published property was in the same position.
+
+**Verified:** typecheck, lint, prettier, the full suite (129 files, 1542 tests); confirmed in the database that all ten floor plans are live and correctly tied to their unit type (each an exact match against `unit_variants.variant_name`, so a typo would have been refused by the publisher, not silently misassigned).
+
+**Not done:** persisting the router's caption past page-routing confirmation, so this class of problem does not recur on a future brochure — proposed, not built, see `DECISIONS.md`.
+
 ## 2026-09-22 (later) - The field-contract gap is closed; found and fixed a real jsonb data-corruption bug on the way
 
 **Done (`docs/tasklists/2026-09-22-field-contract-gap.md`), after you approved building it:** `property.pincode`, `property.launch_date` and `property.rera_project_land_area_sqft` are now real, writable contract fields (the columns already existed; nothing could ever write them). Pincode is dual-sourced like possession date (brochure or RERA); launch date is brochure-only (RERA has no such field); RERA project land area is RERA-fetch-only on purpose, never asked of the OCR model, because it is specifically RERA's own registered figure and must stay independent of the brochure's plot area. `rera_registered` is now derived at publish time from whether a registration number is on record, rather than a dead column that defaulted false forever; an edit that does not even touch the number still backfills the flag if the property already has one, so old properties self-heal on their next edit.
