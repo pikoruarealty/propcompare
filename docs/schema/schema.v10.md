@@ -28,9 +28,11 @@ a decision once matched against how guided intake actually works. Nothing else
 in the table changes, and nothing yet reads from it — see the tasklist above
 for the write path this unblocks.
 
-**Note on version numbering:** this was implemented before the
-owner-approved `unit_variant_amenities` schema change (`DECISIONS.md`
-2026-09-22, "schema v10" in the owner's own approval), so that work becomes
-**v11** rather than v10 when it is built — the owner's approval named the
-next version descriptively, not a specific number, and this smaller change
-landed first.
+**Note on version numbering:** the owner's 2026-09-22 approval named this
+change "schema v10" descriptively — the next version, not a specific number.
+It landed first, ahead of two other approved changes still to come
+(comparison analytics' events table, and `unit_variant_amenities`), so
+whichever of those is actually built next takes v11, and the other v12,
+in build order rather than approval order. Each one's own doc states which
+number it ended up as when it lands; do not assume a fixed mapping from this
+note.
