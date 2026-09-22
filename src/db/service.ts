@@ -1,5 +1,6 @@
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
+import { JSONB_DRIVER_TYPES } from "./jsonb-types";
 
 /**
  * The sole `BYPASSRLS` service-role connection, reserved for the Phase 3
@@ -18,6 +19,8 @@ if (process.env.DATABASE_SERVICE_URL === process.env.DATABASE_URL) {
   );
 }
 
-export const serviceDbClient = postgres(process.env.DATABASE_SERVICE_URL);
+export const serviceDbClient = postgres(process.env.DATABASE_SERVICE_URL, {
+  types: JSONB_DRIVER_TYPES,
+});
 
 export const serviceDb = drizzle(serviceDbClient);

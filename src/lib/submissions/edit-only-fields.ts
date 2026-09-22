@@ -18,5 +18,17 @@ export const EDIT_ONLY_FIELD_KEYS = [
 export const isEditOnlyField = (fieldKey: string): boolean =>
   (EDIT_ONLY_FIELD_KEYS as readonly string[]).includes(fieldKey);
 
+/**
+ * Contract fields only a regulator's own record can state, never a brochure, so
+ * they are never asked of the extraction model either. `property.
+ * rera_project_land_area_sqft` is RERA's registered project land, independent of
+ * the brochure's own plot area (`property.plot_area_sqft`); a brochure cannot
+ * state RERA's figure, so asking a model to guess at it would risk a brochure
+ * number landing in a field named for a different, authoritative source.
+ */
+export const RERA_ONLY_FIELD_KEYS = [
+  "property.rera_project_land_area_sqft",
+] as const;
+
 export const LISTING_STATUSES = ["listed", "unlisted", "deleted"] as const;
 export type ListingStatusValue = (typeof LISTING_STATUSES)[number];

@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { budgetBuckets } from "@/db/schema/private";
+import { JSONB_DRIVER_TYPES } from "./jsonb-types";
 
 if (!process.env.DATABASE_SERVICE_URL) {
   throw new Error(
@@ -14,7 +15,9 @@ if (process.env.DATABASE_SERVICE_URL === process.env.DATABASE_URL) {
   throw new Error("DATABASE_SERVICE_URL must not use the restricted app role");
 }
 
-const dbClient = postgres(process.env.DATABASE_SERVICE_URL);
+const dbClient = postgres(process.env.DATABASE_SERVICE_URL, {
+  types: JSONB_DRIVER_TYPES,
+});
 const db = drizzle(dbClient);
 
 const fixedBudgetBuckets = [

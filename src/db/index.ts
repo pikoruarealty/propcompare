@@ -1,5 +1,6 @@
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
+import { JSONB_DRIVER_TYPES } from "./jsonb-types";
 
 if (!process.env.DATABASE_URL) {
   throw new Error("DATABASE_URL is not set");
@@ -14,6 +15,8 @@ if (
   );
 }
 
-export const dbClient = postgres(process.env.DATABASE_URL);
+export const dbClient = postgres(process.env.DATABASE_URL, {
+  types: JSONB_DRIVER_TYPES,
+});
 
 export const db = drizzle(dbClient);

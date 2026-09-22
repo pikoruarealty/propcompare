@@ -27,11 +27,6 @@ const POSSESSION_LABEL: Record<string, string> = {
   ready_to_move: "Ready to move",
 };
 
-const SQFT_PER_SQM = 10.7639;
-
-const formatNumber = (value: number): string =>
-  value.toLocaleString("en-IN", { maximumFractionDigits: 0 });
-
 /** A comparison value as a person reads it; empty is "—". */
 export const displayReraValue = (
   fieldKey: string,
@@ -411,21 +406,16 @@ function CarpetAreaTable({ item }: { item: ReraComparisonItem | undefined }) {
 
 /**
  * What else the registration says, shown for reference and not written to the
- * listing. Land area is the registered project land, separate from the brochure's
- * plot area, and RERA reports it in square metres. Blocks and slabs describe the
- * registration: a block can hold several towers and a slab is not a storey, so
- * they are not taken as tower or floor counts.
+ * listing. Blocks and slabs describe the registration: a block can hold several
+ * towers and a slab is not a storey, so they are not taken as tower or floor
+ * counts. Land area and pincode are no longer here: since 2026-09-22 they are
+ * contract fields (`RERA_AUTHORITATIVE_FIELDS`) and appear as ordinary rows in
+ * the comparison table above, so an admin can confirm and write them.
  */
 function ReraExtras({ record }: { record: RegulatorRecord }) {
   const facts: [string, string][] = [];
   if (record.projectDescription) {
     facts.push(["Described as", record.projectDescription]);
-  }
-  if (record.landAreaSqm !== null) {
-    facts.push([
-      "Land area",
-      `${formatNumber(record.landAreaSqm)} sq m (${formatNumber(record.landAreaSqm * SQFT_PER_SQM)} sq ft)`,
-    ]);
   }
   if (record.blocks.length > 0) {
     facts.push([
@@ -442,7 +432,6 @@ function ReraExtras({ record }: { record: RegulatorRecord }) {
   if (record.coveredParkingSlots !== null) {
     facts.push(["Covered parking", `${record.coveredParkingSlots} slots`]);
   }
-  if (record.pincode) facts.push(["Pincode", record.pincode]);
   if (facts.length === 0) return null;
   return (
     <div data-slot="rera-extras">
@@ -452,9 +441,8 @@ function ReraExtras({ record }: { record: RegulatorRecord }) {
         ))}
       </dl>
       <p className="text-muted-foreground mt-2 text-xs">
-        Also on the RERA record, for reference. Not written to the listing: land
-        area is separate from the brochure&rsquo;s plot area, and a block can
-        hold several towers, so blocks are not tower or floor counts.
+        Also on the RERA record, for reference. Not written to the listing: a
+        block can hold several towers, so blocks are not tower or floor counts.
       </p>
     </div>
   );

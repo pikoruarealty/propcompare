@@ -300,6 +300,13 @@ const validateFieldValue = (
     }
     return value;
   }
+  if (dataType === "pincode") {
+    const trimmed = readNonEmptyString(value, path).trim();
+    if (!/^\d{6}$/.test(trimmed)) {
+      throw new SubmissionPayloadError(`${path} must be a 6-digit PIN code`);
+    }
+    return trimmed;
+  }
   if (dataType === "amenity_key_array") {
     if (
       !Array.isArray(value) ||

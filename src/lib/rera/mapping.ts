@@ -1,3 +1,4 @@
+import { areaToSqft } from "@/lib/units/measurements";
 import { compareCarpetAreas, type CarpetUnitRow } from "./carpet-area";
 import type { RegulatorCarpetGroup, RegulatorRecord } from "./types";
 
@@ -11,10 +12,19 @@ import type { RegulatorCarpetGroup, RegulatorRecord } from "./types";
  * pictures) are not here and are never touched by a fetch.
  *
  * Deliberately not mapped, because the meaning is not settled: property type
- * (RERA's "Residential/Group Housing" is not our catalogue), city and locality
- * (RERA gives a district), and the project land area. Carpet area per unit type is
- * mapped separately (`compareCarpetAreas`): RERA reports square metres and it is
- * converted once, there. Add others here once agreed, not by inference.
+ * (RERA's "Residential/Group Housing" is not our catalogue) and city and locality
+ * (RERA gives a district). Carpet area per unit type is mapped separately
+ * (`compareCarpetAreas`): RERA reports square metres and it is converted once,
+ * there. Add others here once agreed, not by inference.
+ *
+ * `property.pincode` and `property.rera_project_land_area_sqft` were added here
+ * 2026-09-22 (`DECISIONS.md`): both were readable off the regulator's record from
+ * the start but had no `property_schema_fields` contract key, so a submission
+ * could never write them. The land area figure is RERA's registered project land,
+ * independent of the brochure's own plot area (`property.plot_area_sqft`, never
+ * derived from this or vice versa) and is deliberately never asked of the OCR
+ * extraction model (`RERA_ONLY_FIELD_KEYS`) since a brochure cannot state RERA's
+ * own registered figure.
  */
 export interface ReraFieldRule {
   fieldKey: string;
@@ -47,6 +57,19 @@ export const RERA_AUTHORITATIVE_FIELDS: ReraFieldRule[] = [
     fieldKey: "property.rera_construction_progress_percent",
     label: "Construction progress (%)",
     read: (record) => record.constructionProgressPercent,
+  },
+  {
+    fieldKey: "property.pincode",
+    label: "Pincode",
+    read: (record) => record.pincode,
+  },
+  {
+    fieldKey: "property.rera_project_land_area_sqft",
+    label: "RERA project land area (sq ft)",
+    read: (record) =>
+      record.landAreaSqm === null
+        ? null
+        : Math.round(areaToSqft(record.landAreaSqm, "sqm") * 100) / 100,
   },
 ];
 

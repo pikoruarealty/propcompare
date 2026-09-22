@@ -140,6 +140,8 @@ describe("compareWithRecord", () => {
       "property.possession_date",
       "property.total_units",
       "property.rera_construction_progress_percent",
+      "property.pincode",
+      "property.rera_project_land_area_sqft",
       "property.possession_status",
       "property.amenities",
       LEGAL_ENTITY_FIELD_KEY,
@@ -224,6 +226,7 @@ describe("writableItems", () => {
       "property.possession_date",
       "property.total_units",
       "property.rera_construction_progress_percent",
+      "property.rera_project_land_area_sqft",
       "property.possession_status",
       LEGAL_ENTITY_FIELD_KEY,
     ]);

@@ -187,6 +187,8 @@ describe("fetching a RERA record for a submission", () => {
       "not_held", // possession date
       "not_held", // total units
       "not_held", // construction progress
+      "rera_silent", // pincode: the saved Kimana fixture states none
+      "not_held", // RERA project land area
       "not_held", // possession status (derived)
       "rera_silent", // amenities: Kimana declares no pool
       "not_held", // promoter
@@ -373,6 +375,7 @@ describe("using RERA's values", () => {
       "property.possession_date",
       "property.total_units",
       "property.rera_construction_progress_percent",
+      "property.rera_project_land_area_sqft",
       "property.possession_status",
       "property.legal_entity_id",
     ]);

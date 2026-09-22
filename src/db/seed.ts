@@ -388,6 +388,27 @@ const initialPropertySchemaFields = [
     "Chosen by an admin from the developer's recorded legal entities; never extracted by OCR and not shown to buyers yet.",
   ],
   [
+    "property.pincode",
+    "Pincode",
+    "pincode",
+    "$.basics.pincode.value",
+    "Six-digit postal PIN code, as printed on the brochure or confirmed from RERA.",
+  ],
+  [
+    "property.launch_date",
+    "Launch date",
+    "date",
+    "$.basics.launch.value",
+    "When the project was launched for sale, as stated by the brochure. RERA does not report this.",
+  ],
+  [
+    "property.rera_project_land_area_sqft",
+    "RERA project land area",
+    "positive_number",
+    null,
+    "The project's registered land area from RERA only, in square feet; independent of the brochure's plot area and never asked of the extraction model.",
+  ],
+  [
     "unit_variants",
     "Unit configurations",
     "unit_variant_array",
@@ -648,7 +669,12 @@ async function seed() {
                     "property.listing_status",
                   ].includes(fieldKey)
                 ? "v8"
-                : fieldKey === "property.media_removed"
+                : [
+                      "property.media_removed",
+                      "property.pincode",
+                      "property.launch_date",
+                      "property.rera_project_land_area_sqft",
+                    ].includes(fieldKey)
                   ? "v9"
                   : "v1",
           isActive: true,

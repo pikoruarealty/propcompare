@@ -284,10 +284,15 @@ const runPublish = async (
       "property.possession_status",
     ) as PropertyInsert["possessionStatus"] | undefined;
     const possessionDate = getStringField("property.possession_date");
+    const launchDate = getStringField("property.launch_date");
+    const pincode = getStringField("property.pincode");
     const totalTowers = getNumberField("property.total_towers");
     const totalFloors = getNumberField("property.total_floors");
     const totalUnits = getNumberField("property.total_units");
     const plotArea = getNumberField("property.plot_area_sqft");
+    const reraProjectLandArea = getNumberField(
+      "property.rera_project_land_area_sqft",
+    );
     const developerProfileNarrative = getStringField(
       "developer.profile_narrative",
     );
@@ -312,6 +317,11 @@ const runPublish = async (
     const reraRegistrationNumber = getStringField(
       "property.rera_registration_number",
     );
+    // A registration number on record is what "registered" means (comparison
+    // review, 2026-09-22): the flag is derived from the number, not a separate
+    // choice, and is set the moment a number is confirmed by any submission.
+    const reraRegistered =
+      reraRegistrationNumber === undefined ? undefined : true;
     const legalEntityId = getStringField("property.legal_entity_id");
     const reraConstructionProgressPercent = readPercentField(
       "property.rera_construction_progress_percent",
@@ -361,13 +371,20 @@ const runPublish = async (
           locality,
           possessionStatus: possessionStatusValue,
           possessionDate,
+          launchDate,
+          pincode,
           totalTowers,
           totalFloors,
           totalUnits,
           plotAreaSqft: plotArea === undefined ? undefined : String(plotArea),
           legalEntityId,
           reraRegistrationNumber,
+          reraRegistered,
           reraConstructionProgressPercent,
+          reraProjectLandAreaSqft:
+            reraProjectLandArea === undefined
+              ? undefined
+              : String(reraProjectLandArea),
         })
         .returning({ id: properties.id });
       propertyId = inserted.id;
@@ -390,10 +407,15 @@ const runPublish = async (
       if (possessionDate !== undefined) {
         updateColumns.possessionDate = possessionDate;
       }
+      if (launchDate !== undefined) updateColumns.launchDate = launchDate;
+      if (pincode !== undefined) updateColumns.pincode = pincode;
       if (totalTowers !== undefined) updateColumns.totalTowers = totalTowers;
       if (totalFloors !== undefined) updateColumns.totalFloors = totalFloors;
       if (totalUnits !== undefined) updateColumns.totalUnits = totalUnits;
       if (plotArea !== undefined) updateColumns.plotAreaSqft = String(plotArea);
+      if (reraProjectLandArea !== undefined) {
+        updateColumns.reraProjectLandAreaSqft = String(reraProjectLandArea);
+      }
       if (listingStatusValue !== undefined) {
         updateColumns.listingStatus = listingStatusValue;
         updateColumns.listingStatusChangedAt = new Date();
@@ -412,6 +434,23 @@ const runPublish = async (
       }
       if (reraRegistrationNumber !== undefined) {
         updateColumns.reraRegistrationNumber = reraRegistrationNumber;
+        updateColumns.reraRegistered = true;
+      } else {
+        // Not part of this edit, but the property may already carry a number
+        // from an earlier submission, published before `reraRegistered` was
+        // derived (2026-09-22). Fill the gap the moment any edit touches the
+        // property, rather than leaving it wrong until someone next changes
+        // the number itself.
+        const [current] = await tx
+          .select({
+            reraRegistrationNumber: properties.reraRegistrationNumber,
+            reraRegistered: properties.reraRegistered,
+          })
+          .from(properties)
+          .where(eq(properties.id, propertyId));
+        if (current?.reraRegistrationNumber && !current.reraRegistered) {
+          updateColumns.reraRegistered = true;
+        }
       }
       if (reraConstructionProgressPercent !== undefined) {
         updateColumns.reraConstructionProgressPercent =
