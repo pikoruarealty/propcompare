@@ -411,6 +411,33 @@ export const propertyAmenities = pgTable(
   ],
 );
 
+/**
+ * A unit type's own amenities — distinct from `propertyAmenities`, which
+ * describes the whole property. A penthouse's private pool belongs here, not
+ * on the property (which would wrongly say every unit has one). Schema v11,
+ * `docs/schema/schema.v11.md`; owner-approved 2026-09-22, `DECISIONS.md`.
+ */
+export const unitVariantAmenities = pgTable(
+  "unit_variant_amenities",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    unitVariantId: uuid("unit_variant_id")
+      .notNull()
+      .references(() => unitVariants.id, { onDelete: "cascade" }),
+    amenityCatalogId: uuid("amenity_catalog_id")
+      .notNull()
+      .references(() => amenityCatalog.id),
+    status: catalogItemStatus("status").notNull(),
+    ...timestamps(),
+  },
+  (table) => [
+    uniqueIndex("unit_variant_amenities_variant_catalog_unique").on(
+      table.unitVariantId,
+      table.amenityCatalogId,
+    ),
+  ],
+);
+
 export const propertySpecifications = pgTable(
   "property_specifications",
   {
@@ -917,6 +944,7 @@ export const liveCatalogTables = [
   unitVariants,
   unitAreas,
   propertyAmenities,
+  unitVariantAmenities,
   propertySpecifications,
   propertyMedia,
 ] as const;

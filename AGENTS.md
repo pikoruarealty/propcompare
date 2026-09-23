@@ -14,7 +14,7 @@ When choosing what to build next, comparison comes first. A change that makes da
 
 **There is exactly one live representation of each entity.** Before adding a table, column, or parallel data path, check `docs/schema/schema.v1.md` (or its latest version) for whether it already exists in a different shape. If a change to the canonical schema is genuinely needed, it's a new dated entry in `DECISIONS.md` plus an update to the schema doc (bump to `schema.v2.md` if the change is structural — never silently edit `schema.v1.md`'s content after it's been implemented against) — not a second table, not a "temporary" bridge, not a mirror.
 
-**No code path other than the `property_submissions` publish transaction writes to live catalog tables** (`properties`, `unit_variants`, `unit_areas`, `property_amenities`, `property_specifications`, `property_media`). This includes migrations, seed scripts, and one-off admin fixes. If you find yourself writing a script that needs to change live property data, it must construct a `property_submissions` row and go through approval — or the task needs to be redefined.
+**No code path other than the `property_submissions` publish transaction writes to live catalog tables** (`properties`, `unit_variants`, `unit_areas`, `property_amenities`, `unit_variant_amenities`, `property_specifications`, `property_media`). This includes migrations, seed scripts, and one-off admin fixes. If you find yourself writing a script that needs to change live property data, it must construct a `property_submissions` row and go through approval — or the task needs to be redefined.
 
 ## Before starting work
 
