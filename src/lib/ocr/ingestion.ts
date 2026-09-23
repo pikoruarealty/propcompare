@@ -208,7 +208,10 @@ export const retryOcrExtractionPersistence = async (params: {
         jobId: job.id,
         sourceDocumentId: job.sourceDocumentId,
         submissionId: job.submissionId,
-        manifest,
+        // A unit variant's scopeKey resolves against the manifest floor-plan
+        // unit discovery actually produced, not the confirmed manifest's own
+        // single floor-plans scope — see `OcrProviderExtractionResult.effectiveManifest`.
+        manifest: params.result.effectiveManifest ?? manifest,
         result: params.result,
       });
       await tx

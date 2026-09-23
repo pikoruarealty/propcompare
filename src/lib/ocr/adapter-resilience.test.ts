@@ -91,16 +91,29 @@ const project = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 });
 
+/**
+ * Floor-plan unit discovery now runs before extraction (`DECISIONS.md`
+ * 2026-09-23): a first small call says which pages belong to which unit,
+ * then one bounded extraction call runs per discovered unit, reusing the
+ * `unit_variant` scope kind's request/response shape exactly. Every test
+ * below sends `floorPlanDiscovery()` at `"floor-plans:discovery"` (one unit,
+ * "Type A", spanning both of the shared manifest's floor-plan pages) and
+ * `floorPlans(details)` at `"floor-plans:unit:0"` — same helper name and call
+ * sites as before the split, only its shape and address changed.
+ */
+const floorPlanDiscovery = (
+  units: { variantName: string; pageNumbers: number[] }[] = [
+    { variantName: "Type A", pageNumbers: [2, 3] },
+  ],
+) => ({ units });
+
 const floorPlans = (details: unknown) => ({
   fields: [],
-  unitVariants: [
-    {
-      variantName: "Type A",
-      details,
-      confidence: 0.9,
-      evidence: [{ pageNumber: 2, sourceSnippet: "Type A" }],
-    },
-  ],
+  unitVariant: {
+    details,
+    confidence: 0.9,
+    evidence: [{ pageNumber: 2, sourceSnippet: "Type A" }],
+  },
   unmappedRawEvidence: [],
 });
 
@@ -142,7 +155,8 @@ describe("more than expected, or messier than expected", () => {
   it("keeps several foyers as named rooms instead of failing the run", async () => {
     const adapter = adapterFor({
       "project-details": project(),
-      "floor-plans": floorPlans({
+      "floor-plans:discovery": floorPlanDiscovery(),
+      "floor-plans:unit:0": floorPlans({
         unitsPerFloor: 4,
         dimensions: {
           lengthUnit: "ft",
@@ -168,7 +182,8 @@ describe("more than expected, or messier than expected", () => {
   it("reads a null list of rooms or balconies as none, keeping the rest of the dimensions", async () => {
     const adapter = adapterFor({
       "project-details": project(),
-      "floor-plans": floorPlans({
+      "floor-plans:discovery": floorPlanDiscovery(),
+      "floor-plans:unit:0": floorPlans({
         dimensions: {
           lengthUnit: "ft",
           rooms: [{ name: "Living", length: 15, width: 12 }],
@@ -190,7 +205,8 @@ describe("more than expected, or messier than expected", () => {
   it("leaves out only a room with no measurement, keeping the other rooms", async () => {
     const adapter = adapterFor({
       "project-details": project(),
-      "floor-plans": floorPlans({
+      "floor-plans:discovery": floorPlanDiscovery(),
+      "floor-plans:unit:0": floorPlans({
         dimensions: {
           lengthUnit: "ft",
           areaUnit: "sq ft",
@@ -218,7 +234,8 @@ describe("more than expected, or messier than expected", () => {
   it("takes the readable parts of a variant and leaves out the rest", async () => {
     const adapter = adapterFor({
       "project-details": project(),
-      "floor-plans": floorPlans({
+      "floor-plans:discovery": floorPlanDiscovery(),
+      "floor-plans:unit:0": floorPlans({
         unitsPerFloor: "four",
         areas: [{ basis: "carpet", area: "about 1,200", unit: "sq ft" }],
         dimensions: null,
@@ -230,7 +247,14 @@ describe("more than expected, or messier than expected", () => {
     const result = await adapter.extract(request());
     const [variant] = result.extraction.unitVariants;
 
-    expect(variant.variantName).toBe("Type A");
+    // The name lives on the discovered scope, not the per-unit response
+    // (the same way any `unit_variant`-kind scope already worked) —
+    // resolved at persistence time via `effectiveManifest`, checked below.
+    expect(
+      result.effectiveManifest?.scopes.find(
+        (s) => s.scopeKey === variant.scopeKey,
+      ),
+    ).toMatchObject({ variant: { variantName: "Type A" } });
     expect(variant.details).toEqual({ totalUnitsOfVariant: 24 });
   });
 
@@ -269,7 +293,8 @@ describe("more than expected, or messier than expected", () => {
         ],
         somethingTheModelAddedOnItsOwn: "kept raw, not used",
       }),
-      "floor-plans": floorPlans({}),
+      "floor-plans:discovery": floorPlanDiscovery(),
+      "floor-plans:unit:0": floorPlans({}),
     });
 
     const result = await adapter.extract(request());
@@ -292,10 +317,11 @@ describe("a paid answer is never lost", () => {
   it("saves the raw answer before checking it, so even a rejected one is on disk", async () => {
     const adapter = adapterFor({
       "project-details": project(),
+      "floor-plans:discovery": floorPlanDiscovery(),
       // Not an object at all: the whole scope answer is unusable.
-      "floor-plans": {
+      "floor-plans:unit:0": {
         fields: [],
-        unitVariants: "none",
+        unitVariant: "none",
         unmappedRawEvidence: [],
       },
     });
@@ -306,17 +332,19 @@ describe("a paid answer is never lost", () => {
     const saved = await checkpoint();
     expect(saved.scopes.map((scope) => scope.scopeKey)).toEqual([
       "project-details",
-      "floor-plans",
+      "floor-plans:discovery",
+      "floor-plans:unit:0",
     ]);
-    expect(saved.scopes[1].response).toEqual({
+    expect(saved.scopes[2].response).toEqual({
       fields: [],
-      unitVariants: "none",
+      unitVariant: "none",
       unmappedRawEvidence: [],
     });
     // ...and what was billed is still reported for the ledger.
     expect(partialUsageOf(error).map((usage) => usage.scopeKey)).toEqual([
       "project-details",
-      "floor-plans",
+      "floor-plans:discovery",
+      "floor-plans:unit:0",
     ]);
   });
 
@@ -332,7 +360,8 @@ describe("a paid answer is never lost", () => {
           },
         ],
       }),
-      "floor-plans": floorPlans({}),
+      "floor-plans:discovery": floorPlanDiscovery(),
+      "floor-plans:unit:0": floorPlans({}),
     });
 
     await expect(adapter.extract(request())).rejects.toBeDefined();
@@ -342,36 +371,42 @@ describe("a paid answer is never lost", () => {
   it("does not pay again for scopes that already answered when the job is retried", async () => {
     const answers = {
       "project-details": project(),
-      "floor-plans": { fields: [], unitVariants: "none" },
+      "floor-plans:discovery": floorPlanDiscovery(),
+      "floor-plans:unit:0": { fields: [], unitVariant: "none" },
     };
     const first: string[] = [];
     await adapterFor(answers, first)
       .extract(request())
       .catch(() => undefined);
-    expect(first).toEqual(["project-details", "floor-plans"]);
+    expect(first).toEqual([
+      "project-details",
+      "floor-plans:discovery",
+      "floor-plans:unit:0",
+    ]);
 
-    // The scope that failed is asked again; the one that worked is not.
+    // The scope that failed is asked again; the ones that worked are not.
     const second: string[] = [];
     const result = await adapterFor(
-      { ...answers, "floor-plans": floorPlans({ unitsPerFloor: 2 }) },
+      { ...answers, "floor-plans:unit:0": floorPlans({ unitsPerFloor: 2 }) },
       second,
     ).extract(request());
 
-    expect(second).toEqual(["floor-plans"]);
+    expect(second).toEqual(["floor-plans:unit:0"]);
     expect(result.extraction.fields.map((field) => field.fieldKey)).toEqual([
       "property.name",
     ]);
     expect(result.extraction.unitVariants).toHaveLength(1);
     // Only the request actually made this time is billed.
     expect(result.usage?.map((usage) => usage.scopeKey)).toEqual([
-      "floor-plans",
+      "floor-plans:unit:0",
     ]);
   });
 
   it("re-reads a saved answer for free, so a parser fix needs no new provider call", async () => {
     const answers = {
       "project-details": project(),
-      "floor-plans": floorPlans({ unitsPerFloor: 3 }),
+      "floor-plans:discovery": floorPlanDiscovery(),
+      "floor-plans:unit:0": floorPlans({ unitsPerFloor: 3 }),
     };
     await adapterFor(answers).extract(request());
 
@@ -386,7 +421,8 @@ describe("a paid answer is never lost", () => {
   it("does not reuse answers saved for different pages", async () => {
     await adapterFor({
       "project-details": project(),
-      "floor-plans": floorPlans({}),
+      "floor-plans:discovery": floorPlanDiscovery(),
+      "floor-plans:unit:0": floorPlans({}),
     }).extract(request());
 
     const moved = parseOcrRoutingManifest({
@@ -430,7 +466,8 @@ describe("units: converted once, from what is printed, never assumed", () => {
   it("converts metres printed with the numbers to feet (Kimana's floor plans)", async () => {
     const variant = await variantOf({
       "project-details": project(),
-      "floor-plans": dims({
+      "floor-plans:discovery": floorPlanDiscovery(),
+      "floor-plans:unit:0": dims({
         rooms: [
           { name: "BED ROOM", length: "4.36 m", width: "7 m" },
           { name: "TOILET", length: "2.75 m", width: "2.91 m" },
@@ -447,7 +484,8 @@ describe("units: converted once, from what is printed, never assumed", () => {
   it("converts bare numbers using the unit the plan states once", async () => {
     const variant = await variantOf({
       "project-details": project(),
-      "floor-plans": dims({
+      "floor-plans:discovery": floorPlanDiscovery(),
+      "floor-plans:unit:0": dims({
         lengthUnit: "mm",
         rooms: [{ name: "Living", length: 4360, width: 7000 }],
         balconies: [{ name: "Balcony", length: "3.05 m", width: "1.5 m" }],
@@ -466,7 +504,8 @@ describe("units: converted once, from what is printed, never assumed", () => {
   it("reads feet and inches", async () => {
     const variant = await variantOf({
       "project-details": project(),
-      "floor-plans": dims({
+      "floor-plans:discovery": floorPlanDiscovery(),
+      "floor-plans:unit:0": dims({
         rooms: [{ name: "Living", length: `12'-6"`, width: "10 ft 3 in" }],
       }),
     });
@@ -479,7 +518,8 @@ describe("units: converted once, from what is printed, never assumed", () => {
   it("converts room and unit areas to square feet, whatever the unit", async () => {
     const variant = await variantOf({
       "project-details": project(),
-      "floor-plans": floorPlans({
+      "floor-plans:discovery": floorPlanDiscovery(),
+      "floor-plans:unit:0": floorPlans({
         areas: [
           { basis: "carpet", area: 100, unit: "sq m" },
           { basis: "super_built_up", area: "1,700 sq ft" },
@@ -500,7 +540,8 @@ describe("units: converted once, from what is printed, never assumed", () => {
   it("does NOT store a number with no printed unit, and keeps everything else", async () => {
     const variant = await variantOf({
       "project-details": project(),
-      "floor-plans": floorPlans({
+      "floor-plans:discovery": floorPlanDiscovery(),
+      "floor-plans:unit:0": floorPlans({
         totalUnitsOfVariant: 24,
         areas: [{ basis: "carpet", area: 875, unit: null }],
         dimensions: {
@@ -523,7 +564,8 @@ describe("units: converted once, from what is printed, never assumed", () => {
   it("does not store a unit it does not recognise, and never falls back to feet", async () => {
     const variant = await variantOf({
       "project-details": project(),
-      "floor-plans": dims({
+      "floor-plans:discovery": floorPlanDiscovery(),
+      "floor-plans:unit:0": dims({
         lengthUnit: "cubits",
         rooms: [{ name: "Living", length: 4.36, width: 7 }],
       }),
@@ -535,7 +577,8 @@ describe("units: converted once, from what is printed, never assumed", () => {
   it("ignores measurements in our own canonical shape: they carry no unit, so they are not trusted", async () => {
     const variant = await variantOf({
       "project-details": project(),
-      "floor-plans": floorPlans({
+      "floor-plans:discovery": floorPlanDiscovery(),
+      "floor-plans:unit:0": floorPlans({
         areas: [{ basis: "carpet", areaSqft: 875 }],
         dimensions: {
           rooms: [{ name: "Living", lengthFt: 15, widthFt: 12 }],
@@ -559,7 +602,8 @@ describe("units: converted once, from what is printed, never assumed", () => {
           },
         ],
       }),
-      "floor-plans": floorPlans({}),
+      "floor-plans:discovery": floorPlanDiscovery(),
+      "floor-plans:unit:0": floorPlans({}),
     }).extract(request("job-plot-a"));
     expect(
       withUnit.extraction.fields.find(
@@ -577,7 +621,8 @@ describe("units: converted once, from what is printed, never assumed", () => {
           },
         ],
       }),
-      "floor-plans": floorPlans({}),
+      "floor-plans:discovery": floorPlanDiscovery(),
+      "floor-plans:unit:0": floorPlans({}),
     }).extract(request("job-plot-b"));
     expect(
       withoutUnit.extraction.fields.some(
@@ -589,7 +634,8 @@ describe("units: converted once, from what is printed, never assumed", () => {
   it("converts exactly once: the same saved answer always gives the same result, and re-validating it changes nothing", async () => {
     const answers = {
       "project-details": project(),
-      "floor-plans": dims({
+      "floor-plans:discovery": floorPlanDiscovery(),
+      "floor-plans:unit:0": dims({
         lengthUnit: "m",
         rooms: [{ name: "BED ROOM", length: 4.36, width: 7 }],
       }),
@@ -603,13 +649,16 @@ describe("units: converted once, from what is printed, never assumed", () => {
     ]);
 
     // The result is canonical (feet). Passing it through the canonical validator
-    // that ingestion uses must not convert it again.
-    const extraction = (
-      await adapterFor(answers).extract(request("job-units-revalidate"))
-    ).extraction;
+    // that ingestion uses must not convert it again. Revalidated against
+    // `effectiveManifest`, the same one persistence uses — the confirmed
+    // manifest's own single floor-plans scope key never appears on a
+    // returned unit variant once discovery has split it.
+    const revalidateResult = await adapterFor(answers).extract(
+      request("job-units-revalidate"),
+    );
     const revalidated = validateNewPipelineExtraction(
-      structuredClone(extraction),
-      manifest,
+      structuredClone(revalidateResult.extraction),
+      revalidateResult.effectiveManifest ?? manifest,
       activeFields,
       "ocr-v1",
       "v1",
@@ -620,8 +669,84 @@ describe("units: converted once, from what is printed, never assumed", () => {
     // model answer converts nothing and stores nothing: it has no printed unit.
     const again = await variantOf({
       "project-details": project(),
-      "floor-plans": floorPlans(first.details),
+      "floor-plans:discovery": floorPlanDiscovery(),
+      "floor-plans:unit:0": floorPlans(first.details),
     });
     expect(again.details.dimensions?.rooms).toEqual([]);
+  });
+});
+
+describe("floor-plan unit discovery", () => {
+  it("never drops a page discovery leaves unclaimed — it gets its own fallback scope", async () => {
+    const adapter = adapterFor({
+      "project-details": project(),
+      // Only page 2 is claimed; page 3 (also a real floor-plan page in the
+      // shared manifest) is left out of every unit on purpose.
+      "floor-plans:discovery": floorPlanDiscovery([
+        { variantName: "Type A", pageNumbers: [2] },
+      ]),
+      "floor-plans:unit:0": floorPlans({ totalUnitsOfVariant: 1 }),
+      // The fallback scope reuses the original floor_plans-kind handling
+      // unchanged, so it still speaks the plural `unitVariants` shape.
+      "floor-plans:unmatched": {
+        fields: [],
+        unitVariants: [
+          {
+            variantName: "Type B (from an unclaimed page)",
+            details: { totalUnitsOfVariant: 2 },
+            confidence: 0.7,
+            evidence: [{ pageNumber: 3, sourceSnippet: "Type B" }],
+          },
+        ],
+        unmappedRawEvidence: [],
+      },
+    });
+
+    const result = await adapter.extract(request());
+
+    expect(
+      result.extraction.unitVariants.map((v) => v.details.totalUnitsOfVariant),
+    ).toEqual([1, 2]);
+    const fallback = result.effectiveManifest?.scopes.find(
+      (s) => s.scopeKey === "floor-plans:unmatched",
+    );
+    expect(fallback).toMatchObject({
+      kind: "floor_plans",
+      pages: [{ pageNumber: 3 }],
+    });
+  });
+
+  it("surfaces a clear error when discovery names a page outside the scope, rather than trusting it", async () => {
+    const adapter = adapterFor({
+      "project-details": project(),
+      "floor-plans:discovery": floorPlanDiscovery([
+        { variantName: "Type A", pageNumbers: [2, 99] },
+      ]),
+    });
+
+    const error = await adapter.extract(request()).catch((e: unknown) => e);
+    expect(error).toMatchObject({ name: "OcrContractError" });
+    expect(String((error as Error).message)).toContain(
+      "not one of this scope's pages",
+    );
+
+    // The discovery call itself is still on disk, even though its shape
+    // failed validation afterward — the same "saved before it is checked"
+    // guarantee every other scope's answer gets.
+    const saved = await checkpoint();
+    expect(
+      saved.scopes.find((s) => s.scopeKey === "floor-plans:discovery"),
+    ).toBeDefined();
+  });
+
+  it("surfaces a clear error when discovery's JSON does not have a units array", async () => {
+    const adapter = adapterFor({
+      "project-details": project(),
+      "floor-plans:discovery": { notAUnitsArray: true },
+    });
+
+    const error = await adapter.extract(request()).catch((e: unknown) => e);
+    expect(error).toMatchObject({ name: "OcrContractError" });
+    expect(String((error as Error).message)).toContain("units array");
   });
 });
