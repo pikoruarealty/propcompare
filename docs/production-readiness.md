@@ -2,7 +2,7 @@
 
 A running list of everything that works locally (or is stubbed) but must be decided or built before PropCompare goes live. Add to it whenever a task leaves something behind; tick items off with a date and a pointer to where it was resolved. Not a plan — the phase tasklists are the plan.
 
-Last updated: 2026-09-21 (first property live, legal entities)
+Last updated: 2026-09-23 (analytics taxonomy tasklist opened, data-coverage/quality KPIs adopted)
 
 ## Blocking — nothing ships without these
 
@@ -33,7 +33,8 @@ Last updated: 2026-09-21 (first property live, legal entities)
 - [ ] **Admin MFA** (`admin_users.mfa_enforced` is a placeholder; Phase 5). Admins can publish to the live catalog, so this should not wait long.
 - [ ] **Buyer retention screens** — saved properties and saved comparisons pages so returning buyers see their activity (backend done; UI is Deep's Phase 3). Also buyer email verification once an email provider exists (emails are stored unverified today).
 - [ ] **"Claim this listing" and "report a problem" links** on every property, feeding admin queues (developer recruiting funnel and corrections).
-- [ ] **Analytics event capture (beta deadline).** The paid developer analytics platform is future scope, but raw event history cannot be rebuilt: capture must exist by the start of beta. Needs its own tasklist and decision (event taxonomy, anonymous vs signed-in identity, retention, consent, declared trackers) before beta. See `DECISIONS.md` 2026-09-19.
+- [ ] **Analytics event capture (beta deadline).** The paid developer analytics platform is future scope, but raw event history cannot be rebuilt: capture must exist by the start of beta. Design tasklist opened 2026-09-23: `docs/tasklists/2026-09-23-analytics-event-taxonomy.md` (event taxonomy, anonymous vs signed-in identity, retention, consent, declared trackers, and the `activated user`/`completed comparison` definitions) — paper only so far, capture code not yet built. See `DECISIONS.md` 2026-09-19 and 2026-09-23.
+- [ ] **Data coverage and data quality KPIs** (adopted `DECISIONS.md` 2026-09-23): "% of active RERA-registered Ahmedabad projects indexed" (denominator from `reraFetchJobs`) and "% RERA-verified / % fields stated vs `not_stated` / % refreshed in the last 30 days" (from `property_schema_fields` and fetch-job timestamps) as an admin panel. Uses only existing data; not yet scheduled as a tasklist.
 - [ ] **"Last checked" dates and a re-check rhythm** for properties nobody else maintains; "Verified" copy says checked by PropCompare.
 - [ ] **Pre-login intake cookie claim** (`docs/tasklists/2026-09-18-pre-login-intake-cookie.md`) — direction agreed, not built.
 - [ ] **Password reset** for developer and admin accounts (invite links cover first-time setup only).

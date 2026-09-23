@@ -96,6 +96,8 @@ The submission-creating half of the developer portal (upload, page routing, OCR-
 
 **Future scope — the paid developer analytics platform (recorded 2026-09-19, not scheduled).** The revenue model is charging developers for presence and for insights, and the intended product is a property-specific analytics platform in the spirit of Google Analytics but going well beyond it (discovery-to-enquiry funnels, competitor comparison behaviour, demand by budget band/configuration/locality, listing-quality benchmarks). It is designed after the app is live in beta, as its own tasklist; the beta start date is the deadline for event capture to exist because history cannot be rebuilt. The dashboard above is only its first, small slice. See the 2026-09-19 `DECISIONS.md` entry for the constraints it must respect (no exact prices, aggregates only for developers, declared trackers).
 
+**Design work opened 2026-09-22/23 (still not scheduled as implementation):** the event taxonomy this platform and comparison slice 4 both need is being designed on paper in `docs/tasklists/2026-09-23-analytics-event-taxonomy.md`, since Phase 3 is nearly closed and beta is the next real milestone. A comparison preference/"win-rate" index, if it comes of this, is a developer-facing aggregate only — never a buyer-facing score (`DECISIONS.md` 2026-09-23). If paid presence/sponsored placement is ever built as part of this platform's revenue model, it must never affect match ordering or comparison content, and must be visibly disclosed (`DECISIONS.md` 2026-09-23) — recorded now, ahead of any such feature existing, so monetisation cannot quietly compromise comparison neutrality.
+
 ---
 
 ## Phase 5 — Polish & production readiness
