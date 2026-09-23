@@ -21,6 +21,17 @@ export type RoutingPageCategory = (typeof ROUTING_PAGE_CATEGORIES)[number];
 export interface RoutingPageChoice {
   pageNumber: number;
   category: RoutingPageCategory;
+  /**
+   * The router's own non-authoritative caption for this page (a unit name
+   * like "3 BHK - Type A"), if the admin's client had one at confirm time.
+   * Threaded into the confirmed manifest's `OcrRoutedPage.label` so it
+   * survives past this session — previously it lived only in the draft
+   * manifest's ephemeral `suggestions` wrapper, which confirming overwrites,
+   * so it was lost unless "Use as image" happened in the same sitting as the
+   * original page review. See DECISIONS.md 2026-09-22 (comparison review
+   * finding on Maruti 360's lost floor-plan caption).
+   */
+  caption?: string;
 }
 
 export class RoutingConfirmationError extends Error {
@@ -60,6 +71,21 @@ const readCategory = (value: unknown, path: string): RoutingPageCategory => {
   return value as RoutingPageCategory;
 };
 
+const readOptionalCaption = (
+  value: unknown,
+  path: string,
+): string | undefined => {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== "string") {
+    throw new RoutingConfirmationError(
+      "invalid_routing",
+      `${path} must be a string when given.`,
+    );
+  }
+  const trimmed = value.trim();
+  return trimmed.length === 0 ? undefined : trimmed;
+};
+
 /**
  * Accepts only complete page-level human choices, then creates the one
  * canonical v2 routing manifest. The browser never supplies scope keys or
@@ -86,6 +112,7 @@ export const buildConfirmedRoutingManifest = (
     return {
       pageNumber: readPositiveInteger(entry.pageNumber, `${path}.pageNumber`),
       category: readCategory(entry.category, `${path}.category`),
+      caption: readOptionalCaption(entry.caption, `${path}.caption`),
     };
   });
 
@@ -125,7 +152,11 @@ export const buildConfirmedRoutingManifest = (
     choices
       .filter((choice) => choice.category === category)
       .sort((left, right) => left.pageNumber - right.pageNumber)
-      .map((choice) => ({ pageNumber: choice.pageNumber }));
+      .map((choice) =>
+        choice.caption === undefined
+          ? { pageNumber: choice.pageNumber }
+          : { pageNumber: choice.pageNumber, label: choice.caption },
+      );
 
   // A page can only be given one category, but a project overview or a site plan
   // often names the amenities too (the 360 brochure prints them as labels on its

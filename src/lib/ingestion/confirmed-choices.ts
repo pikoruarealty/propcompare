@@ -9,6 +9,8 @@ export interface ConfirmedChoice {
     | "specifications"
     | "floor_plan"
     | "ignore";
+  /** The caption carried into this page's `OcrRoutedPage.label` at confirm time, if any. */
+  label?: string;
 }
 
 /**
@@ -45,7 +47,11 @@ export const readConfirmedChoices = (
       for (const page of scope.pages) {
         if (claimed.has(page.pageNumber)) continue;
         claimed.add(page.pageNumber);
-        choices.push({ pageNumber: page.pageNumber, category });
+        choices.push({
+          pageNumber: page.pageNumber,
+          category,
+          ...(page.label === undefined ? {} : { label: page.label }),
+        });
       }
     }
     return choices.sort((a, b) => a.pageNumber - b.pageNumber);
