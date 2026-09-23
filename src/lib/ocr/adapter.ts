@@ -231,6 +231,15 @@ const parseEvidence = (
   };
 };
 
+/**
+ * Citations are validated one at a time, and a bad one loses only itself.
+ * A model reading a 15-page excerpt has to map each page back to its original
+ * brochure number, and it sometimes miscounts one of them; refusing the whole
+ * list for that cost a real run all 14 of its correctly-read amenities
+ * (2026-09-23, Godrej Altus flipchart) because 1 of 12 citations named a page
+ * outside the scope. Evidence stays mandatory — a value whose citations are
+ * *all* unusable still fails, because then nothing supports it.
+ */
 const parseEvidenceList = (
   value: unknown,
   path: string,
@@ -240,9 +249,23 @@ const parseEvidenceList = (
   if (!Array.isArray(value) || value.length === 0) {
     throw new OcrContractError(`${path} must contain at least one citation`);
   }
-  return value.map((item, index) =>
-    parseEvidence(item, `${path}[${index}]`, manifest, requiredScopeKey),
-  );
+  const kept: OcrEvidenceCandidate[] = [];
+  for (const [index, item] of value.entries()) {
+    try {
+      kept.push(
+        parseEvidence(item, `${path}[${index}]`, manifest, requiredScopeKey),
+      );
+    } catch (error) {
+      if (!(error instanceof OcrContractError)) throw error;
+      console.warn(`[ocr] left out one citation: ${error.message}`);
+    }
+  }
+  if (kept.length === 0) {
+    throw new OcrContractError(
+      `${path} has no citation inside the named scope`,
+    );
+  }
+  return kept;
 };
 
 const validateFieldValue = (
@@ -448,20 +471,68 @@ const convertProviderDetails = (raw: unknown, path: string): unknown => {
     return undefined;
   };
 
+  /**
+   * A plan that prints each room as one string — `12'-7" X 12'-0"` — instead of
+   * a separate length and width. Models reach for their own key for this
+   * (`dimension`, `size`) rather than splitting it themselves, and a brochure
+   * that prints the pair twice in two unit systems makes that near-certain:
+   * the 2026-09-23 Godrej Altus flipchart lost all 269 of its rooms this way.
+   * Each half still goes through `readMeasurement`, so an unaccompanied number
+   * is refused exactly as before — this splits the string, it never assumes a
+   * unit for it.
+   */
+  const splitDimensionPair = (
+    value: unknown,
+    legendLength: unknown,
+    where: string,
+  ): { length?: number; width?: number } => {
+    if (typeof value !== "string") return {};
+    const halves = value.split(/\s*[xX×]\s*/).filter((part) => part.trim());
+    if (halves.length !== 2) return {};
+    const length = readMeasurement(halves[0], "length", legendLength);
+    const width = readMeasurement(halves[1], "length", legendLength);
+    if (!length.ok || !width.ok) {
+      const reason = !length.ok
+        ? length.reason
+        : !width.ok
+          ? width.reason
+          : "unreadable";
+      console.warn(`[ocr] left out ${where}: ${reason}`);
+      return {};
+    }
+    return { length: length.value, width: width.value };
+  };
+
   const convertRoom = (room: unknown, where: string): unknown => {
     if (!isRecord(room)) return room;
     const converted: Record<string, unknown> = {};
     if (room.name !== undefined) converted.name = room.name;
     const legendLength = dimensionLegend.length;
     const legendArea = dimensionLegend.area;
-    const length = measure(
+    let length = measure(
       room.length,
       "length",
       legendLength,
       `${where}.length`,
     );
-    const width = measure(room.width, "length", legendLength, `${where}.width`);
+    let width = measure(room.width, "length", legendLength, `${where}.width`);
     const area = measure(room.area, "area", legendArea, `${where}.area`);
+    if (length === undefined && width === undefined) {
+      // Tried in order: a pair printed with its own unit beats one relying on
+      // the plan's legend, so `12'-7" X 12'-0"` wins over a bare `4.16 X 3.66`.
+      for (const key of ["dimension", "dimensions", "size"] as const) {
+        const pair = splitDimensionPair(
+          room[key],
+          legendLength,
+          `${where}.${key}`,
+        );
+        if (pair.length !== undefined || pair.width !== undefined) {
+          length = pair.length;
+          width = pair.width;
+          break;
+        }
+      }
+    }
     if (length !== undefined) converted.lengthFt = length;
     if (width !== undefined) converted.widthFt = width;
     if (area !== undefined) converted.areaSqft = area;
@@ -560,8 +631,14 @@ const parseVariantDetails = (
       if (!Array.isArray(value.areas)) {
         throw new OcrContractError(`${path}.areas must be an array`);
       }
-      const bases = new Set<string>();
-      result.areas = value.areas.map((area, index) => {
+      // A basis printed twice is normally the same area in two unit systems
+      // ("142.93 sq. mt." and "1538 sq. ft."), already converted to sq ft
+      // above — so the repeat is agreement, not a contradiction, and dropping
+      // the whole list for it cost a real run every area it had, carpet
+      // included (2026-09-23, Godrej Altus flipchart). Two readings that
+      // genuinely disagree are still refused: that needs a person.
+      const byBasis = new Map<string, number>();
+      value.areas.forEach((area, index) => {
         const areaPath = `${path}.areas[${index}]`;
         if (!isRecord(area)) {
           throw new OcrContractError(`${areaPath} must be an object`);
@@ -572,15 +649,25 @@ const parseVariantDetails = (
           throw new OcrContractError(`${areaPath}.basis is not supported`);
         }
         const basis = area.basis as "carpet" | "super_built_up" | "built_up";
-        if (bases.has(basis)) {
-          throw new OcrContractError(`${path}.areas contains duplicate bases`);
+        const areaSqft = readPositiveNumber(
+          area.areaSqft,
+          `${areaPath}.areaSqft`,
+        );
+        const seen = byBasis.get(basis);
+        if (seen === undefined) {
+          byBasis.set(basis, areaSqft);
+          return;
         }
-        bases.add(basis);
-        return {
-          basis,
-          areaSqft: readPositiveNumber(area.areaSqft, `${areaPath}.areaSqft`),
-        };
+        if (Math.abs(seen - areaSqft) / seen > 0.01) {
+          throw new OcrContractError(
+            `${path}.areas gives two different ${basis} areas (${seen} and ${areaSqft} sq ft)`,
+          );
+        }
       });
+      result.areas = [...byBasis.entries()].map(([basis, areaSqft]) => ({
+        basis: basis as "carpet" | "super_built_up" | "built_up",
+        areaSqft,
+      }));
     });
   }
   if (value.dimensions !== undefined && value.dimensions !== null) {
@@ -837,8 +924,16 @@ export const buildSubmissionFieldCandidates = (
 
 const DEFAULT_OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 const DEFAULT_OPENROUTER_MODEL = "anthropic/claude-sonnet-5";
-const DEFAULT_MAX_COMPLETION_TOKENS = 32_000;
-const DEFAULT_MAX_REASONING_TOKENS = 2_048;
+/**
+ * Sonnet 5's own ceiling is 128,000 (OpenRouter `max_completion_tokens`); this
+ * is headroom, not a budget — an unemitted token costs nothing, so the only
+ * thing a low cap buys is a failed run. The previous 32,000 was the direct
+ * cause of every `output_length` failure this pipeline has ever had: with
+ * reasoning silently uncapped (see `reasoning` in `callModel`), hidden
+ * thinking filled all 32,000 before any JSON was written. See DECISIONS.md
+ * 2026-09-23 (reasoning-billing entry).
+ */
+const DEFAULT_MAX_COMPLETION_TOKENS = 64_000;
 const DEFAULT_REQUEST_TIMEOUT_MS = 8 * 60 * 1_000;
 
 export type OcrAdapterFailureCode =
@@ -885,7 +980,6 @@ export interface OpenRouterOcrAdapterOptions {
   model?: string;
   endpoint?: string;
   maxCompletionTokens?: number;
-  maxReasoningTokens?: number;
   requestTimeoutMs?: number;
   fetch?: typeof fetch;
   retryDelayMs?: number;
@@ -975,6 +1069,20 @@ const fieldsForScope = (
   return [];
 };
 
+/**
+ * Lost twice already — do not drop this a third time. Fixed once on
+ * 2026-09-02 (Kimana Towers "rule 10": mirrored units and repeated
+ * floor-range plans transcribed as separate ~30-room variants burned the
+ * completion budget and roughly doubled cost) but that fix lived only in a
+ * one-off eval script, never the production prompt; the 2026-09-20 and
+ * 2026-09-23 rewrites of this prompt both independently reintroduced the
+ * bug (2026-09-23's discovery prompt went further and told the model to
+ * enumerate mirrored units as separate entries). See DECISIONS.md
+ * 2026-09-02 and 2026-09-23.
+ */
+const MIRRORED_UNIT_MERGE_RULE =
+  "Two or more units are the SAME variant, not separate ones, when their layouts are identical or mirrored (a flat and its mirror image, or a floor plate repeated unchanged across a labelled floor range): collapse them into one variant record naming every unit/floor number it covers. Only a layout that differs in at least one room, dimension, or amenity from its neighbor is a distinct variant.";
+
 const createScopePrompt = (
   scope: OcrRoutingManifest["scopes"][number],
   activeFields: ActiveOcrField[],
@@ -982,7 +1090,7 @@ const createScopePrompt = (
   const sourcePages = scope.pages.map((page) => page.pageNumber);
   const scalarFields = fieldsForScope(scope, activeFields);
   const variantDetails =
-    'totalUnitsOfVariant (positive integer), unitsPerFloor (positive integer), areas [{basis: carpet|super_built_up|built_up, area: the number exactly as printed, unit: the unit printed with it or null}], and dimensions {lengthUnit: the unit the plan states for its lengths or null, areaUnit: the unit stated for room areas or null, rooms: [room], foyer: one room object or null (never a list; put extra foyers in rooms), balconies: [room]}; each room has name and any explicitly printed length, width, or area, exactly as printed (a number, or text such as "4.36 m" or "12\'-6\\"")';
+    'totalUnitsOfVariant (positive integer), unitsPerFloor (positive integer), areas [{basis: carpet|super_built_up|built_up, area: the number exactly as printed, unit: the unit printed with it or null}], and dimensions {lengthUnit: the unit the plan states for its lengths or null, areaUnit: the unit stated for room areas or null, rooms: [room], foyer: one room object or null (never a list; put extra foyers in rooms), balconies: [room]}; each room has ONLY these keys: name, and any explicitly printed length, width, or area, exactly as printed (a number, or text such as "4.36 m" or "12\'-6\\""). Never invent another key such as "dimension" or "size" for a measurement. When a plan prints one room as a single pair ("12\'-7\\" X 12\'-0\\""), split it: the first value is length, the second is width. When the SAME room is printed twice in two unit systems (feet-inches and metres side by side), return it ONCE, using whichever of the two carries its own printed unit — do not return the room twice and do not merge the two into one string';
   const variantOutput =
     scope.kind === "floor_plans"
       ? `"unitVariants": [{"variantName": string, "details": object, "confidence": number, "evidence": [{"pageNumber": number, "sourceSnippet": string}]}]`
@@ -991,7 +1099,7 @@ const createScopePrompt = (
     scope.kind === "unit_variant"
       ? `Extract exactly one unit variant for \"${scope.variant.variantName}\". Put its values in unitVariant.details using only: ${variantDetails}. Combine all excerpt pages into this one variant; never emit a second variant.`
       : scope.kind === "floor_plans"
-        ? `Discover every distinct unit variant explicitly shown across these floor-plan pages. Return one unitVariants entry per distinct variant, merging pages that show levels of the same duplex or penthouse. Each variantName must be a concise, evidence-backed name printed in the brochure; do not invent BHK or layout catalog keys. Put each variant's values in details using only: ${variantDetails}. Return an empty unitVariants array when these pages do not explicitly show a unit variant.`
+        ? `Discover every distinct unit variant explicitly shown across these floor-plan pages. Return one unitVariants entry per distinct variant, merging pages that show levels of the same duplex or penthouse. ${MIRRORED_UNIT_MERGE_RULE} Each variantName must be a concise, evidence-backed name printed in the brochure and, when it covers more than one unit or floor number, must say so (for example "Block B - Units 301 & 302 (3rd Floor)" or "Flat Type 02 - Typical Floor (3rd-20th)"); do not invent BHK or layout catalog keys. Put each variant's values in details using only: ${variantDetails}. Return an empty unitVariants array when these pages do not explicitly show a unit variant.`
         : "This is not a unit-discovery scope. Return unitVariant as null.";
 
   return `You extract evidence-backed real-estate brochure facts into a reviewed submission. Return one complete JSON object only, with no markdown or commentary.
@@ -1012,92 +1120,6 @@ Rules:
 - Evidence is mandatory for every returned value. This excerpt maps in order to original brochure pages ${sourcePages.join(", ")}; cite those original one-based page numbers only.
 - Preserve evidence snippets verbatim and keep confidence between 0 and 1.
 - ${variantInstruction}`;
-};
-
-/**
- * Floor-plan unit discovery: a much smaller ask than real extraction, over
- * the same full page range, so it can bound a floor-plans scope's output by
- * unit before ever asking for room detail. See `DECISIONS.md` 2026-09-23 and
- * `docs/tasklists/2026-09-23-floor-plan-unit-discovery.md` for why this
- * exists and why it reads all the pages together rather than one at a time
- * (a duplex/penthouse's levels must be seen together to be merged into one
- * unit, not two).
- */
-export interface OcrFloorPlanUnitDiscovery {
-  variantName: string;
-  pageNumbers: number[];
-}
-
-const createFloorPlanDiscoveryPrompt = (pages: number[]): string =>
-  `You are looking at floor-plan pages from a real-estate brochure, pages ${pages.join(", ")} in the original document, given to you in that order as a single PDF.
-
-Your only job here is to say which of these pages belong together as one sellable unit (a flat, villa, or plot type) — not to extract any room, dimension, or area detail.
-
-Return one complete JSON object only, with no markdown or commentary:
-{"units": [{"variantName": string, "pageNumbers": [number, ...]}]}
-
-Rules:
-- variantName is the unit's own printed name, or a concise, evidence-backed description if none is printed (for example "4 BHK Typical Floor Plan", "5 BHK Duplex"). Never invent a BHK or layout catalog key.
-- pageNumbers are original one-based document page numbers, drawn only from: ${pages.join(", ")}.
-- A duplex or penthouse's lower and upper levels are the SAME unit: put both page numbers in that one unit's pageNumbers, never as two separate units.
-- A single page may show more than one unit (for example two mirrored flats, each fully dimensioned, side by side on one drawing); in that case the same page number may appear in more than one unit's pageNumbers.
-- Every page that shows a real unit's own floor plan must appear in at least one unit's pageNumbers. A page that is purely a legend, index, or site plan with no dimensioned unit of its own may be left out of every unit entirely — do not force it into one.
-- Do not describe rooms, dimensions, or areas here. Only unit names and which pages belong to each.`;
-
-const parseFloorPlanDiscoveryResponse = (
-  parsed: unknown,
-  pages: number[],
-): OcrFloorPlanUnitDiscovery[] => {
-  if (!isRecord(parsed) || !Array.isArray(parsed.units)) {
-    throw new OcrContractError(
-      "floor-plan unit discovery must return a units array",
-    );
-  }
-  if (parsed.units.length === 0) {
-    throw new OcrContractError("floor-plan unit discovery returned no units");
-  }
-  const validPages = new Set(pages);
-  const seenNames = new Set<string>();
-  return parsed.units.map((entry, index) => {
-    const path = `units[${index}]`;
-    if (!isRecord(entry)) {
-      throw new OcrContractError(`${path} must be an object`);
-    }
-    const variantName = readNonEmptyString(
-      entry.variantName,
-      `${path}.variantName`,
-    );
-    const normalized = variantName.toLocaleLowerCase();
-    if (seenNames.has(normalized)) {
-      throw new OcrContractError(
-        `floor-plan unit discovery returned duplicate variant name: ${variantName}`,
-      );
-    }
-    seenNames.add(normalized);
-
-    if (!Array.isArray(entry.pageNumbers) || entry.pageNumbers.length === 0) {
-      throw new OcrContractError(
-        `${path}.pageNumbers must be a non-empty array`,
-      );
-    }
-    const pageNumbers = entry.pageNumbers.map((value, pageIndex) => {
-      const pageNumber = readPositiveInteger(
-        value,
-        `${path}.pageNumbers[${pageIndex}]`,
-      );
-      if (!validPages.has(pageNumber)) {
-        throw new OcrContractError(
-          `${path}.pageNumbers[${pageIndex}] (${pageNumber}) is not one of this scope's pages`,
-        );
-      }
-      return pageNumber;
-    });
-
-    return {
-      variantName,
-      pageNumbers: [...new Set(pageNumbers)].sort((a, b) => a - b),
-    };
-  });
 };
 
 const createScopedPdf = async (
@@ -1301,14 +1323,28 @@ const parseScopeResponse = (
       scope.scopeKey,
     );
     if (!activeKeys.has(fieldKey)) {
-      unmapped.push(
-        parseUnmappedCandidate(
-          { ...candidate, evidence },
-          unmapped.length,
-          scope.scopeKey,
-          manifest,
-        ),
-      );
+      try {
+        unmapped.push(
+          parseUnmappedCandidate(
+            { ...candidate, evidence },
+            unmapped.length,
+            scope.scopeKey,
+            manifest,
+          ),
+        );
+      } catch (error) {
+        if (
+          !(error instanceof OcrContractError) &&
+          !(error instanceof OcrAdapterError)
+        ) {
+          throw error;
+        }
+        // Advisory data (no active field key), not the contract this run is
+        // paid to fill: one bad citation loses that one note, never the
+        // whole already-paid-for run. Same tolerance `fields` already gets
+        // below — unmappedRawEvidence has no reason to be the fatal path.
+        console.warn(`[ocr] left out unmapped ${fieldKey}: ${error.message}`);
+      }
       continue;
     }
     if (
@@ -1377,15 +1413,22 @@ const parseScopeResponse = (
   }
 
   if (Array.isArray(response.unmappedRawEvidence)) {
-    for (const candidate of response.unmappedRawEvidence) {
-      unmapped.push(
-        parseUnmappedCandidate(
-          candidate,
-          unmapped.length,
-          scope.scopeKey,
-          manifest,
-        ),
-      );
+    for (const [index, candidate] of response.unmappedRawEvidence.entries()) {
+      try {
+        unmapped.push(
+          parseUnmappedCandidate(candidate, index, scope.scopeKey, manifest),
+        );
+      } catch (error) {
+        if (
+          !(error instanceof OcrContractError) &&
+          !(error instanceof OcrAdapterError)
+        ) {
+          throw error;
+        }
+        console.warn(
+          `[ocr] left out unmappedRawEvidence[${index}]: ${error.message}`,
+        );
+      }
     }
   } else if (response.unmappedRawEvidence !== undefined) {
     throw new OcrAdapterError(
@@ -1543,14 +1586,6 @@ export const createOpenRouterOcrAdapter = (
     ),
     "OPENROUTER_OCR_MAX_COMPLETION_TOKENS",
   );
-  const maxReasoningTokens = readConfiguredInteger(
-    options.maxReasoningTokens,
-    Number(
-      process.env.OPENROUTER_OCR_MAX_REASONING_TOKENS ??
-        DEFAULT_MAX_REASONING_TOKENS,
-    ),
-    "OPENROUTER_OCR_MAX_REASONING_TOKENS",
-  );
   const requestTimeoutMs = readConfiguredInteger(
     options.requestTimeoutMs,
     Number(
@@ -1571,9 +1606,7 @@ export const createOpenRouterOcrAdapter = (
         );
 
   /**
-   * The one place a PDF and a prompt become an OpenRouter request. Used
-   * directly by floor-plan unit discovery (a much smaller prompt and
-   * response than a real scope) as well as by `callScope` below, so the
+   * The one place a PDF and a prompt become an OpenRouter request, so the
    * retry/timeout handling and the native-PDF request shape exist in one
    * place rather than two copies that could drift.
    */
@@ -1586,7 +1619,17 @@ export const createOpenRouterOcrAdapter = (
     const body = JSON.stringify({
       model,
       max_tokens: maxTokensOverride ?? maxCompletionTokens,
-      reasoning: { max_tokens: maxReasoningTokens, exclude: true },
+      /**
+       * `enabled: false`, never `exclude: true`. `exclude` only hides the
+       * reasoning from the response — it is still generated and still billed
+       * at the output rate. Paired with a `max_tokens` budget (which maps to
+       * Anthropic's `budget_tokens`, a parameter **removed on Sonnet 5**, so
+       * the cap was silently ignored), that bought unlimited invisible
+       * thinking: 55% of this pipeline's entire spend to date, and every
+       * `output_length` failure. Extraction is transcription against an
+       * explicit contract; it does not need chain-of-thought.
+       */
+      reasoning: { enabled: false },
       messages: [
         {
           role: "user",
@@ -1744,130 +1787,13 @@ export const createOpenRouterOcrAdapter = (
         });
       };
 
-      /**
-       * Bounds a `floor_plans` scope's output by unit instead of trusting the
-       * whole scope to fit in one response. Every other scope kind passes
-       * through unchanged. See `docs/tasklists/2026-09-23-floor-plan-unit-discovery.md`.
-       */
-      const expandFloorPlanScope = async (
-        scope: OcrRoutingManifest["scopes"][number],
-      ): Promise<OcrRoutingManifest["scopes"]> => {
-        if (scope.kind !== "floor_plans") return [scope];
-
-        const pageNumbers = scope.pages.map((page) => page.pageNumber);
-        const discoveryScopeKey = `${scope.scopeKey}:discovery`;
-        const earlierDiscovery = earlierResponses.get(discoveryScopeKey);
-        let discoveryResponse: unknown;
-
-        if (
-          earlierDiscovery !== undefined &&
-          earlierDiscovery.pageNumbers.length === pageNumbers.length &&
-          earlierDiscovery.pageNumbers.every((n, i) => n === pageNumbers[i])
-        ) {
-          // Already discovered (and paid for) by an earlier attempt of this job.
-          discoveryResponse = earlierDiscovery.response;
-        } else {
-          const scopedPdf = await createScopedPdf(sourcePdf, pageNumbers);
-          const stream = await callModel(
-            scopedPdf,
-            discoveryScopeKey,
-            createFloorPlanDiscoveryPrompt(pageNumbers),
-          );
-          if (stream.providerRequestId) {
-            providerRequestIds.push(stream.providerRequestId);
-          }
-          usage.push({
-            scopeKey: discoveryScopeKey,
-            inputPdfBytes: scopedPdf.byteLength,
-            ...(stream.providerRequestId === undefined
-              ? {}
-              : { providerRequestId: stream.providerRequestId }),
-            ...stream.usage,
-          });
-          if (stream.finishReason === "length") {
-            // Discovery only ever returns names and page numbers, so this
-            // should not happen; if it does, the scope needs a person to
-            // look at it rather than a silent guess.
-            throw new OcrAdapterError(
-              "output_length",
-              `OpenRouter exhausted the output budget discovering units for scope ${scope.scopeKey}; human re-routing is required`,
-              stream.providerRequestId,
-            );
-          }
-          if (stream.finishReason !== "stop") {
-            throw new OcrAdapterError(
-              "invalid_response",
-              `OpenRouter ended floor-plan unit discovery for ${scope.scopeKey} with finish_reason=${stream.finishReason ?? "unknown"}`,
-              stream.providerRequestId,
-            );
-          }
-          try {
-            discoveryResponse = JSON.parse(stripCodeFence(stream.rawText));
-          } catch {
-            throw new OcrAdapterError(
-              "invalid_json",
-              `OpenRouter returned invalid JSON discovering units for scope ${scope.scopeKey}`,
-              stream.providerRequestId,
-            );
-          }
-          scopeCheckpoints.push({
-            scopeKey: discoveryScopeKey,
-            pageNumbers,
-            ...(stream.providerRequestId === undefined
-              ? {}
-              : { providerRequestId: stream.providerRequestId }),
-            response: discoveryResponse,
-          });
-          await saveCheckpoint("extracting");
-        }
-
-        const units = parseFloorPlanDiscoveryResponse(
-          discoveryResponse,
-          pageNumbers,
-        );
-
-        const claimedPages = new Set<number>();
-        const unitScopes: OcrRoutingManifest["scopes"] = units.map(
-          (unit, index) => {
-            for (const pageNumber of unit.pageNumbers) {
-              claimedPages.add(pageNumber);
-            }
-            return {
-              scopeKey: `${scope.scopeKey}:unit:${index}`,
-              kind: "unit_variant",
-              label: `${scope.label}: ${unit.variantName}`,
-              pages: scope.pages.filter((page) =>
-                unit.pageNumbers.includes(page.pageNumber),
-              ),
-              variant: { variantName: unit.variantName },
-            };
-          },
-        );
-
-        // A page discovery did not assign to any unit is never silently
-        // dropped: it gets its own small fallback scope, the original
-        // discover-and-extract-together floor-plans handling, unchanged.
-        const unclaimedPages = scope.pages.filter(
-          (page) => !claimedPages.has(page.pageNumber),
-        );
-        if (unclaimedPages.length === 0) return unitScopes;
-        return [
-          ...unitScopes,
-          {
-            scopeKey: `${scope.scopeKey}:unmatched`,
-            kind: "floor_plans",
-            label: `${scope.label}: not assigned to a discovered unit`,
-            pages: unclaimedPages,
-          },
-        ];
-      };
-
       // `expandedScopes` and `effectiveManifest` share this one array by
-      // reference: as scopes are discovered and appended below, in document
-      // order, `effectiveManifest.scopes` grows to match — so evidence
-      // validation for a scope processed now can always find itself (and
-      // everything before it), without needing every floor-plans scope's
-      // discovery to run before any real extraction call is made.
+      // reference: scopes are appended below in document order, so evidence
+      // validation for a scope processed now can always find itself and
+      // everything before it. The manifest the adapter runs is the confirmed
+      // one, unchanged — persistence resolves a unit variant's scopeKey
+      // against this same object (see `ingestion.ts`), which is what keeps a
+      // discovered variant from silently vanishing at persistence time.
       const expandedScopes: OcrRoutingManifest["scopes"] = [];
       const effectiveManifest: OcrRoutingManifest = {
         ...request.manifest,
@@ -1875,104 +1801,101 @@ export const createOpenRouterOcrAdapter = (
       };
 
       try {
-        for (const originalScope of request.manifest.scopes) {
-          const subScopes = await expandFloorPlanScope(originalScope);
-          for (const scope of subScopes) {
-            expandedScopes.push(scope);
-            if (scope.kind === "ignore") continue;
-            const pageNumbers = scope.pages.map((page) => page.pageNumber);
-            const earlier = earlierResponses.get(scope.scopeKey);
-            if (
-              earlier !== undefined &&
-              earlier.pageNumbers.length === pageNumbers.length &&
-              earlier.pageNumbers.every((n, i) => n === pageNumbers[i])
-            ) {
-              // Already answered (and paid for) by an earlier attempt of this job.
-              try {
-                const reused = parseScopeResponse(
-                  earlier.response,
-                  scope,
-                  effectiveManifest,
-                  request.activeFields,
-                );
-                scopeCheckpoints.push(earlier);
-                if (earlier.providerRequestId) {
-                  providerRequestIds.push(earlier.providerRequestId);
-                }
-                fields.push(...reused.fields);
-                unitVariants.push(...reused.unitVariants);
-                unmappedRawEvidence.push(...reused.unmapped);
-                continue;
-              } catch {
-                // That answer is unusable; ask again for this scope only.
-              }
-            }
-            const scopedPdf = await createScopedPdf(
-              sourcePdf,
-              scope.pages.map((page) => page.pageNumber),
-            );
-            const stream = await callScope(
-              scope,
-              scopedPdf,
-              request.activeFields,
-            );
-            if (stream.providerRequestId) {
-              providerRequestIds.push(stream.providerRequestId);
-            }
-            usage.push({
-              scopeKey: scope.scopeKey,
-              inputPdfBytes: scopedPdf.byteLength,
-              ...(stream.providerRequestId === undefined
-                ? {}
-                : { providerRequestId: stream.providerRequestId }),
-              ...stream.usage,
-            });
-            if (stream.finishReason === "length") {
-              throw new OcrAdapterError(
-                "output_length",
-                `OpenRouter exhausted the output budget for scope ${scope.scopeKey}; human re-routing is required`,
-                stream.providerRequestId,
-              );
-            }
-            if (stream.finishReason !== "stop") {
-              throw new OcrAdapterError(
-                "invalid_response",
-                `OpenRouter ended scope ${scope.scopeKey} with finish_reason=${stream.finishReason ?? "unknown"}`,
-                stream.providerRequestId,
-              );
-            }
-            let parsed: unknown;
+        for (const scope of request.manifest.scopes) {
+          expandedScopes.push(scope);
+          if (scope.kind === "ignore") continue;
+          const pageNumbers = scope.pages.map((page) => page.pageNumber);
+          const earlier = earlierResponses.get(scope.scopeKey);
+          if (
+            earlier !== undefined &&
+            earlier.pageNumbers.length === pageNumbers.length &&
+            earlier.pageNumbers.every((n, i) => n === pageNumbers[i])
+          ) {
+            // Already answered (and paid for) by an earlier attempt of this job.
             try {
-              parsed = JSON.parse(stripCodeFence(stream.rawText));
-            } catch {
-              throw new OcrAdapterError(
-                "invalid_json",
-                `OpenRouter returned invalid JSON for scope ${scope.scopeKey}`,
-                stream.providerRequestId,
+              const reused = parseScopeResponse(
+                earlier.response,
+                scope,
+                effectiveManifest,
+                request.activeFields,
               );
+              scopeCheckpoints.push(earlier);
+              if (earlier.providerRequestId) {
+                providerRequestIds.push(earlier.providerRequestId);
+              }
+              fields.push(...reused.fields);
+              unitVariants.push(...reused.unitVariants);
+              unmappedRawEvidence.push(...reused.unmapped);
+              continue;
+            } catch {
+              // That answer is unusable; ask again for this scope only.
             }
-            assertNoCommercialData(parsed);
-            // Saved before it is validated: if the answer does not fit the contract,
-            // what was paid for is still on disk to inspect.
-            scopeCheckpoints.push({
-              scopeKey: scope.scopeKey,
-              pageNumbers,
-              ...(stream.providerRequestId === undefined
-                ? {}
-                : { providerRequestId: stream.providerRequestId }),
-              response: parsed,
-            });
-            await saveCheckpoint("extracting");
-            const scopeResult = parseScopeResponse(
-              parsed,
-              scope,
-              effectiveManifest,
-              request.activeFields,
-            );
-            fields.push(...scopeResult.fields);
-            unitVariants.push(...scopeResult.unitVariants);
-            unmappedRawEvidence.push(...scopeResult.unmapped);
           }
+          const scopedPdf = await createScopedPdf(
+            sourcePdf,
+            scope.pages.map((page) => page.pageNumber),
+          );
+          const stream = await callScope(
+            scope,
+            scopedPdf,
+            request.activeFields,
+          );
+          if (stream.providerRequestId) {
+            providerRequestIds.push(stream.providerRequestId);
+          }
+          usage.push({
+            scopeKey: scope.scopeKey,
+            inputPdfBytes: scopedPdf.byteLength,
+            ...(stream.providerRequestId === undefined
+              ? {}
+              : { providerRequestId: stream.providerRequestId }),
+            ...stream.usage,
+          });
+          if (stream.finishReason === "length") {
+            throw new OcrAdapterError(
+              "output_length",
+              `OpenRouter exhausted the output budget for scope ${scope.scopeKey}; human re-routing is required`,
+              stream.providerRequestId,
+            );
+          }
+          if (stream.finishReason !== "stop") {
+            throw new OcrAdapterError(
+              "invalid_response",
+              `OpenRouter ended scope ${scope.scopeKey} with finish_reason=${stream.finishReason ?? "unknown"}`,
+              stream.providerRequestId,
+            );
+          }
+          let parsed: unknown;
+          try {
+            parsed = JSON.parse(stripCodeFence(stream.rawText));
+          } catch {
+            throw new OcrAdapterError(
+              "invalid_json",
+              `OpenRouter returned invalid JSON for scope ${scope.scopeKey}`,
+              stream.providerRequestId,
+            );
+          }
+          assertNoCommercialData(parsed);
+          // Saved before it is validated: if the answer does not fit the contract,
+          // what was paid for is still on disk to inspect.
+          scopeCheckpoints.push({
+            scopeKey: scope.scopeKey,
+            pageNumbers,
+            ...(stream.providerRequestId === undefined
+              ? {}
+              : { providerRequestId: stream.providerRequestId }),
+            response: parsed,
+          });
+          await saveCheckpoint("extracting");
+          const scopeResult = parseScopeResponse(
+            parsed,
+            scope,
+            effectiveManifest,
+            request.activeFields,
+          );
+          fields.push(...scopeResult.fields);
+          unitVariants.push(...scopeResult.unitVariants);
+          unmappedRawEvidence.push(...scopeResult.unmapped);
         }
       } catch (error) {
         // Requests that were billed before this failure still belong in the usage ledger.

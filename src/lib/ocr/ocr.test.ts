@@ -59,38 +59,23 @@ const validScopePayload = (scopeKey: string): unknown => {
       unmappedRawEvidence: [],
     };
   }
-  // Floor-plan unit discovery runs first (`DECISIONS.md` 2026-09-23): a
-  // small call says which pages are which unit, then one bounded extraction
-  // call runs per discovered unit, reusing the `unit_variant` scope kind's
-  // request/response shape exactly — a single `unitVariant`, not a plural
-  // `unitVariants` array.
-  if (scopeKey === "floor-plans:discovery") {
+  if (scopeKey === "floor-plans") {
     return {
-      units: [
-        { variantName: "2 BHK - Type A", pageNumbers: [2] },
-        { variantName: "3 BHK - Type B", pageNumbers: [3] },
+      fields: [],
+      unitVariants: [
+        {
+          variantName: "2 BHK - Type A",
+          details: { areas: [{ basis: "carpet", area: 875, unit: "sq ft" }] },
+          confidence: 0.9,
+          evidence: [{ pageNumber: 2, sourceSnippet: "2 BHK Type A" }],
+        },
+        {
+          variantName: "3 BHK - Type B",
+          details: { areas: [{ basis: "carpet", area: 1240, unit: "sq ft" }] },
+          confidence: 0.88,
+          evidence: [{ pageNumber: 3, sourceSnippet: "3 BHK Type B" }],
+        },
       ],
-    };
-  }
-  if (scopeKey === "floor-plans:unit:0") {
-    return {
-      fields: [],
-      unitVariant: {
-        details: { areas: [{ basis: "carpet", area: 875, unit: "sq ft" }] },
-        confidence: 0.9,
-        evidence: [{ pageNumber: 2, sourceSnippet: "2 BHK Type A" }],
-      },
-      unmappedRawEvidence: [],
-    };
-  }
-  if (scopeKey === "floor-plans:unit:1") {
-    return {
-      fields: [],
-      unitVariant: {
-        details: { areas: [{ basis: "carpet", area: 1240, unit: "sq ft" }] },
-        confidence: 0.88,
-        evidence: [{ pageNumber: 3, sourceSnippet: "3 BHK Type B" }],
-      },
       unmappedRawEvidence: [],
     };
   }
@@ -587,20 +572,13 @@ describe("the OpenRouter OCR provider adapter", () => {
 
     const result = await adapter.extract(request);
     expect(result.extraction.unitVariants).toMatchObject([
-      { scopeKey: "floor-plans:unit:0" },
-      { scopeKey: "floor-plans:unit:1" },
+      { scopeKey: "floor-plans", variantName: "2 BHK - Type A" },
+      { scopeKey: "floor-plans", variantName: "3 BHK - Type B" },
     ]);
-    // The name lives on the discovered scope, not the per-unit response.
     expect(
-      result.effectiveManifest?.scopes
-        .filter((scope) => scope.kind === "unit_variant")
-        .map((scope) => scope.variant.variantName),
-    ).toEqual(["2 BHK - Type A", "3 BHK - Type B"]);
-    expect(
-      buildSubmissionFieldCandidates(
-        result.extraction,
-        result.effectiveManifest ?? request.manifest,
-      ).find((field) => field.fieldKey === "unit_variants")?.value,
+      buildSubmissionFieldCandidates(result.extraction, request.manifest).find(
+        (field) => field.fieldKey === "unit_variants",
+      )?.value,
     ).toEqual([
       {
         variantName: "2 BHK - Type A",
