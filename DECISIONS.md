@@ -895,3 +895,49 @@ Context: reviewing the Godrej Altus flipchart extraction (37 pages, the richest 
 **Backfill, not re-extraction.** The three fixes above and the 20 new fields all apply to data Claude had already read and this session had already paid for — sitting on disk in the job's checkpoint. Two one-off scripts replayed the cached raw responses through the fixed code and wrote the results directly to `property_submission_fields`/`property_submission_field_evidence` (draft staging, not in `liveCatalogTables`, so ordinary code may write it same as normal extraction persistence does) rather than requeue the job for a second paid run of calls that had already succeeded. Final state for this submission: 36 fields, 13 unit variants carrying 144 rooms and 26 area entries, 14 catalog amenities, 41 amenities as printed, 20 new specification facts — up from 14 fields, empty rooms, and zero amenities before this entry.
 
 **Not done:** the dossier does not yet give `amenities_full_list` (or the new "Location & legal"/"Certifications" categories) their own visual section — it currently renders inside the generic specifications list. `unmappedRawEvidence` itself is still discarded once extraction finishes; this closes the gap this specific brochure proved costly, not the general one — a masterplan legend item or any other fact this schema didn't anticipate still has nowhere to go until it's named the way this entry names these 20.
+
+---
+
+**2026-09-23 — Competitive review against Propsoch: what to adopt, what we already do better, what's explicitly rejected. Comparison is missing derivable numbers we've had in schema since v1.**
+
+Context: owner shared eight screenshots of Propsoch's comparison page (propsoch.com) after noticing `properties.plotAreaSqft`-derived facts from the original whiteboard — unit density, open area — never made it into `/compare`. Reviewed against `docs/design/comparison.v1.md` and the actual row definitions in `src/lib/compare/model.ts`, not just the screenshots.
+
+**Confirmed gap: "The project" group renders `towers`, `floors`, `total_units` but never `plotAreaSqft` — a field that has existed since schema v1 — and nothing derived from it.** Not a missing-data problem; a missing-row problem.
+
+## Adopt now — zero new extraction, pure computation from fields already in schema
+
+- **Land area** as its own row (`properties.plotAreaSqft`, already stored, never rendered).
+- **Unit density** (units per acre) = `totalUnits / (plotAreaSqft / 43,560)`.
+- **Units per floor** (project-level) = sum of `unit_variants[].unitsPerFloor` across a property's variants, when every variant states it.
+- **Efficiency** (carpet ÷ super-built-up, as a %) — direct, now that schema v12's duplicate-basis fix means a unit type reliably carries both bases (verified today: 13/13 Godrej Altus variants have both).
+- **Balcony area ratio** — balcony room area ÷ unit's own total area, from the room dimensions already captured (`dimensions.balconies`).
+- **Amenity category sub-headers.** `amenity_catalog.category` is already loaded into every comparison row (`model.ts` line ~688) and used only to _sort_ — never to render a category heading. Propsoch's Sports / Lifestyle / Neighbourhood grouping is a rendering change against data we already have, not a new field.
+- **Developer completed-projects count** — countable from our own `properties` table (developer's properties at `possession_status = ready_to_move`), not a fact to extract.
+- **Largest bedroom is arguably already "Master Bedroom Area."** Principle 8 already sorts bedrooms largest-first; Propsoch's row may just be a label on the same fact we already surface. Worth confirming intent before adding a new field for it.
+
+## Needs new fields — design, then extraction, no schema migration expected (the `specification_text` pattern from today covers scalars; only a _numeric_ one needs its own data type)
+
+- **Open area %**, **park area**, **floor area ratio** — need a numeric open-space/built-up figure; today's `specifications.open_space` is free text, not a number a formula can use.
+- **Elevator count → elevator crowd factor** — `specifications.lifts_per_tower` is a descriptive sentence ("3 nos. of lifts each in Tower 1, 2, 3 & 4"), not a count. A genuinely numeric field needs its own extraction contract and probably its own data type (`positive_integer`-like) rather than reusing `specification_text`.
+- **Clubhouse area, numeric** — `specifications.clubhouse_size` (schema v1) and its wider `amenities_full_list` cousin (v12, today) are both text. A "clubhouse factor" (sqft ÷ units) formula needs a number.
+- **Common walls %** — not captured in any form today.
+- **Developer established year** — `developers` has no such column; a small additive one if adopted.
+
+## A structural weakness in what shipped today, named honestly
+
+Propsoch's Connectivity rows (Closest Metro, Airport, Hospital, Mall, School) are **discrete, numeric, per-category** — one named place plus one distance per row, letting the UI bar/color/"closer" them directly, exactly what comparison principle 6 asks for. Schema v12's `nearby_connectivity` / `nearby_hospitals` / `nearby_schools` (this session, above) are **flattened text blobs** — dossier-adequate, but comparison cannot do numeric comparison, bars, or "which is closer" on a sentence. Reusing `specification_text` was the safe, no-migration call for getting brochure-read facts into the database at all; it was not designed as comparison's ideal shape. A follow-up — `nearest_metro_distance_km` + `nearest_metro_name`, one pair per category — would need its own small schema entry (still no migration: numeric + text pair, same `property_schema_fields`-driven pattern) and its own comparison rows with real bars.
+
+## New feature ideas, not decided, bigger than a row addition
+
+- **"Common amenities" as its own shown-but-grouped bucket**, ahead of the differing ones. Distinct from the "hide identical rows" toggle already built and removed 2026-09-20 (owner direction: real properties differ on nearly everything, so hiding hid nothing) — Propsoch's version still _shows_ the shared amenities, just groups them first. Worth a real design pass, not an automatic yes.
+- **"(Rare)" amenity tagging** — needs a cross-catalog frequency signal (how many published properties have this amenity, recomputed periodically), a new kind of derived data this project doesn't have yet.
+- **Neighbourhood natural-feature proximity** (lake, forest, hill, golf course) — a genuinely new fact category, structurally separate from building amenities; not discussed before this review.
+
+## Explicitly rejected, reaffirming standing principles rather than reopening them
+
+- **Propscore (4.14/5 vs 3.79/5)** — a proprietary composite rating. Comparison principle 7: "No score, no rank, no 'winner'." Direct conflict.
+- **Price, price on saleable/carpet area** — shown prominently on every Propsoch screen. Comparison principle 7: "No price, price per sq ft or budget bucket, ever." Direct conflict; price never leaves `private` except through the one matching path (`AGENTS.md`).
+- **"Investment Potential: Medium/High", "Price Range: Moderate", "Livability: Developing"** — unverifiable subjective labels; "Price Range" is a disguised price signal by another name. Same disposition as the 2026-08-31 precedent on unbuildable pitch-deck asks and the 2026-09-23 investor-metrics chat review (buyer-facing scores rejected there too).
+- **The bottom-of-page generated narrative** ("Lodha Mirabelle vs Assetz Soho and Sky... Assetz Soho and Sky has the edge") — reads a winner into cost-efficiency and possession timing. Comparison principle 3 already builds a rule-based "if you choose A over B" summary from verified facts, explicitly "never generated text, never a score" — the mechanism we want already exists; Propsoch's version is the score-laundering pattern principle 3 was written to avoid.
+
+Tasklist for the zero-new-extraction slice: `docs/tasklists/2026-09-23-comparison-derived-metrics.md`. The needs-new-fields and bigger feature items are recorded here for the next scoping pass, not scheduled.
