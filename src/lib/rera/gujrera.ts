@@ -3,6 +3,10 @@ import { legacyTlsFetch } from "./legacy-tls-fetch";
 import {
   RegulatorError,
   type RegulatorAdapter,
+  type RegulatorBlockProgress,
+  type RegulatorDetails,
+  type RegulatorParty,
+  type RegulatorPoint,
   type RegulatorPriceRange,
   type RegulatorQuarter,
   type RegulatorRecord,
@@ -148,10 +152,11 @@ export const createGujreraAdapter = (
   ) => {
     if (!/^\d{1,12}$/.test(formThreeId) || blocks.length === 0) {
       gaps.push("flat carpet areas");
-      return [];
+      return { groups: [], asOn: null };
     }
     const flats: FlatCarpetArea[] = [];
     let failed = false;
+    let asOn: string | null = null;
     for (const block of blocks) {
       await sleep(delayMs);
       try {
@@ -169,14 +174,31 @@ export const createGujreraAdapter = (
           // A flat is at least a few square metres and never a hectare.
           if (carpetAreaSqm < 1 || carpetAreaSqm > 5000) continue;
           if (usage !== null && !/resid/i.test(usage)) continue;
-          flats.push({ flatNumber, carpetAreaSqm });
+          // Only the booked or unbooked word and the exclusive area are taken from
+          // the rest of the row: it also holds a price, a buyer and a phone number.
+          const status = text(flat?.status)?.toUpperCase();
+          const exclusive = positive(flat?.areaofExBalcony);
+          flats.push({
+            flatNumber,
+            carpetAreaSqm,
+            ...(status === "BOOKED" || status === "UNBOOKED"
+              ? { booked: status === "BOOKED" }
+              : {}),
+            ...(exclusive !== null && exclusive < 500
+              ? { exclusiveAreaSqm: exclusive }
+              : {}),
+          });
+          const listedOn = isoDate(flat?.createdOn);
+          if (listedOn !== null && (asOn === null || listedOn > asOn)) {
+            asOn = listedOn;
+          }
         }
       } catch {
         failed = true;
       }
     }
     if (failed || flats.length === 0) gaps.push("flat carpet areas");
-    return groupCarpetAreas(flats);
+    return { groups: groupCarpetAreas(flats), asOn };
   };
 
   /** The search hit for exactly this registration number, or a `RegulatorError`. */
@@ -320,6 +342,48 @@ export const createGujreraAdapter = (
         )?.data,
       );
 
+      // The latest quarterly filing: the form ids the site's own summary and
+      // inventory tabs read. The registration summary's ids can be a later draft
+      // than the filing the site shows, so these take precedence.
+      const latestIds = asRecord(
+        asRecord(
+          await optional(
+            gaps,
+            "latest filing",
+            `/quarter/public/get-qtr-form-details/${projectId}`,
+          ),
+        )?.data,
+      );
+      const idOf = (value: unknown): string | null => {
+        const id = String(value ?? "");
+        return /^\d{1,12}$/.test(id) ? id : null;
+      };
+      const filingFormOneId = idOf(latestIds?.formOneId);
+      const formThreeId =
+        idOf(latestIds?.formThreeId) ?? idOf(summary?.formThreeId) ?? "";
+
+      // Progress: the latest filing's figure, else the older certified one.
+      const readFormOne = async (id: string, label: string) =>
+        asRecord(
+          asRecord(
+            await optional(
+              gaps,
+              label,
+              `/formone/public/getfrom-one-byformone-id/${id}`,
+            ),
+          )?.data,
+        );
+      const percent = (value: unknown): number | null => {
+        const number = finiteNumber(value);
+        return number !== null && number >= 0 && number <= 100 ? number : null;
+      };
+      // Only a form-one the quarterly listing named counts as the latest filing;
+      // the registration's own form-one is the older certified one.
+      const filingForm = filingFormOneId
+        ? await readFormOne(filingFormOneId, "latest filing progress")
+        : null;
+      const filingProgress = percent(filingForm?.progressReport);
+
       const progressBody = asRecord(
         await optional(
           gaps,
@@ -327,19 +391,28 @@ export const createGujreraAdapter = (
           `/formone/public/getfrom-one-progs-rept-projectid/${projectId}`,
         ),
       );
-      const progress = finiteNumber(progressBody?.data);
-      const constructionProgressPercent =
-        progress !== null && progress >= 0 && progress <= 100 ? progress : null;
-      if (
-        constructionProgressPercent === null &&
-        !gaps.includes("construction progress")
-      ) {
-        gaps.push("construction progress");
+      const certifiedProgress = percent(progressBody?.data);
+      const constructionProgressPercent = filingProgress ?? certifiedProgress;
+      const progressSource: RegulatorDetails["filing"]["source"] =
+        filingProgress !== null
+          ? "quarterly_filing"
+          : certifiedProgress !== null
+            ? "certified_form_one"
+            : null;
+      if (constructionProgressPercent === null) {
+        if (!gaps.includes("construction progress")) {
+          gaps.push("construction progress");
+        }
+      } else {
+        // One good figure is enough: a failed second source is not a gap.
+        const index = gaps.indexOf("construction progress");
+        if (index >= 0) gaps.splice(index, 1);
       }
 
       let totalUnits: number | null = null;
-      const formThreeId = String(summary?.formThreeId ?? "");
-      if (/^\d{1,12}$/.test(formThreeId)) {
+      let bookedUnits: number | null = null;
+      let availableUnits: number | null = null;
+      if (formThreeId !== "") {
         const inventory = asRecord(
           await optional(
             gaps,
@@ -347,9 +420,16 @@ export const createGujreraAdapter = (
             `/formthree/public/get-fromthree-a-details-byid/${formThreeId}`,
           ),
         );
-        const units = finiteNumber(inventory?.numberOfUnits);
-        totalUnits =
-          units !== null && Number.isInteger(units) && units > 0 ? units : null;
+        const count = (value: unknown): number | null => {
+          const number = finiteNumber(value);
+          return number !== null && Number.isInteger(number) && number >= 0
+            ? number
+            : null;
+        };
+        const units = count(inventory?.numberOfUnits);
+        totalUnits = units !== null && units > 0 ? units : null;
+        bookedUnits = count(inventory?.bookedUnit);
+        availableUnits = count(inventory?.unBookedUnit);
         if (totalUnits === null && !gaps.includes("unit count")) {
           gaps.push("unit count");
         }
@@ -357,36 +437,53 @@ export const createGujreraAdapter = (
         gaps.push("unit count");
       }
 
-      // The block list lives with the registration's form-one.
-      const formOneId = String(summary?.formOneId ?? "");
-      let blocks: RegulatorRecord["blocks"] = [];
-      if (/^\d{1,12}$/.test(formOneId)) {
-        const formOne = asRecord(
-          await optional(
-            gaps,
-            "blocks",
-            `/formone/public/getfrom-one-byformone-id/${formOneId}`,
-          ),
+      // Blocks, with the progress, floors and lifts the filing states for each. The
+      // filing's own list is used; the registration's form-one only when the
+      // filing could not be read.
+      const readBlocks = (form: Record<string, unknown> | null) => {
+        const list = form?.formOneAList;
+        return (Array.isArray(list) ? list : []).flatMap(
+          (entry): RegulatorBlockProgress[] => {
+            const block = asRecord(entry);
+            const name = text(block?.blockName);
+            if (!name) return [];
+            const whole = (value: unknown): number | null => {
+              const number = Number(value);
+              return Number.isInteger(number) && number > 0 ? number : null;
+            };
+            return [
+              {
+                name,
+                progressPercent: percent(block?.blockProgress),
+                floors: whole(block?.noOfFloors),
+                lifts: whole(block?.noOfLifts),
+                slabs: whole(block?.totalNoOfSlabs),
+              },
+            ];
+          },
         );
-        const list = asRecord(formOne?.data ?? formOne)?.formOneAList;
-        blocks = (Array.isArray(list) ? list : []).flatMap((entry) => {
-          const block = asRecord(entry);
-          const name = text(block?.blockName);
-          if (!name) return [];
-          const slabs = Number(block?.totalNoOfSlabs);
-          return [
-            {
-              name,
-              slabs: Number.isInteger(slabs) && slabs > 0 ? slabs : null,
-            },
-          ];
-        });
+      };
+      let blockProgress = readBlocks(filingForm);
+      if (blockProgress.length === 0) {
+        const registrationFormOneId = idOf(summary?.formOneId);
+        if (registrationFormOneId) {
+          blockProgress = readBlocks(
+            await readFormOne(registrationFormOneId, "blocks"),
+          );
+        } else if (summary) {
+          gaps.push("blocks");
+        }
       }
+      const blocks: RegulatorRecord["blocks"] = blockProgress.map((block) => ({
+        name: block.name,
+        slabs: block.slabs,
+      }));
 
       // Carpet area of every flat, in square metres, reduced to the distinct areas
-      // per block. Read from the same list the site's own inventory tab shows;
-      // only the named fields are taken.
-      const carpetGroups = await readCarpetGroups(formThreeId, blocks, gaps);
+      // per block, with how many are booked. Read from the same list the site's
+      // own inventory tab shows; only the named fields are taken.
+      const { groups: carpetGroups, asOn: inventoryAsOn } =
+        await readCarpetGroups(formThreeId, blocks, gaps);
 
       const developments = Array.isArray(detail?.dev) ? detail.dev : [];
       const swimmingPool = developments.some(
@@ -400,6 +497,79 @@ export const createGujreraAdapter = (
           `/quarter/public/getprojectqtrs/${projectId}`,
         ),
       );
+
+      // The drawn project boundary. The response also carries a project cost;
+      // only the coordinates are read.
+      const boundary = parseBoundary(
+        asRecord(
+          await optional(
+            gaps,
+            "boundary",
+            `/maplocation/public/getProjectLocations/${projectId}`,
+          ),
+        )?.coordinates,
+      );
+      if (boundary.length === 0 && !gaps.includes("boundary")) {
+        gaps.push("boundary");
+      }
+
+      const filingRows = Array.isArray(quarters?.data) ? quarters.data : [];
+      const listedFilings = filingRows.filter(
+        (row) => text(asRecord(row)?.quarterName) !== null,
+      );
+      const filings =
+        listedFilings.length > 0
+          ? {
+              listed: listedFilings.length,
+              submitted: listedFilings.filter(
+                (row) => text(asRecord(row)?.status) === "SUBMITTED",
+              ).length,
+            }
+          : null;
+      const latest = latestQuarter(quarters?.data);
+
+      const openArea = positive(project.totOpenArea);
+      const coveredArea = positive(project.totCoverdArea);
+      const details: RegulatorDetails = {
+        version: 1,
+        layoutLandAreaSqm: positive(project.totAreaOfLandLayout),
+        openAreaSqm: openArea,
+        coveredAreaSqm: coveredArea,
+        coveredParkingAreaSqm: positive(project.coveredParkingArea),
+        filing: {
+          quarter: filingProgress !== null ? (latest?.name ?? null) : null,
+          periodEndsOn:
+            filingProgress !== null ? (latest?.periodEndsOn ?? null) : null,
+          source: progressSource,
+          progressPercent: constructionProgressPercent,
+          blocks: blockProgress,
+        },
+        inventory:
+          totalUnits === null && bookedUnits === null
+            ? null
+            : {
+                totalUnits,
+                bookedUnits,
+                availableUnits,
+                asOn: inventoryAsOn,
+              },
+        filings,
+        planPassingAuthority: text(project.approvingAuthority),
+        registeredOn: dayMonthYear(summary?.approvedDate),
+        architects: parties(
+          detail?.acrchlist,
+          "name",
+          "noOfKeyProjectCompleted",
+        ),
+        engineers: parties(detail?.englist, "name", "noOfKeyProjectsCompleted"),
+        contractors: parties(
+          detail?.contr,
+          "contractortName",
+          "noofkeyprojectscompleted",
+        ),
+        boundary,
+        centre: boundaryCentre(boundary),
+      };
 
       return {
         regulatorCode: "gujrera",
@@ -420,16 +590,19 @@ export const createGujreraAdapter = (
         constructionProgressPercent,
         projectDescription: text(project.projectDesc),
         pincode: text(project.pinCode),
+        // The figure the site prints as the project's land area (its layout land),
+        // then the registered-for-RERA part, then the whole plot.
         landAreaSqm: positive(
-          project.totLandAreaForProjectUnderReg ??
-            project.totAreaOfLandLayout ??
+          project.totAreaOfLandLayout ??
+            project.totLandAreaForProjectUnderReg ??
             project.totAreaOfLand,
         ),
         coveredParkingSlots: positive(project.coveredParking),
         blocks,
         carpetGroups,
+        details,
         declaredAmenityKeys: swimmingPool ? ["swimming_pool"] : [],
-        latestQuarter: latestQuarter(quarters?.data),
+        latestQuarter: latest,
         sourceUrl: `${ORIGIN}/#/search-glob/gloabl-data`,
         fetchedAt: now().toISOString(),
         gaps,
@@ -437,6 +610,107 @@ export const createGujreraAdapter = (
     },
   };
 };
+
+/** "11-11-2022" (day-month-year, as the summary prints an approval date) to ISO. */
+const dayMonthYear = (value: unknown): string | null => {
+  if (typeof value !== "string") return null;
+  const match = /^(\d{2})-(\d{2})-(\d{4})$/.exec(value.trim());
+  if (!match) return null;
+  const [, day, month, year] = match;
+  const date = new Date(`${year}-${month}-${day}T00:00:00Z`);
+  return Number.isNaN(date.getTime()) || date.getUTCDate() !== Number(day)
+    ? null
+    : `${year}-${month}-${day}`;
+};
+
+/** India's bounding box: a coordinate outside it is a typo, not a place. */
+const inIndia = (lat: number, lng: number): boolean =>
+  lat >= 6 && lat <= 38 && lng >= 68 && lng <= 98;
+
+/**
+ * The drawn boundary from the map service: `{ lat, lang }` pairs as text, the first
+ * point often repeated at the end to close the ring. Points outside India, or that
+ * do not read as numbers, are dropped; fewer than three left is no boundary.
+ */
+export const parseBoundary = (coordinates: unknown): RegulatorPoint[] => {
+  const points: RegulatorPoint[] = [];
+  for (const entry of Array.isArray(coordinates) ? coordinates : []) {
+    const item = asRecord(entry);
+    const lat = Number(item?.lat);
+    const lng = Number(item?.lang ?? item?.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+    if (!inIndia(lat, lng)) continue;
+    points.push({ lat, lng });
+  }
+  const first = points[0];
+  const last = points[points.length - 1];
+  if (
+    points.length > 1 &&
+    first.lat === last.lat &&
+    first.lng === last.lng
+  ) {
+    points.pop();
+  }
+  return points.length >= 3 ? points : [];
+};
+
+/** The centre of a boundary: the area-weighted centroid of the ring, or the mean
+ * of its corners when the ring has no area. A project is a few hundred metres
+ * across, so plain degrees are accurate enough here. */
+export const boundaryCentre = (
+  points: RegulatorPoint[],
+): RegulatorPoint | null => {
+  if (points.length < 3) return null;
+  // Measured from the first corner: multiplying raw coordinates (about 72 and 23)
+  // loses the small differences that make up a site a few hundred metres across.
+  const origin = points[0];
+  let area = 0;
+  let cx = 0;
+  let cy = 0;
+  for (let i = 0; i < points.length; i += 1) {
+    const ax = points[i].lng - origin.lng;
+    const ay = points[i].lat - origin.lat;
+    const next = points[(i + 1) % points.length];
+    const bx = next.lng - origin.lng;
+    const by = next.lat - origin.lat;
+    const cross = ax * by - bx * ay;
+    area += cross;
+    cx += (ax + bx) * cross;
+    cy += (ay + by) * cross;
+  }
+  const round = (value: number) => Math.round(value * 1e7) / 1e7;
+  if (Math.abs(area) < 1e-14) {
+    return {
+      lat: round(points.reduce((sum, p) => sum + p.lat, 0) / points.length),
+      lng: round(points.reduce((sum, p) => sum + p.lng, 0) / points.length),
+    };
+  }
+  return {
+    lat: round(origin.lat + cy / (3 * area)),
+    lng: round(origin.lng + cx / (3 * area)),
+  };
+};
+
+/** Names and stated project counts of the professionals a list carries; nothing
+ * else about them is read. */
+const parties = (
+  rows: unknown,
+  nameKey: string,
+  countKey: string,
+): RegulatorParty[] =>
+  (Array.isArray(rows) ? rows : []).flatMap((row) => {
+    const item = asRecord(row);
+    const name = text(item?.[nameKey]);
+    if (!name) return [];
+    const count = Number(item?.[countKey]);
+    return [
+      {
+        name,
+        projectsCompleted:
+          Number.isInteger(count) && count >= 0 ? count : null,
+      },
+    ];
+  });
 
 /** The highest-numbered "Q-n" filing. The list also carries other filing kinds
  * ("BWA-n"), which are not quarterly progress reports. */

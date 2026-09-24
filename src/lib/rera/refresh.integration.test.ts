@@ -21,6 +21,7 @@ import {
   detailResponse,
   formOneResponse,
   inventoryResponse,
+  latestFilingRoutes,
   kimanaSearchHit,
   progressResponse,
   quartersResponse,
@@ -62,6 +63,7 @@ const stubRegistry = (
     "/formthree/public/get-fromthree-a-details-byid/417562": inventoryResponse,
     "/quarter/public/getprojectqtrs/17929": quartersResponse,
     "/formone/public/getfrom-one-byformone-id/278008": formOneResponse,
+    ...latestFilingRoutes,
     ...overrides,
   };
   return createRegulatorRegistry([

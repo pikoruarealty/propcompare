@@ -23,6 +23,10 @@ export const ROOMS_GAP_FLAG_RATIO = 0.3;
 export interface FlatCarpetArea {
   flatNumber: string;
   carpetAreaSqm: number;
+  /** Whether the regulator lists the flat as booked; absent when it did not say. */
+  booked?: boolean;
+  /** Exclusive balcony, veranda or open-terrace area, square metres. */
+  exclusiveAreaSqm?: number;
 }
 
 /** The block a flat number names: "A-301" is block "A"; a number with no block
@@ -44,6 +48,10 @@ export const groupCarpetAreas = (
       block: string | null;
       carpetAreaSqm: number;
       flats: string[];
+      /** Flats whose booked status the list gave, and how many were booked. */
+      statedStatus: number;
+      booked: number;
+      exclusive: number[];
     }
   >();
   for (const flat of flats) {
@@ -53,12 +61,22 @@ export const groupCarpetAreas = (
       block,
       carpetAreaSqm: flat.carpetAreaSqm,
       flats: [],
+      statedStatus: 0,
+      booked: 0,
+      exclusive: [],
     };
     group.flats.push(flat.flatNumber);
+    if (flat.booked !== undefined) {
+      group.statedStatus += 1;
+      if (flat.booked) group.booked += 1;
+    }
+    if (flat.exclusiveAreaSqm !== undefined) {
+      group.exclusive.push(flat.exclusiveAreaSqm);
+    }
     groups.set(key, group);
   }
   return [...groups.values()]
-    .map((group) => {
+    .map((group): RegulatorCarpetGroup => {
       const sorted = [...group.flats].sort(collator.compare);
       return {
         block: group.block,
@@ -66,6 +84,17 @@ export const groupCarpetAreas = (
         flatCount: sorted.length,
         firstFlat: sorted[0],
         lastFlat: sorted[sorted.length - 1],
+        // Only when every flat's status was stated: a partial count would read
+        // as fewer booked than there are.
+        ...(group.statedStatus === sorted.length
+          ? { bookedCount: group.booked }
+          : {}),
+        ...(group.exclusive.length > 0
+          ? {
+              exclusiveAreaMinSqm: Math.min(...group.exclusive),
+              exclusiveAreaMaxSqm: Math.max(...group.exclusive),
+            }
+          : {}),
       };
     })
     .sort(

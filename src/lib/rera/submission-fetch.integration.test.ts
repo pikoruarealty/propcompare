@@ -23,6 +23,7 @@ import {
   detailResponse,
   formOneResponse,
   inventoryResponse,
+  latestFilingRoutes,
   kimanaSearchHit,
   POISON,
   progressResponse,
@@ -59,6 +60,7 @@ const stubRegistry = (overrides: Record<string, unknown> = {}) => {
     "/formthree/public/get-fromthree-a-details-byid/417562": inventoryResponse,
     "/quarter/public/getprojectqtrs/17929": quartersResponse,
     "/formone/public/getfrom-one-byformone-id/278008": formOneResponse,
+    ...latestFilingRoutes,
     ...overrides,
   };
   return createRegulatorRegistry([
@@ -414,10 +416,10 @@ describe("using RERA's values", () => {
     expect(fields["property.possession_date"].value).toBe("2027-04-30");
     expect(fields["property.total_units"].value).toBe(76);
     expect(fields["property.rera_construction_progress_percent"].value).toBe(
-      67.71875,
+      93.72324444444445,
     );
     expect(fields["property.legal_entity_id"].value).toBe(entityId);
-    // Derived from RERA's declared progress (67.7%, under 100).
+    // Derived from RERA's declared progress (93.7%, under 100).
     expect(fields["property.possession_status"].value).toBe(
       "under_construction",
     );

@@ -53,8 +53,13 @@ export const detailResponse = {
       projectDesc: "Residential Apartments",
       pinCode: null,
       totAreaOfLand: 7628,
+      totAreaOfLandLayout: 7628,
       totLandAreaForProjectUnderReg: 7628,
       totCarpetArea: 25356.46,
+      totCoverdArea: 4496.9,
+      totOpenArea: 3131.1,
+      coveredParkingArea: 12553.45,
+      approvingAuthority: "AUDA",
       coveredParking: 246,
       costOfLand: POISON,
       estimatedCost: POISON,
@@ -62,7 +67,31 @@ export const detailResponse = {
     },
     // Kimana leaves the swimming-pool flag blank: not stated, not "no".
     dev: [{ sewSwimCapacityFlag: null, sewDisposalFlag: null }],
-    contr: [{ contractortName: "Builder Ltd", emailId: POISON_TEXT }],
+    contr: [
+      {
+        contractortName: "Builder Ltd",
+        emailId: POISON_TEXT,
+        mobileNo: POISON_TEXT,
+        noofkeyprojectscompleted: "24",
+      },
+    ],
+    acrchlist: [
+      {
+        name: "HM Architects",
+        emailId: POISON_TEXT,
+        mobileNo: POISON_TEXT,
+        panNo: POISON_TEXT,
+        noOfKeyProjectCompleted: 62,
+      },
+    ],
+    englist: [
+      {
+        name: "Setu Infrastructure",
+        engemailId: POISON_TEXT,
+        mobileNo: POISON_TEXT,
+        noOfKeyProjectsCompleted: "80",
+      },
+    ],
   },
 };
 
@@ -76,6 +105,7 @@ export const amarisDetailResponse = {
       projectName: "AMARIS",
       projectDesc: "4BHK and 5BHK (Penthouse)",
       pinCode: "382481",
+      totAreaOfLandLayout: 15949,
       totLandAreaForProjectUnderReg: 15949,
       coveredParking: 1327,
     },
@@ -128,6 +158,7 @@ export const summaryResponse = {
     promoterMobileNo: "0000000000",
     formThreeId: 417562,
     formOneId: 278008,
+    approvedDate: "11-11-2022",
   },
 };
 
@@ -146,8 +177,8 @@ export const inventoryResponse = {
   totalBookedUnitConside: String(POISON),
   totalCansidrationAmt: String(POISON),
   numberOfUnits: 76,
-  bookedUnit: 55,
-  unBookedUnit: 21,
+  bookedUnit: 24,
+  unBookedUnit: 52,
   totalCarpetArea: "25356.46",
 };
 
@@ -186,7 +217,11 @@ export const quartersResponse = {
 
 /** One row of the per-flat list, with the price, buyer and phone fields the real
  * response carries (poisoned) beside the three the adapter may read. */
-const flatRow = (flatNo: string, carpetArea: number) => ({
+const flatRow = (
+  flatNo: string,
+  carpetArea: number,
+  status: "BOOKED" | "UNBOOKED" = "BOOKED",
+) => ({
   id: POISON,
   formThreePk: 417562,
   blockId: null,
@@ -195,7 +230,7 @@ const flatRow = (flatNo: string, carpetArea: number) => ({
   flatNo,
   carpetArea,
   areaofExBalcony: 194.42,
-  status: "BOOKED",
+  status,
   unitConsideration: String(POISON),
   receivedAmount: String(POISON),
   balanceAmount: String(POISON),
@@ -206,7 +241,7 @@ const flatRow = (flatNo: string, carpetArea: number) => ({
   kycId: POISON_TEXT,
   redeveloped: null,
   mobileNumber: POISON_TEXT,
-  createdOn: "2025-01-01",
+  createdOn: "2026-07-03T09:00:00.000+0530",
   kycid: POISON_TEXT,
 });
 
@@ -220,11 +255,13 @@ export const flatListResponse = (() => {
     ["B", 277.26, 463.24],
   ] as const) {
     for (let floor = 3; floor <= 20; floor += 1) {
-      rows.push(flatRow(`${block}-${floor}01`, typical));
-      rows.push(flatRow(`${block}-${floor}02`, typical));
+      // Floors 3 to 8 are booked: 12 of each block's 36 typical flats.
+      const status = floor <= 8 ? "BOOKED" : "UNBOOKED";
+      rows.push(flatRow(`${block}-${floor}01`, typical, status));
+      rows.push(flatRow(`${block}-${floor}02`, typical, status));
     }
-    rows.push(flatRow(`${block}-2101`, penthouse));
-    rows.push(flatRow(`${block}-2102`, penthouse));
+    rows.push(flatRow(`${block}-2101`, penthouse, "UNBOOKED"));
+    rows.push(flatRow(`${block}-2102`, penthouse, "UNBOOKED"));
   }
   return {
     status: 200,
@@ -234,3 +271,55 @@ export const flatListResponse = (() => {
     data: rows,
   };
 })();
+
+/** The quarterly filing the site's own tabs read: its form ids differ from the
+ * registration summary's (which can be a later draft). */
+export const qtrDetailsResponse = {
+  status: "200",
+  message: "Data Found Successfully",
+  data: { formOneId: 325057, formTwoId: null, formThreeId: 446362 },
+};
+
+/** Kimana's July 2026 filing: 93.7% overall, one block of 22 floors and 8 lifts. */
+export const latestFormOneResponse = {
+  status: "200",
+  masssge: "DATA FOUND",
+  data: {
+    formOneId: 325057,
+    progressReport: 93.72324444444445,
+    formOneAList: [
+      {
+        blockName: "A+B",
+        totalNoOfSlabs: "24",
+        blockProgress: 95.86533333333334,
+        noOfFloors: 22,
+        noOfLifts: 8,
+        noOfUnitsBooked: 63,
+        photoDocList: [{ latitude: "", longitude: "", photoExternalId: POISON_TEXT }],
+      },
+    ],
+  },
+};
+
+/** The drawn boundary (closed ring, first point repeated) and, beside it, a
+ * project cost that must never be read. */
+export const boundaryResponse = {
+  locId: 11173,
+  projectName: "The Kimana Towers",
+  projectCost: POISON,
+  coordinates: [
+    { locId: 1, lat: "23.027580847592397", lang: "72.48880773049679" },
+    { locId: 2, lat: "23.027487045257566", lang: "72.49006032210674" },
+    { locId: 3, lat: "23.026948914812206", lang: "72.49006032210674" },
+    { locId: 4, lat: "23.02707233941613", lang: "72.48875408631649" },
+    { locId: 5, lat: "23.027580847592397", lang: "72.48880773049679" },
+  ],
+};
+
+/** The routes a project with a readable latest filing adds. */
+export const latestFilingRoutes = {
+  "/quarter/public/get-qtr-form-details/17929": qtrDetailsResponse,
+  "/formone/public/getfrom-one-byformone-id/325057": latestFormOneResponse,
+  "/formthree/public/get-fromthree-a-details-byid/446362": inventoryResponse,
+  "/maplocation/public/getProjectLocations/17929": boundaryResponse,
+};

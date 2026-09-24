@@ -44,6 +44,9 @@ export interface RegulatorRecord {
    * several towers ("A+B") and a slab is not a storey, so these describe the
    * registration and are not a tower or floor count. */
   blocks: { name: string; slabs: number | null }[];
+  /** What else the regulator states about the project (`DECISIONS.md` 2026-09-24,
+   * "RERA data, second pass"). Absent on a record fetched before it was read. */
+  details?: RegulatorDetails;
   /** Amenity-catalogue keys the regulator affirmatively declares. Only a positive
    * declaration is listed: a blank flag is not stated, never "not offered". */
   declaredAmenityKeys: string[];
@@ -75,6 +78,80 @@ export interface RegulatorCarpetGroup {
   flatCount: number;
   firstFlat: string;
   lastFlat: string;
+  /** How many of these flats the regulator lists as booked. Absent when the list
+   * did not say, which is not the same as none. */
+  bookedCount?: number;
+  /** The smallest and largest exclusive balcony, veranda or open-terrace area
+   * listed for these flats, square metres, as printed. */
+  exclusiveAreaMinSqm?: number;
+  exclusiveAreaMaxSqm?: number;
+}
+
+/** A point on the project's boundary, degrees. */
+export interface RegulatorPoint {
+  lat: number;
+  lng: number;
+}
+
+export interface RegulatorBlockProgress {
+  name: string;
+  /** Percent complete for the block, from the latest filing. */
+  progressPercent: number | null;
+  /** Floors and lifts the filing states for the block; a block can hold several
+   * towers, so these are the regulator's counts, not per tower. */
+  floors: number | null;
+  lifts: number | null;
+  slabs: number | null;
+}
+
+/** A professional or contractor the registration names. Names and the count of
+ * projects they state only: no address, licence, phone or email. */
+export interface RegulatorParty {
+  name: string;
+  projectsCompleted: number | null;
+}
+
+/**
+ * Facts the regulator states beyond the ones the contract already had a field for.
+ * Money never appears here, nor a person's contact detail. Areas are square metres
+ * as printed, converted once where they are shown.
+ */
+export interface RegulatorDetails {
+  version: 1;
+  /** The project's land as the regulator prints it (its layout figure), which is
+   * what the site shows as "Project Land Area". */
+  layoutLandAreaSqm: number | null;
+  openAreaSqm: number | null;
+  coveredAreaSqm: number | null;
+  coveredParkingAreaSqm: number | null;
+  /** The quarterly filing the progress figures come from. */
+  filing: {
+    quarter: string | null;
+    periodEndsOn: string | null;
+    /** "quarterly_filing" is the promoter's latest report; "certified_form_one" is
+     * the older architect-visit figure, used only when no filing was readable. */
+    source: "quarterly_filing" | "certified_form_one" | null;
+    progressPercent: number | null;
+    blocks: RegulatorBlockProgress[];
+  };
+  /** Units booked and available as on the date the regulator's flat list carries. */
+  inventory: {
+    totalUnits: number | null;
+    bookedUnits: number | null;
+    availableUnits: number | null;
+    asOn: string | null;
+  } | null;
+  /** Every quarterly and half-yearly filing the regulator lists, and how many were
+   * submitted. */
+  filings: { listed: number; submitted: number } | null;
+  planPassingAuthority: string | null;
+  registeredOn: string | null;
+  architects: RegulatorParty[];
+  engineers: RegulatorParty[];
+  contractors: RegulatorParty[];
+  /** The drawn project boundary and its centre. */
+  boundary: RegulatorPoint[];
+  centre: RegulatorPoint | null;
 }
 
 export interface RegulatorQuarter {
