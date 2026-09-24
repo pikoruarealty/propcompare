@@ -536,6 +536,15 @@ export const createGujreraAdapter = (
         openAreaSqm: openArea,
         coveredAreaSqm: coveredArea,
         coveredParkingAreaSqm: positive(project.coveredParkingArea),
+        coveredParkingSlots: positive(project.coveredParking),
+        // From the flats listed, so it is the range the site's summary prints.
+        carpetAreaRangeSqm:
+          carpetGroups.length > 0
+            ? {
+                min: Math.min(...carpetGroups.map((g) => g.carpetAreaSqm)),
+                max: Math.max(...carpetGroups.map((g) => g.carpetAreaSqm)),
+              }
+            : null,
         filing: {
           quarter: filingProgress !== null ? (latest?.name ?? null) : null,
           periodEndsOn:

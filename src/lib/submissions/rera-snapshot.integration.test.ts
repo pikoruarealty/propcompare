@@ -11,6 +11,7 @@ import {
   propertySubmissionFields,
   propertySubmissions,
 } from "@/db/schema/catalog";
+import { getPublishedPropertyBySlug } from "@/lib/properties/queries";
 import { buildReraSnapshot } from "@/lib/rera/snapshot";
 import type { RegulatorRecord } from "@/lib/rera/types";
 import { createEditSubmission } from "./edit-property";
@@ -180,6 +181,48 @@ describe("RERA facts and position on a published property", () => {
     expect(live["property.rera_snapshot"]).toEqual(snapshot);
     expect(live["property.latitude"]).toBeCloseTo(23.0272712, 6);
     expect(live["property.longitude"]).toBeCloseTo(72.4894294, 6);
+  });
+
+  it("shows the buyer the facts and the regulator's carpet-area range in square feet", async () => {
+    const withRange = buildReraSnapshot({
+      ...record,
+      details: {
+        ...record.details!,
+        carpetAreaRangeSqm: { min: 153.13, max: 533.17 },
+      },
+    } as RegulatorRecord)!;
+    await publish({ "property.rera_snapshot": withRange }, propertyId);
+    const [{ slug }] = await db
+      .select({ slug: properties.slug })
+      .from(properties)
+      .where(eq(properties.id, propertyId));
+
+    const dossier = (await getPublishedPropertyBySlug(db, slug))!;
+
+    expect(dossier.rera.facts?.openAreaSqm).toBe(3131.1);
+    // 153.13 and 533.17 square metres, converted once.
+    expect(dossier.rera.carpetAreaRangeMinSqft).toBe("1648.28");
+    expect(dossier.rera.carpetAreaRangeMaxSqft).toBe("5738.99");
+  });
+
+  it("does not show a stored object that is not a snapshot of the current shape", async () => {
+    await db
+      .update(properties)
+      .set({ reraSnapshot: { version: 99, junk: true } })
+      .where(eq(properties.id, propertyId));
+    const [{ slug }] = await db
+      .select({ slug: properties.slug })
+      .from(properties)
+      .where(eq(properties.id, propertyId));
+
+    const dossier = (await getPublishedPropertyBySlug(db, slug))!;
+
+    expect(dossier.rera.facts).toBeNull();
+    // Put a real one back for the tests that follow.
+    await publish(
+      { "property.rera_snapshot": buildReraSnapshot(record)! },
+      propertyId,
+    );
   });
 
   it("reads back the fields it published but used not to report", async () => {

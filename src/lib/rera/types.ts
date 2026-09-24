@@ -124,6 +124,13 @@ export interface RegulatorDetails {
   openAreaSqm: number | null;
   coveredAreaSqm: number | null;
   coveredParkingAreaSqm: number | null;
+  /** Covered parking slots the registration declares. Absent in a snapshot stored
+   * before it was read. */
+  coveredParkingSlots?: number | null;
+  /** The smallest and largest carpet area of any residential flat the regulator
+   * lists, square metres: the "carpet area of units (range)" its summary prints.
+   * Absent in a snapshot stored before it was read. */
+  carpetAreaRangeSqm?: { min: number; max: number } | null;
   /** The quarterly filing the progress figures come from. */
   filing: {
     quarter: string | null;

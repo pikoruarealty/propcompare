@@ -163,6 +163,29 @@ describe("project rows from the regulator's facts", () => {
     expect(texts(model, "floors_rera")).toEqual(["22", "22"]);
   });
 
+  it("states covered parking and works out slots per unit only from stated inputs", () => {
+    const parked = buildComparison([
+      property("a", facts({ coveredParkingSlots: 246 })),
+      property("b", facts({ coveredParkingSlots: 523 }), { totalUnits: 124 }),
+    ]);
+
+    expect(texts(parked, "covered_parking")).toEqual([
+      "246 slots",
+      "523 slots",
+    ]);
+    expect(texts(parked, "parking_per_unit")).toEqual([
+      "3.2 per unit",
+      "4.2 per unit",
+    ]);
+
+    const unstated = buildComparison([
+      property("a", facts({ coveredParkingSlots: 246 })),
+      property("b", facts({ coveredParkingSlots: null })),
+    ]);
+    expect(rowOf(unstated, "covered_parking")?.status).toBe("gap");
+    expect(rowOf(unstated, "parking_per_unit")?.status).toBe("gap");
+  });
+
   it("states the authority, the registration date, filings and the team", () => {
     expect(texts(model, "plan_authority")).toEqual([
       "AUDA",

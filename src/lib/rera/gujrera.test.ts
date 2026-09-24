@@ -423,6 +423,29 @@ describe("GujRERA adapter — the second pass (latest filing, areas, boundary)",
     });
   });
 
+  it("reads the carpet-area range from the flats listed, and the covered parking", async () => {
+    const record =
+      await adapterFor(fakeSite()).lookupByRegistrationNumber(KIMANA_NUMBER);
+
+    // The smallest and largest of the four carpet areas in the fixture's list.
+    expect(record.details?.carpetAreaRangeSqm).toEqual({
+      min: 277.26,
+      max: 572.59,
+    });
+    expect(record.details?.coveredParkingSlots).toBe(246);
+  });
+
+  it("states no carpet-area range when the flat list could not be read", async () => {
+    const record = await adapterFor(
+      fakeSite({
+        "/formthree/public/get-inv-details-for-view": () =>
+          new Response("boom", { status: 500 }),
+      }),
+    ).lookupByRegistrationNumber(KIMANA_NUMBER);
+
+    expect(record.details?.carpetAreaRangeSqm).toBeNull();
+  });
+
   it("labels progress with the quarterly filing it came from, block by block", async () => {
     const record =
       await adapterFor(fakeSite()).lookupByRegistrationNumber(KIMANA_NUMBER);

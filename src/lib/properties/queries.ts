@@ -1,6 +1,7 @@
 import { and, asc, count, desc, eq, inArray, sql, type SQL } from "drizzle-orm";
 import { isListed, mediaIsLive, variantIsLive } from "./visibility";
 import { splitNearbyFacts } from "./dossier";
+import { areaToSqft } from "@/lib/units/measurements";
 import { reraSnapshotProblem, type ReraSnapshot } from "@/lib/rera/snapshot";
 import { reraSourcedFacts, type CheckedRecord } from "./rera-source";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
@@ -486,6 +487,15 @@ export const getPublishedPropertyBySlug = async (
     .orderBy(asc(unitVariants.createdAt), asc(unitVariants.variantName));
 
   const regulatorCheck = await latestRegulatorCheck(db, row.id);
+  // A stored object that is not a snapshot of the current shape is not shown.
+  const facts =
+    row.reraSnapshot !== null && reraSnapshotProblem(row.reraSnapshot) === null
+      ? (row.reraSnapshot as ReraSnapshot)
+      : null;
+  /** Square metres to two-decimal square feet, the one conversion from the
+   * regulator's unit. */
+  const rangeSqft = (sqm: number | undefined): string | null =>
+    sqm === undefined ? null : areaToSqft(sqm, "sqm").toFixed(2);
 
   const [completedProjects] = await db
     .select({ value: count() })
@@ -655,8 +665,14 @@ export const getPublishedPropertyBySlug = async (
       registrationNumber: row.reraRegistrationNumber ?? null,
       lastVerifiedAt: toIsoString(row.reraLastVerifiedAt),
       projectLandAreaSqft: row.reraProjectLandAreaSqft ?? null,
-      carpetAreaRangeMinSqft: row.reraCarpetAreaRangeMinSqft ?? null,
-      carpetAreaRangeMaxSqft: row.reraCarpetAreaRangeMaxSqft ?? null,
+      // The columns had no writer, so the range is read from the regulator's own
+      // "carpet area of units (range)" in the stored snapshot, converted once here.
+      carpetAreaRangeMinSqft:
+        row.reraCarpetAreaRangeMinSqft ??
+        rangeSqft(facts?.carpetAreaRangeSqm?.min),
+      carpetAreaRangeMaxSqft:
+        row.reraCarpetAreaRangeMaxSqft ??
+        rangeSqft(facts?.carpetAreaRangeSqm?.max),
       constructionProgressPercent: row.reraConstructionProgressPercent ?? null,
       lastCheckedAt: toIsoString(regulatorCheck.checkedAt),
       sourcedFacts: reraSourcedFacts(regulatorCheck.record, {
@@ -666,12 +682,7 @@ export const getPublishedPropertyBySlug = async (
         possessionDate: row.possessionDate ?? null,
         totalUnits: row.totalUnits ?? null,
       }),
-      // A stored object that is not a snapshot of the current shape is not shown.
-      facts:
-        row.reraSnapshot !== null &&
-        reraSnapshotProblem(row.reraSnapshot) === null
-          ? (row.reraSnapshot as ReraSnapshot)
-          : null,
+      facts,
     },
     totalTowers: row.totalTowers ?? null,
     totalFloors: row.totalFloors ?? null,

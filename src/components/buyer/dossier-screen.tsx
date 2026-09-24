@@ -916,12 +916,17 @@ export function DossierScreen({ dossier }: DossierScreenProps) {
                   <FactValue value={rera.registrationNumber} tabular />
                   <ReraSource rera={rera} fact="registration_number" />
                 </Fact>
-                <Fact label="Last verified">
+                {/* The date of the latest successful check of the regulator's
+                 * record. The `rera_last_verified_at` column has no writer, so it
+                 * is only a fallback for a value entered before checks were kept. */}
+                <Fact label="Last checked with RERA">
                   <FactValue
                     value={
-                      rera.lastVerifiedAt === null
-                        ? null
-                        : rera.lastVerifiedAt.slice(0, 10)
+                      rera.lastCheckedAt !== null
+                        ? shortDate(rera.lastCheckedAt)
+                        : rera.lastVerifiedAt === null
+                          ? null
+                          : rera.lastVerifiedAt.slice(0, 10)
                     }
                     tabular
                   />

@@ -1064,6 +1064,41 @@ export const buildComparison = (
         { numeric: true },
       ),
       row(
+        "covered_parking",
+        "Covered parking (RERA)",
+        (d) => {
+          const slots = positiveNumber(
+            d.rera.facts?.coveredParkingSlots ?? null,
+          );
+          return numberCell(
+            slots,
+            slots === null ? null : `${slots} slots`,
+            true,
+          );
+        },
+        { numeric: true },
+      ),
+      row(
+        "parking_per_unit",
+        "Covered parking per unit (calculated)",
+        (d) => {
+          const slots = positiveNumber(
+            d.rera.facts?.coveredParkingSlots ?? null,
+          );
+          const units = positiveNumber(
+            d.totalUnits ?? d.rera.facts?.inventory?.totalUnits ?? null,
+          );
+          if (slots === null || units === null) return textCell(null);
+          const perUnit = slots / units;
+          return numberCell(
+            Math.round(perUnit * 10) / 10,
+            `${oneDecimal(perUnit)} per unit`,
+            true,
+          );
+        },
+        { numeric: true },
+      ),
+      row(
         "floors_rera",
         "Floors (per RERA)",
         (d) => {

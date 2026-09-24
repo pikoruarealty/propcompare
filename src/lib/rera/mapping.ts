@@ -72,6 +72,19 @@ export const RERA_AUTHORITATIVE_FIELDS: ReraFieldRule[] = [
         ? null
         : Math.round(areaToSqft(record.landAreaSqm, "sqm") * 100) / 100,
   },
+  {
+    // The most floors any block states in the latest filing. A brochure may count
+    // podium or terrace levels the regulator does not, so a difference is shown for
+    // review with that in words (see `compareWithRecord`), never taken silently.
+    fieldKey: "property.total_floors",
+    label: "Floors (RERA's latest filing)",
+    read: (record) => {
+      const floors = (record.details?.filing.blocks ?? [])
+        .map((block) => block.floors)
+        .filter((value): value is number => value !== null);
+      return floors.length === 0 ? null : Math.max(...floors);
+    },
+  },
 ];
 
 export const SNAPSHOT_FIELD_KEY = "property.rera_snapshot";
@@ -221,6 +234,14 @@ export const compareWithRecord = (
         : filing.source === "certified_form_one"
           ? "The latest quarterly filing could not be read, so this is the older architect-certified figure."
           : undefined;
+  }
+
+  const floors = items.find(
+    (item) => item.fieldKey === "property.total_floors",
+  );
+  if (floors && floors.status === "differs") {
+    floors.note =
+      "RERA counts the floors of its blocks as filed. A brochure can count podium, stilt or terrace levels as floors, so check which is meant before using RERA's number.";
   }
 
   // The project's position and its map link, from the boundary RERA draws. These

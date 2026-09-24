@@ -142,6 +142,7 @@ describe("compareWithRecord", () => {
       "property.rera_construction_progress_percent",
       "property.pincode",
       "property.rera_project_land_area_sqft",
+      "property.total_floors",
       "property.possession_status",
       "property.amenities",
       LEGAL_ENTITY_FIELD_KEY,
@@ -559,6 +560,46 @@ describe("the second-pass items (position, map link, snapshot)", () => {
         "property.rera_snapshot"
       ].status,
     ).toBe("differs");
+  });
+
+  it("proposes the floors the latest filing states, and says why a difference needs a look", () => {
+    const withFloors: RegulatorRecord = {
+      ...withDetails,
+      details: {
+        ...withDetails.details!,
+        filing: {
+          ...withDetails.details!.filing,
+          blocks: [
+            { name: "A", progressPercent: 50, floors: 22, lifts: 4, slabs: 24 },
+            { name: "B", progressPercent: 50, floors: 20, lifts: 4, slabs: 24 },
+          ],
+        },
+      },
+    };
+
+    const none = byKey(compareWithRecord(withFloors, {}, entities));
+    expect(none["property.total_floors"]).toMatchObject({
+      status: "not_held",
+      proposedValue: 22,
+    });
+
+    const held = byKey(
+      compareWithRecord(withFloors, { "property.total_floors": 24 }, entities),
+    );
+    expect(held["property.total_floors"]).toMatchObject({
+      status: "differs",
+      proposedValue: 22,
+      currentValue: 24,
+    });
+    expect(held["property.total_floors"].note).toMatch(
+      /podium, stilt or terrace/,
+    );
+
+    // A record with no filing blocks says nothing about floors.
+    expect(
+      byKey(compareWithRecord(record, {}, entities))["property.total_floors"]
+        .status,
+    ).toBe("rera_silent");
   });
 
   it("adds none of these for a record that predates them", () => {
