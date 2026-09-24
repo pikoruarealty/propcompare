@@ -436,6 +436,15 @@ export const compareWithRecord = (
   const declared = record.declaredAmenityKeys ?? [];
   const label = (key: string) => amenityLabels[key] ?? key;
   const missing = declared.filter((key) => !held.includes(key));
+  // The brochure is the primary source: a "not proposed" in RERA's filing only
+  // prompts a look at a brochure claim, and changes nothing.
+  const contradicted = (record.notProposedAmenityKeys ?? []).filter((key) =>
+    held.includes(key),
+  );
+  const contradictionNote =
+    contradicted.length > 0
+      ? `RERA's latest filing does not propose ${contradicted.map(label).join(", ")}, but it is listed here. The brochure is kept; check it.`
+      : undefined;
   items.push({
     fieldKey: AMENITIES_FIELD_KEY,
     label: "Amenities",
@@ -449,11 +458,16 @@ export const compareWithRecord = (
           ? "same"
           : "not_held",
     note:
-      declared.length === 0
-        ? "RERA lists no amenities for this project, so ours are left as they are."
-        : missing.length > 0
-          ? "RERA declares this and it is not yet listed. It is added; nothing is removed."
-          : undefined,
+      [
+        declared.length === 0
+          ? "RERA lists no amenities for this project, so ours are left as they are."
+          : missing.length > 0
+            ? "RERA declares this and it is not yet listed. It is added; nothing is removed."
+            : undefined,
+        contradictionNote,
+      ]
+        .filter((part): part is string => part !== undefined)
+        .join(" ") || undefined,
   });
 
   const currentEntityId = asDisplay(current[LEGAL_ENTITY_FIELD_KEY]);

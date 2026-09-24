@@ -67,3 +67,7 @@
 Built across `src/lib/rera/` (adapter, snapshot, mapping, refresh), `src/lib/submissions/` (publisher, validation, live values), `src/lib/properties/` (query, lock, fact lines), `src/lib/compare/model.ts`, `src/components/buyer/dossier-screen.tsx` and `src/components/admin/submission/` (map preview, RERA panel).
 
 Deviations from the plan above: "declared amenity yes and no" was not built (mapping RERA's flags to the amenity catalog, and reading a "NO" as not offered, needs an owner decision); the registration's start date is not compared; floors, the carpet-area range and covered parking were added; records stored before this change simply lack `details`, which readers treat as optional. The field audit's report is in `DECISIONS.md` ("RERA second pass, as built"); its proposals (retire two never-filled specifications, drop three dead columns, add a promoter as a legal entity from RERA, map RERA's amenity flags) wait for the owner.
+
+## Follow-up completed the same day
+
+The owner's answers to the field audit were carried out: three dead columns dropped and two specifications retired (schema v18), the promoter added as a legal entity from the RERA panel, and RERA's amenity flags read with the brochure kept primary. See `DECISIONS.md` "RERA clean-up" and `docs/schema/schema.v18.md`. Still open: promoter group history and unit-type amenities.

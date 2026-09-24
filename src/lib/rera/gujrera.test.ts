@@ -3,6 +3,7 @@ import {
   boundaryCentre,
   createGujreraAdapter,
   parseBoundary,
+  readAmenityFlags,
   type FetchLike,
 } from "./gujrera";
 import {
@@ -16,6 +17,7 @@ import {
   latestFilingRoutes,
   kimanaSearchHit,
   KIMANA_NUMBER,
+  latestFormOneWithFlagsResponse,
   POISON,
   POISON_TEXT,
   progressResponse,
@@ -745,5 +747,71 @@ describe("GujRERA adapter, the project price range", () => {
 
     expect(everything).not.toContain("22573000");
     expect(everything).not.toContain("66319200");
+  });
+});
+
+describe("amenity flags: the brochure stays primary", () => {
+  it("adds a swimming pool or landscaping only on a yes, and treats a no as a prompt, not a fact", () => {
+    expect(
+      readAmenityFlags([{ sewSwimCapacityFlag: "Yes" }], {
+        landscapingYesNo: "YES",
+      }),
+    ).toEqual({
+      declared: ["swimming_pool", "landscaped_garden"],
+      notProposed: [],
+    });
+    expect(
+      readAmenityFlags([{ sewSwimCapacityFlag: "No" }], {
+        landscapingYesNo: "NO",
+      }),
+    ).toEqual({
+      declared: [],
+      notProposed: ["swimming_pool", "landscaped_garden"],
+    });
+  });
+
+  it("says nothing for a blank or unreadable flag", () => {
+    expect(
+      readAmenityFlags([{ sewSwimCapacityFlag: null }, {}], {
+        landscapingYesNo: "",
+        communityBuildingsYesNo: "MAYBE",
+      }),
+    ).toEqual({ declared: [], notProposed: [] });
+    expect(readAmenityFlags([], null)).toEqual({
+      declared: [],
+      notProposed: [],
+    });
+  });
+
+  it("never adds an amenity for community buildings, security or fire protection, and points a no at the halls", () => {
+    expect(
+      readAmenityFlags([], {
+        communityBuildingsYesNo: "YES",
+        securityYesNo: "YES",
+        fireProtectionYesNo: "YES",
+        waterConservationYesNo: "YES",
+        useofRenewableEnergyYesNo: "YES",
+      }),
+    ).toEqual({ declared: [], notProposed: [] });
+    expect(readAmenityFlags([], { communityBuildingsYesNo: "NO" })).toEqual({
+      declared: [],
+      notProposed: ["clubhouse", "multipurpose_hall", "banquet_hall"],
+    });
+  });
+
+  it("reads the flags from the latest filing's Form 1B", async () => {
+    const record = await adapterFor(
+      fakeSite({
+        "/formone/public/getfrom-one-byformone-id/325057":
+          latestFormOneWithFlagsResponse,
+      }),
+    ).lookupByRegistrationNumber(KIMANA_NUMBER);
+
+    expect(record.declaredAmenityKeys).toEqual(["landscaped_garden"]);
+    expect(record.notProposedAmenityKeys).toEqual([
+      "clubhouse",
+      "multipurpose_hall",
+      "banquet_hall",
+    ]);
   });
 });

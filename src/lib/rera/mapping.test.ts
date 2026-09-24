@@ -637,3 +637,78 @@ describe("legalEntityTypeFromRera", () => {
     expect(legalEntityTypeFromRera(null)).toBe("other");
   });
 });
+
+describe("amenities from RERA's flags", () => {
+  const labels = {
+    clubhouse: "Clubhouse",
+    landscaped_garden: "Landscaped garden",
+    swimming_pool: "Swimming pool",
+  };
+  const flagged: RegulatorRecord = {
+    ...record,
+    declaredAmenityKeys: ["landscaped_garden"],
+    notProposedAmenityKeys: ["clubhouse", "multipurpose_hall"],
+  };
+
+  it("adds a declared amenity to the brochure's set and removes nothing", () => {
+    const item = byKey(
+      compareWithRecord(
+        flagged,
+        { "property.amenities": ["gymnasium", "clubhouse"] },
+        entities,
+        labels,
+      ),
+    )["property.amenities"];
+
+    expect(item.proposedValue).toEqual([
+      "gymnasium",
+      "clubhouse",
+      "landscaped_garden",
+    ]);
+  });
+
+  it("only prompts a check when RERA does not propose something the brochure lists", () => {
+    const item = byKey(
+      compareWithRecord(
+        flagged,
+        {
+          "property.amenities": ["gymnasium", "clubhouse", "landscaped_garden"],
+        },
+        entities,
+        labels,
+      ),
+    )["property.amenities"];
+
+    // Nothing to change: the brochure is kept.
+    expect(item.status).toBe("same");
+    expect(item.proposedValue).toBeNull();
+    expect(item.note).toMatch(/does not propose Clubhouse/);
+    expect(item.note).toMatch(/brochure is kept/i);
+  });
+
+  it("stays quiet when the brochure lists nothing RERA does not propose", () => {
+    const item = byKey(
+      compareWithRecord(
+        flagged,
+        { "property.amenities": ["gymnasium"] },
+        entities,
+        labels,
+      ),
+    )["property.amenities"];
+
+    expect(item.note).not.toMatch(/does not propose/);
+  });
+
+  it("says nothing about not-proposed amenities for a record that predates them", () => {
+    const item = byKey(
+      compareWithRecord(
+        { ...record, declaredAmenityKeys: [] },
+        { "property.amenities": ["clubhouse"] },
+        entities,
+        labels,
+      ),
+    )["property.amenities"];
+
+    expect(item.note).not.toMatch(/does not propose/);
+  });
+});

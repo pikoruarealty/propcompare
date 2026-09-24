@@ -50,6 +50,11 @@ export interface RegulatorRecord {
   /** Amenity-catalogue keys the regulator affirmatively declares. Only a positive
    * declaration is listed: a blank flag is not stated, never "not offered". */
   declaredAmenityKeys: string[];
+  /** Amenity-catalogue keys the regulator's latest filing marks as not proposed.
+   * Only ever a prompt to check a brochure claim: a "no" in a filing may mean "not
+   * in this filing", so it never removes or disproves an amenity. Absent on a record
+   * fetched before it was read. */
+  notProposedAmenityKeys?: string[];
   /** The distinct carpet areas the regulator lists per block, with how many flats
    * have each. Square metres, as printed; converted once, where they are offered.
    * Flat numbers only: no price, status or person ever enters this. */

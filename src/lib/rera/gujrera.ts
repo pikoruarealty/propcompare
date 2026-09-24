@@ -486,8 +486,9 @@ export const createGujreraAdapter = (
         await readCarpetGroups(formThreeId, blocks, gaps);
 
       const developments = Array.isArray(detail?.dev) ? detail.dev : [];
-      const swimmingPool = developments.some(
-        (entry) => asRecord(entry)?.sewSwimCapacityFlag === "Yes",
+      const amenityFlags = readAmenityFlags(
+        developments,
+        asRecord(filingForm?.formOneB),
       );
 
       const quarters = asRecord(
@@ -610,7 +611,8 @@ export const createGujreraAdapter = (
         blocks,
         carpetGroups,
         details,
-        declaredAmenityKeys: swimmingPool ? ["swimming_pool"] : [],
+        declaredAmenityKeys: amenityFlags.declared,
+        notProposedAmenityKeys: amenityFlags.notProposed,
         latestQuarter: latest,
         sourceUrl: `${ORIGIN}/#/search-glob/gloabl-data`,
         fetchedAt: now().toISOString(),
@@ -618,6 +620,56 @@ export const createGujreraAdapter = (
       } satisfies RegulatorRecord;
     },
   };
+};
+
+const yesNo = (value: unknown): "yes" | "no" | null => {
+  const word = typeof value === "string" ? value.trim().toUpperCase() : "";
+  return word === "YES" ? "yes" : word === "NO" ? "no" : null;
+};
+
+/**
+ * What the regulator's flags say about the amenities we catalogue. The brochure is
+ * the primary source (owner decision, 2026-09-24), so this is deliberately
+ * lopsided:
+ * - A "yes" adds an amenity only where the regulator's item is the same thing as a
+ *   catalogue amenity: a swimming pool, and landscaping (the site prints it as
+ *   "Garden"). Other items (community buildings, security, fire protection, water
+ *   conservation, renewable energy) are not the same as any one catalogue amenity,
+ *   so a "yes" to them adds nothing.
+ * - A "no" never changes the listing. It is kept as `notProposed`, only to prompt a
+ *   check of a brochure claim, because a "no" may mean "not in this filing". A
+ *   community buildings "no" points at the clubhouse and halls, the things such a
+ *   building would be.
+ * A flag that is blank or reads anything else says nothing.
+ */
+export const readAmenityFlags = (
+  developments: unknown[],
+  formOneB: Record<string, unknown> | null,
+): { declared: string[]; notProposed: string[] } => {
+  const declared = new Set<string>();
+  const notProposed = new Set<string>();
+  const note = (
+    answer: "yes" | "no" | null,
+    keys: string[],
+    addOnYes = true,
+  ) => {
+    if (answer === "yes" && addOnYes) keys.forEach((key) => declared.add(key));
+    if (answer === "no") keys.forEach((key) => notProposed.add(key));
+  };
+
+  const pool = developments
+    .map((entry) => yesNo(asRecord(entry)?.sewSwimCapacityFlag))
+    .filter((answer) => answer !== null);
+  note(pool.includes("yes") ? "yes" : pool.includes("no") ? "no" : null, [
+    "swimming_pool",
+  ]);
+  note(yesNo(formOneB?.landscapingYesNo), ["landscaped_garden"]);
+  note(
+    yesNo(formOneB?.communityBuildingsYesNo),
+    ["clubhouse", "multipurpose_hall", "banquet_hall"],
+    false,
+  );
+  return { declared: [...declared], notProposed: [...notProposed] };
 };
 
 /** "11-11-2022" (day-month-year, as the summary prints an approval date) to ISO. */

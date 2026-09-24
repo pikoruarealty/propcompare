@@ -303,6 +303,21 @@ export const latestFormOneResponse = {
   },
 };
 
+/** The same filing with Form 1B's yes/no answers: landscaping proposed, community
+ * buildings not. Everything else in Form 1B is left out on purpose. */
+export const latestFormOneWithFlagsResponse = {
+  ...latestFormOneResponse,
+  data: {
+    ...latestFormOneResponse.data,
+    formOneB: {
+      landscapingYesNo: "YES",
+      communityBuildingsYesNo: "NO",
+      securityYesNo: "YES",
+      fireProtectionYesNo: "YES",
+    },
+  },
+};
+
 /** The drawn boundary (closed ring, first point repeated) and, beside it, a
  * project cost that must never be read. */
 export const boundaryResponse = {
