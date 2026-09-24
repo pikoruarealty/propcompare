@@ -1,6 +1,6 @@
 # Tasklist — match a single-facility amenity spread straight against the catalog
 
-**Status:** not started — design only, blocked on two owner decisions below
+**Status:** design complete, wiring not started — steps 1-3 all resolved below; the remaining work is the routing-contract implementation itself
 **Owner:** Bhavarth
 **Branch:** none yet
 **Depends on:** the router's single-facility amenities categorization, already built (`e2bfdc0`, `DECISIONS.md` 2026-09-22 "Refinements to the routing pass")
@@ -13,27 +13,26 @@ A brochure's single-facility marketing spread ("Dive in for sheer bliss" over a 
 1. **The router's caption is not the facility name yet.** `page-router.ts` already asks for one ("add a short 'caption' naming that one facility as printed, for example 'Swimming Pool'"), but the actual test run returned the page's own marketing tagline instead ("Dive in for sheer bliss"). The instruction exists; it is not reliable. This needs prompt work — likely a clearer either/or instruction and few-shot examples distinguishing a tagline from a facility name, verified against a few more real single-facility pages before it's trusted.
 2. **The "skip a second extraction call" wiring was never designed**, only proposed. If a page's caption matches the catalog directly, what actually happens?
 
-## Decisions/ambiguities that block work
+## Decisions, resolved 2026-09-23 (see `DECISIONS.md` "Single-facility amenity matching: skip extraction...")
 
-1. **What "skip extraction" means concretely.** Does a directly-matched amenity still need a human review step before it can reach `property_submissions` (the standing "reviewed publishing" rule), or does catalog-matched confidence count as reviewed? `AGENTS.md`'s controlled-vocabulary rule says amenities must go through the catalog either way — this decision is about whether the _extraction call_ is skippable, not whether the _review_ step is.
-2. **Evidence.** Every extracted field carries a source snippet and page citation today. A router-matched amenity has a page number but no model-generated evidence snippet — decide whether the caption itself stands in as evidence, or whether this path is only allowed to pre-fill a suggestion that a human still confirms against the actual page image.
-3. **Partial pages.** A page router-tagged as single-facility but that turns out, on the extraction pass, to also show something else (the router is recall-only per the 2026-09-02 decision, so it can be wrong) — decide whether a page ever gets skipped from extraction outright, or whether this only ever adds a pre-filled suggestion alongside extraction still running normally. The safer default, given the router's known false-positive rate on other categories, is the latter: this saves a human's typing, not a provider call, until the caption's reliability is proven.
+1. **What "skip extraction" means concretely — resolved: (a), actually skip.** The page is removed from what the amenities scope reads, not sent alongside a normal reading. This is a real cost saving (each page is a real image-token cost in that scope's request), not just less typing.
+2. **Evidence — resolved.** The router's caption is the suggestion's evidence, but it is explicitly labeled as router-detected, never presented the same way as an extraction-verified snippet. The match is never auto-accepted into `property.amenities`; it is an unconfirmed suggestion until a human reviews it.
+3. **Partial pages — resolved: full skip, no hedging extraction call**, on the condition that the review screen shows the actual page image beside the suggestion, not text alone. That visible-source requirement is what absorbs the router's known recall-only fallibility (2026-09-02) — a reviewer looking at the real photo while confirming "Swimming Pool" will notice a mislabel or a second amenity in fine print; a redundant model call would not add anything a visible-image human check doesn't already cover.
 
-## Non-goals (for now)
+## Non-goals
 
 - Not touching multi-amenity list pages — this is single-facility marketing spreads only, the case the 2026-09-22 test isolated.
 - Not building a `room_catalog`-style synonym table for anything else.
-- Not skipping the extraction call for cost savings until decision 3 above resolves — the initial version may still call extraction and only use the catalog match as a pre-filled default, in which case "skip a second extraction call" is deferred to a follow-up once the caption is proven reliable.
 
-## Proposed next steps (not started)
+## Proposed next steps
 
-1. Tighten `createPrompt`'s caption instruction with 2-3 concrete before/after examples (tagline in the page vs. the facility name to return), and re-run the same categorization test against a few more single-facility pages to check reliability before trusting it.
-2. Resolve decisions 1-3 above with the owner.
-3. Depending on decision 3: either (a) pre-fill a suggested `property.amenities` entry alongside normal extraction, surfaced in the review UI with its source page, or (b) actually remove the page from what gets sent to the amenities extraction scope — a routing-contract change needing its own `DECISIONS.md` entry per `AGENTS.md`.
+1. **Done, 2026-09-23:** tightened `createPrompt`'s caption instruction in `src/lib/ocr/page-router.ts` — the model must now return a plain noun facility name, with the two real observed taglines from the 2026-09-22 test ("Dive in for sheer bliss", "Elevate your fitness journey") named explicitly as counter-examples of what NOT to return, and an instruction to name the facility from the image itself when the only printed text is a tagline. Prompt-only change: no routing categories, confidence handling, or extraction wiring touched. Full suite (133 files, 1591 tests) passes unchanged — prompt wording has no unit-test coverage anywhere in this module, since the only real check is a live model call. **Verified live, same day** (`DECISIONS.md` 2026-09-23 "The router's caption prompt now names a facility..."): re-running categorization on Maruti 360 shows pages 14 and 15 — which previously returned taglines never named in the prompt ("Rise above all else", "Leave a lasting impression") — now correctly return "Observatory" and "Banquet Hall", proving the fix generalizes rather than just pattern-matching the two banned examples.
+2. **Resolved, 2026-09-23:** decisions 1-3 above, with the owner.
+3. **Not started:** the routing-contract change itself — remove a router-tagged single-facility page from what the amenities scope reads, generate a catalog-matched (or synonym-matched) suggestion from its caption, surface it in the review UI beside that page's actual image, labeled as router-detected, requiring explicit confirmation before it can reach `property_submissions`. Needs its own `DECISIONS.md` entry per `AGENTS.md` once implemented, since it changes what pages reach an extraction scope.
 
-## Acceptance (once resolved)
+## Acceptance (once built)
 
-A single-facility marketing page's amenity reaches the review screen pre-matched against `amenity_catalog` (or its own synonym), correctly attributed to that page, without the admin having to re-type or re-select it — and without weakening the "no free-text amenity fields" rule.
+A single-facility marketing page's amenity reaches the review screen pre-matched against `amenity_catalog` (or its own synonym), correctly attributed to that page and shown beside its actual image, without the admin having to re-type or re-select it — and without weakening the "no free-text amenity fields" rule or the "reviewed publishing" rule (the match is confirmed, not auto-accepted).
 
 ## Completion record
 

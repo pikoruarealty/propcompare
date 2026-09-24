@@ -13,8 +13,7 @@ Owner-approved scope, exact: "a dialog/page saying the contact email is coming; 
 ## Non-goals
 
 - No `listing_reports` table or any other schema change — this is not a form, it has nothing to write.
-- No real contact address — none is chosen yet (`DECISIONS.md` 2026-09-21); the placeholder must not invent one.
-- No "claim this listing" — that is a separate, explicitly out-of-scope feature that needs a schema change and belongs with the on-hold developer portal (`DECISIONS.md` 2026-09-21).
+- No real contact address. As first built (2026-09-22) the dialog invented none; on 2026-09-24 the owner directed a placeholder on a reserved example domain (`DECISIONS.md` 2026-09-24), held in one constant in `src/lib/buyer/report-contact.ts`.
 - No admin-side anything — there is nothing for an admin to see, since nothing is stored.
 
 ## Implementation checklist

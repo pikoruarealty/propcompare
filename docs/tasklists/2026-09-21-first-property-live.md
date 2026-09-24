@@ -53,7 +53,7 @@ Take one real brochure (The Kimana Towers) through the whole product with no sho
 
 - Buyer retention screens: saved properties, saved comparisons, and their save/compare controls.
 - Enquiry submission from the dossier, and the admin enquiry inbox.
-- "Claim this listing", "report a problem / request removal", and a "last checked" date on each property.
+- "Report a problem / request removal", and a "last checked" date on each property.
 - The pre-login intake cookie claim.
 - GujRERA fetch job (needs the owner's scoping; see the conversation of 2026-09-21).
 - Setting BHK type / layout on Kimana's unit types (the brochure did not state them, and they were not guessed).
