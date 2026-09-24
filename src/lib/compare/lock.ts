@@ -1,0 +1,30 @@
+import type { CompareModel } from "./model";
+
+/**
+ * The comparison as a signed-out visitor is allowed to receive it (`AGENTS.md`,
+ * "Comparison depth is gated behind sign-in"): who each column is, the
+ * differences-first summary, and the name of every row, so the locked skeleton
+ * can say what it is hiding. No cell value, no floor-plan reference, no photo strip, and no
+ * per-row status (which rows differ or are gaps is itself a fact about the
+ * data) leaves the server.
+ *
+ * This runs on the server, before the model is handed to the client. Hiding
+ * rows in the browser is not a gate: the values would already be in the page.
+ */
+export const lockComparison = (model: CompareModel): CompareModel => ({
+  columns: model.columns.map((column) => ({
+    ...column,
+    floorPlans: [],
+    photos: [],
+  })),
+  groups: model.groups.map((group) => ({
+    ...group,
+    rows: group.rows.map((row) => ({
+      key: row.key,
+      label: row.label,
+      cells: [],
+      status: "same" as const,
+    })),
+  })),
+  summary: model.summary,
+});

@@ -1,5 +1,6 @@
-import { and, asc, desc, eq, inArray, sql, type SQL } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, sql, type SQL } from "drizzle-orm";
 import { isListed, mediaIsLive, variantIsLive } from "./visibility";
+import { splitNearbyFacts } from "./dossier";
 import { reraSourcedFacts, type CheckedRecord } from "./rera-source";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import {
@@ -433,6 +434,7 @@ export const getPublishedPropertyBySlug = async (
       latitude: properties.latitude,
       longitude: properties.longitude,
       pincode: properties.pincode,
+      mapUrl: properties.mapUrl,
       possessionStatus: properties.possessionStatus,
       possessionDate: properties.possessionDate,
       launchDate: properties.launchDate,
@@ -447,6 +449,7 @@ export const getPublishedPropertyBySlug = async (
       totalTowers: properties.totalTowers,
       totalFloors: properties.totalFloors,
       totalUnits: properties.totalUnits,
+      plotAreaSqft: properties.plotAreaSqft,
       propertyTypeKey: propertyTypes.key,
       propertyTypeLabel: propertyTypes.label,
       developerId: developers.id,
@@ -467,6 +470,7 @@ export const getPublishedPropertyBySlug = async (
       id: unitVariants.id,
       variantName: unitVariants.variantName,
       totalUnitsOfVariant: unitVariants.totalUnitsOfVariant,
+      unitsPerFloor: unitVariants.unitsPerFloor,
       dimensions: unitVariants.dimensions,
       bhkKey: bhkTypes.key,
       bhkLabel: bhkTypes.label,
@@ -480,6 +484,17 @@ export const getPublishedPropertyBySlug = async (
     .orderBy(asc(unitVariants.createdAt), asc(unitVariants.variantName));
 
   const regulatorCheck = await latestRegulatorCheck(db, row.id);
+
+  const [completedProjects] = await db
+    .select({ value: count() })
+    .from(properties)
+    .where(
+      and(
+        eq(properties.developerId, row.developerId),
+        isListed,
+        eq(properties.possessionStatus, "ready_to_move"),
+      ),
+    );
 
   const variantIds = variantRows.map((variant) => variant.id);
   const areaRows =
@@ -570,6 +585,7 @@ export const getPublishedPropertyBySlug = async (
         ? { key: variant.layoutKey, label: variant.layoutLabel }
         : null,
     totalUnitsOfVariant: variant.totalUnitsOfVariant ?? null,
+    unitsPerFloor: variant.unitsPerFloor ?? null,
     dimensions: (variant.dimensions as UnitVariantDimensions | null) ?? null,
     areas: areasByVariant.get(variant.id) ?? [],
   }));
@@ -581,7 +597,7 @@ export const getPublishedPropertyBySlug = async (
     status: amenity.status,
   }));
 
-  const specifications: DossierSpecification[] = specificationRows.map(
+  const allSpecifications: DossierSpecification[] = specificationRows.map(
     (specification) => ({
       key: specification.key,
       label: specification.label,
@@ -590,6 +606,9 @@ export const getPublishedPropertyBySlug = async (
       status: specification.status,
     }),
   );
+  // What is near the project is shown with the location, not among the
+  // specifications (`DECISIONS.md` 2026-09-24).
+  const { nearby, specifications } = splitNearbyFacts(allSpecifications);
 
   const media: DossierMedia[] = mediaRows.map((mediaRow) => ({
     id: mediaRow.id,
@@ -613,6 +632,7 @@ export const getPublishedPropertyBySlug = async (
       description: row.developerDescription ?? null,
       logoGcsPath: row.developerLogoGcsPath ?? null,
       website: row.developerWebsite ?? null,
+      completedProjectsCount: completedProjects?.value ?? 0,
     },
     location: {
       city: row.city,
@@ -620,6 +640,8 @@ export const getPublishedPropertyBySlug = async (
       latitude: row.latitude ?? null,
       longitude: row.longitude ?? null,
       pincode: row.pincode ?? null,
+      mapUrl: row.mapUrl ?? null,
+      nearby,
     },
     possession: {
       status: row.possessionStatus ?? null,
@@ -646,6 +668,7 @@ export const getPublishedPropertyBySlug = async (
     totalTowers: row.totalTowers ?? null,
     totalFloors: row.totalFloors ?? null,
     totalUnits: row.totalUnits ?? null,
+    plotAreaSqft: row.plotAreaSqft ?? null,
     unitVariants: unitVariantList,
     amenities,
     specifications,

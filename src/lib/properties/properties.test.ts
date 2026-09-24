@@ -164,6 +164,7 @@ describe("dossier fixtures match the dossier contract", () => {
     "totalTowers",
     "totalFloors",
     "totalUnits",
+    "plotAreaSqft",
     "unitVariants",
     "amenities",
     "specifications",

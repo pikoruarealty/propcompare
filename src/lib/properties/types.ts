@@ -80,6 +80,19 @@ export interface DossierDeveloper {
   description: string | null;
   logoGcsPath: string | null;
   website: string | null;
+  /** Count of this developer's own published properties at `ready_to_move`,
+   * computed at read time — never stored, so it always reflects live data. */
+  completedProjectsCount: number;
+}
+
+/** What is near the project, as printed: one entry per landmark, with its
+ * distance or travel time as stated. Read from the v12 location specifications,
+ * and never shown among the specifications (`DECISIONS.md` 2026-09-24). */
+export interface DossierNearby {
+  connectivity: string[];
+  hospitals: string[];
+  schools: string[];
+  plotNumber: string | null;
 }
 
 export interface DossierLocation {
@@ -88,6 +101,9 @@ export interface DossierLocation {
   latitude: string | null;
   longitude: string | null;
   pincode: string | null;
+  /** The Google Maps link an admin set (schema v15). */
+  mapUrl: string | null;
+  nearby: DossierNearby;
 }
 
 export interface DossierPossession {
@@ -134,6 +150,7 @@ export interface DossierUnitVariant {
   bhkType: LookupRef | null;
   layoutType: LookupRef | null;
   totalUnitsOfVariant: number | null;
+  unitsPerFloor: number | null;
   dimensions: UnitVariantDimensions | null;
   /** May be missing bases; an absent basis is never inferred from another. */
   areas: UnitArea[];
@@ -170,6 +187,21 @@ export interface DossierMedia {
   attribution: string | null;
 }
 
+/**
+ * Present only on a dossier handed to a signed-out visitor (`lockDossier`,
+ * `DECISIONS.md` 2026-09-24). The configurations, amenities, floor plans and most
+ * photos are withheld on the server; this says what was withheld, so the page can
+ * draw a locked placeholder instead of a misleading "not stated". A signed-in
+ * visitor gets no `lock` and the full record.
+ */
+export interface DossierLock {
+  /** Photos beyond the preview that a signed-in visitor sees. */
+  hiddenPhotos: number;
+  hiddenFloorPlans: number;
+  /** The catalog's amenity names (the vocabulary, not this property's answers). */
+  amenityCatalog: { label: string; category: string }[];
+}
+
 /** The response of `GET /api/v1/properties/{slug}`. */
 export interface PropertyDossier {
   id: string;
@@ -184,10 +216,13 @@ export interface PropertyDossier {
   totalTowers: number | null;
   totalFloors: number | null;
   totalUnits: number | null;
+  plotAreaSqft: string | null;
   unitVariants: DossierUnitVariant[];
   amenities: DossierAmenity[];
   specifications: DossierSpecification[];
   media: DossierMedia[];
+  /** Set only when detail was withheld from a signed-out visitor. */
+  lock?: DossierLock;
 }
 
 export type PropertySort = "newest" | "name";

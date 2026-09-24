@@ -71,13 +71,13 @@ describe("VerifiedBadge", () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it("shows the registration number it is asserting", () => {
+  it("says RERA Verified without printing the number, which stays in the tooltip", () => {
     render(<VerifiedBadge fact={reraVerifiedFact(reraSource())} />);
 
     const badge = screen.getByText(/RERA Verified/);
     expect(badge).toHaveAttribute("data-verified-kind", "rera");
-    // The evidence path: the badge names the fact, it does not just assert trust.
-    expect(badge).toHaveTextContent(
+    expect(badge.textContent?.trim()).toBe("RERA Verified");
+    expect(badge.getAttribute("title")).toContain(
       "PR/GJ/AHMEDABAD/AHMEDABADCITY/AUDA/MAA00000/EX1",
     );
     expect(badge.getAttribute("title")).toContain("last verified 2026-08-01");

@@ -22,6 +22,7 @@ const variant = (
     ? { key: bhk, label: bhk.toUpperCase().replace("BHK", " BHK") }
     : null,
   layoutType: null,
+  unitsPerFloor: null,
   totalUnitsOfVariant: null,
   dimensions: null,
   areas: carpet === null ? [] : [{ basis: "carpet", areaSqft: String(carpet) }],
@@ -211,8 +212,52 @@ describe("the rows", () => {
       "timeline",
       "unit_type",
       "project",
+      "location",
       "trust",
     ]);
+  });
+
+  it("compares what is near each project as its own group, one landmark per line, never among the specifications", () => {
+    const model = buildComparison([a, b]);
+    const location = model.groups.find((group) => group.key === "location");
+    expect(location?.rows.map((row) => row.label)).toEqual([
+      "Connectivity",
+      "Hospitals",
+      "Schools and institutions",
+    ]);
+    const connectivity = location?.rows[0].cells[0];
+    expect(connectivity?.text).toBe(
+      "Vastrapur Metro Station 1.1 Km\nAirport 16.2 Km",
+    );
+    const specs = model.groups.find((group) => group.key === "specifications");
+    const specKeys = (specs?.rows ?? []).map((row) => row.key).join(" ");
+    expect(specKeys).not.toMatch(/nearby/);
+  });
+
+  it("shows a printed run of specification items one to a line", () => {
+    const withSafety = (valueText: string): PropertyDossier => ({
+      ...a,
+      specifications: [
+        {
+          key: "safety_features",
+          label: "Safety features",
+          category: "building_operation",
+          valueText,
+          status: "available",
+        },
+      ],
+    });
+    const model = buildComparison([
+      withSafety("24/7 CCTV; Access control in lobby; Fire sprinklers"),
+      withSafety("Gated entry"),
+    ]);
+    const specs = model.groups.find((group) => group.key === "specifications");
+    const row = specs?.rows.find((r) => r.key === "spec_safety_features");
+
+    expect(row?.cells[0].text).toBe(
+      "24/7 CCTV\nAccess control in lobby\nFire sprinklers",
+    );
+    expect(row?.cells[1].text).toBe("Gated entry");
   });
 
   it("marks rows that are the same, so the screen can show them plainly", () => {

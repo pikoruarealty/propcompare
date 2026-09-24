@@ -12,10 +12,11 @@ import {
   propertySubmissions,
 } from "@/db/schema/catalog";
 import { users } from "@/db/schema/auth";
+import { signUpTestBuyer } from "@/lib/buyer/test-support";
 import { publishSubmission } from "@/lib/submissions/publisher";
 import { findForbiddenKeys } from "@/lib/properties/no-price";
 import {
-  DOSSIER_CACHE_CONTROL,
+  DOSSIER_LOCKED_CACHE_CONTROL,
   ERROR_CACHE_CONTROL,
   LIST_CACHE_CONTROL,
 } from "@/lib/properties/http";
@@ -47,6 +48,8 @@ const testCity = `Test City ${randomUUID().slice(0, 8)}`;
 
 let developerId: string;
 let readyToMoveSlug: string;
+let buyerId: string;
+let buyerCookie: string;
 const createdSubmissionIds: string[] = [];
 const createdPropertyIds: string[] = [];
 
@@ -159,6 +162,7 @@ afterAll(async () => {
   await db.delete(properties).where(inArray(properties.id, createdPropertyIds));
   await db.delete(developers).where(eq(developers.id, developerId));
   await db.delete(users).where(eq(users.id, testUserId));
+  if (buyerId) await db.delete(users).where(eq(users.id, buyerId));
 });
 
 describe("GET /api/v1/properties", () => {
@@ -250,22 +254,52 @@ describe("GET /api/v1/properties", () => {
 });
 
 describe("GET /api/v1/properties/[slug]", () => {
-  it("returns the dossier with the longer shared-cache window", async () => {
+  it("returns the locked dossier, never shared-cached, to a caller with no session", async () => {
     const response = await getPropertyBySlug(
       slugRequest(readyToMoveSlug),
       slugContext(readyToMoveSlug),
     );
 
     expect(response.status).toBe(200);
-    expect(response.headers.get("Cache-Control")).toBe(DOSSIER_CACHE_CONTROL);
+    // The body depends on who asks, so no shared cache may hold it.
+    expect(response.headers.get("Cache-Control")).toBe(
+      DOSSIER_LOCKED_CACHE_CONTROL,
+    );
 
     const body = (await response.json()) as PropertyDossier;
     expect(body.slug).toBe(readyToMoveSlug);
     expect(body.propertyType.key).toBe("apartment");
     expect(body.location.city).toBe(testCity);
+    // The gated detail is absent, and the response says what was withheld.
+    expect(body.lock).toBeDefined();
+    expect(body.amenities).toEqual([]);
     // Absent facts are present as explicit nulls / empty arrays, never omitted.
     expect(body.media).toEqual([]);
     expect(body.rera.registrationNumber).toBeNull();
+  });
+
+  it("returns the full dossier to a signed-in buyer", async () => {
+    const buyer = await signUpTestBuyer(
+      `dossier-gate-${randomUUID()}@example.test`,
+    );
+    buyerId = buyer.userId;
+    buyerCookie = buyer.cookie;
+
+    const response = await getPropertyBySlug(
+      new NextRequest(
+        `http://localhost/api/v1/properties/${encodeURIComponent(readyToMoveSlug)}`,
+        { headers: { cookie: buyerCookie } },
+      ),
+      slugContext(readyToMoveSlug),
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Cache-Control")).toBe(
+      DOSSIER_LOCKED_CACHE_CONTROL,
+    );
+    const body = (await response.json()) as PropertyDossier;
+    expect(body.lock).toBeUndefined();
+    expect(body.amenities.length).toBeGreaterThan(0);
   });
 
   it("carries no excluded data on the wire", async () => {

@@ -1,5 +1,4 @@
 import { ShieldCheck } from "lucide-react";
-import { TabularValue } from "./typography";
 
 /**
  * The Soft Gold trust badge.
@@ -17,8 +16,10 @@ import { TabularValue } from "./typography";
  *
  * `docs/app-flows/buyer.md`: a RERA Verified indicator denotes the specific
  * verified fact the catalog supports; it is not a general-quality guarantee.
- * The badge therefore shows the registration number it is asserting, which is
- * the evidence path `design.v1.md` requires of a trust signal.
+ * The badge still cannot exist without the registration number it asserts (the
+ * evidence path `design.v1.md` requires of a trust signal), but it does not print
+ * it: "RERA Verified" stands alone, and the number is in the tooltip and in the
+ * dossier's RERA section (owner direction, 2026-09-24).
  */
 
 export interface ReraVerifiedFact {
@@ -97,9 +98,6 @@ export function VerifiedBadge({ fact }: VerifiedBadgeProps) {
         className="size-3.5 text-[var(--color-verified-gold)]"
       />
       RERA Verified
-      <TabularValue className="text-muted-foreground">
-        {fact.registrationNumber}
-      </TabularValue>
     </span>
   );
 }

@@ -22,7 +22,10 @@ export const BUYER_NAV = [
 
 export function SiteHeader() {
   return (
-    <header className="border-border bg-background/85 sticky top-0 z-40 border-b backdrop-blur-md">
+    <header
+      data-slot="site-header"
+      className="border-border bg-background/85 sticky top-0 z-40 border-b backdrop-blur-md"
+    >
       <PageContainer>
         <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 py-3 md:h-16 md:py-0">
           <Link

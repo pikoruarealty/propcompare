@@ -2,6 +2,7 @@ import {
   POSSESSION_STATUS_LABEL,
   formatPossessionDate,
 } from "@/lib/properties/browse";
+import { identityPicture } from "@/lib/properties/identity-picture";
 import {
   AREA_BASIS_LABEL,
   AREA_BASIS_ORDER,
@@ -12,6 +13,7 @@ import {
   formatSqft,
   readRoomDimensions,
   shortUnitTypeName,
+  splitListValue,
 } from "@/lib/properties/dossier";
 import type {
   CatalogItemStatus,
@@ -81,6 +83,7 @@ export type GroupKey =
   | "project"
   | "amenities"
   | "specifications"
+  | "location"
   | "trust";
 
 export interface CompareGroup {
@@ -97,6 +100,12 @@ export interface VariantOption {
 }
 
 export interface FloorPlanRef {
+  id: string;
+  caption: string | null;
+  attribution: string | null;
+}
+
+export interface PhotoRef {
   id: string;
   caption: string | null;
   attribution: string | null;
@@ -120,6 +129,8 @@ export interface CompareColumn {
   variants: VariantOption[];
   /** The floor plans published for the unit type this column compares. */
   floorPlans: FloorPlanRef[];
+  /** Every published photo of the project, in listing order, for the photo strip. */
+  photos: PhotoRef[];
   /** How the unit type was chosen. */
   variantChosenBy: "requested" | "bhk" | "area" | "first" | "none";
 }
@@ -533,12 +544,12 @@ export const buildComparison = (
     reraRegistered: displayReraRegistered(dossier),
     registrationNumber: dossier.rera.registrationNumber,
     regulatorCheckedOn: shortDate(dossier.rera.lastCheckedAt),
-    primaryMediaId:
-      dossier.media.find((media) => media.isPrimary)?.id ??
-      dossier.media[0]?.id ??
-      null,
+    primaryMediaId: identityPicture(dossier.media)?.id ?? null,
     variant: chosen[i].variant ? optionOf(chosen[i].variant) : null,
     floorPlans: floorPlansFor(dossier, chosen[i].variant?.id ?? null),
+    photos: dossier.media
+      .filter((media) => media.mediaType === "photo")
+      .map(({ id, caption, attribution }) => ({ id, caption, attribution })),
     variants: dossier.unitVariants.map(optionOf),
     variantChosenBy: chosen[i].by,
   }));
@@ -713,6 +724,45 @@ export const buildComparison = (
       ),
   });
 
+  // What is near each project (schema v12 location facts, kept out of the
+  // specifications): one row per kind, each landmark on its own line.
+  const nearbyRows: {
+    key: string;
+    label: string;
+    pick: (d: PropertyDossier) => string[];
+  }[] = [
+    {
+      key: "nearby_connectivity",
+      label: "Connectivity",
+      pick: (d) => d.location.nearby.connectivity,
+    },
+    {
+      key: "nearby_hospitals",
+      label: "Hospitals",
+      pick: (d) => d.location.nearby.hospitals,
+    },
+    {
+      key: "nearby_schools",
+      label: "Schools and institutions",
+      pick: (d) => d.location.nearby.schools,
+    },
+  ];
+  const statedNearby = nearbyRows.filter((entry) =>
+    dossiers.some((d) => entry.pick(d).length > 0),
+  );
+  if (statedNearby.length > 0) {
+    groups.push({
+      key: "location",
+      title: "Location and connectivity",
+      rows: statedNearby.map((entry) =>
+        row(entry.key, entry.label, (d) => {
+          const items = entry.pick(d);
+          return textCell(items.length > 0 ? items.join("\n") : null);
+        }),
+      ),
+    });
+  }
+
   const specKeys = new Map<string, { label: string; category: string }>();
   for (const dossier of dossiers) {
     for (const spec of dossier.specifications) {
@@ -736,7 +786,10 @@ export const buildComparison = (
           if (!found) return missing("not_stated");
           if (found.status === "explicitly_not_offered")
             return missing("not_offered");
-          return textCell(found.valueText);
+          // A printed run of items ("A; B; C") is one item to a line.
+          return textCell(
+            splitListValue(found.valueText)?.join("\n") ?? found.valueText,
+          );
         }),
       ),
   });

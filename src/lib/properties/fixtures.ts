@@ -89,6 +89,7 @@ export const richDossierFixture: PropertyDossier = {
     description: "Ahmedabad-based developer active since 1998.",
     logoGcsPath: "developers/sabarmati-estates/logo.png",
     website: "https://example.invalid/sabarmati-estates",
+    completedProjectsCount: 3,
   },
   location: {
     city: "Ahmedabad",
@@ -96,6 +97,14 @@ export const richDossierFixture: PropertyDossier = {
     latitude: "23.036900",
     longitude: "72.529700",
     pincode: "380015",
+    mapUrl:
+      "https://www.google.com/maps/place/Riverfront+Heights/@23.0369,72.5297,17z",
+    nearby: {
+      connectivity: ["Vastrapur Metro Station 1.1 Km", "Airport 16.2 Km"],
+      hospitals: ["Apex Heart Institute 650 Mtr"],
+      schools: ["Nirma Vidyavihar 1.4 Km", "Udgam School 1.6 Km"],
+      plotNumber: null,
+    },
   },
   possession: {
     status: "under_construction",
@@ -116,6 +125,7 @@ export const richDossierFixture: PropertyDossier = {
   totalTowers: 2,
   totalFloors: 14,
   totalUnits: 184,
+  plotAreaSqft: "130680.00",
   unitVariants: [
     {
       id: "cccccccc-1111-4111-8111-cccccccccccc",
@@ -123,6 +133,7 @@ export const richDossierFixture: PropertyDossier = {
       bhkType: { key: "2bhk", label: "2 BHK" },
       layoutType: { key: "corner", label: "Corner" },
       totalUnitsOfVariant: 96,
+      unitsPerFloor: 4,
       dimensions: {
         rooms: [
           { name: "Living", lengthFt: 16.5, widthFt: 12, areaSqft: 200 },
@@ -142,6 +153,7 @@ export const richDossierFixture: PropertyDossier = {
       bhkType: { key: "3bhk", label: "3 BHK" },
       layoutType: null,
       totalUnitsOfVariant: 88,
+      unitsPerFloor: 4,
       dimensions: null,
       // Only carpet area was published. The other bases must render as
       // unstated, never derived from this one.
@@ -224,6 +236,7 @@ export const sparseDossierFixture: PropertyDossier = {
     description: null,
     logoGcsPath: null,
     website: null,
+    completedProjectsCount: 0,
   },
   location: {
     city: "Ahmedabad",
@@ -231,6 +244,8 @@ export const sparseDossierFixture: PropertyDossier = {
     latitude: null,
     longitude: null,
     pincode: null,
+    mapUrl: null,
+    nearby: { connectivity: [], hospitals: [], schools: [], plotNumber: null },
   },
   possession: {
     status: null,
@@ -251,6 +266,7 @@ export const sparseDossierFixture: PropertyDossier = {
   totalTowers: null,
   totalFloors: null,
   totalUnits: null,
+  plotAreaSqft: null,
   unitVariants: [
     {
       id: "cccccccc-2222-4222-8222-cccccccccccc",
@@ -258,6 +274,7 @@ export const sparseDossierFixture: PropertyDossier = {
       bhkType: { key: "2bhk", label: "2 BHK" },
       layoutType: null,
       totalUnitsOfVariant: null,
+      unitsPerFloor: null,
       dimensions: null,
       areas: [{ basis: "carpet", areaSqft: "870.00" }],
     },

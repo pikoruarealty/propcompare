@@ -3,17 +3,22 @@
 import * as React from "react";
 import { Dialog } from "radix-ui";
 import { X } from "lucide-react";
+import {
+  REPORT_PROBLEM_EMAIL,
+  reportProblemMailto,
+} from "@/lib/buyer/report-contact";
 
 /**
  * "Report a problem" on every property dossier — the placement `DECISIONS.md`
  * (2026-09-20) already committed to as one of the mitigations for publishing
  * brochure media before a developer has consented (attribution, a takedown
- * route, keeping source PDFs private). Approved 2026-09-22 as a placeholder
- * only: a dialog that says plainly there is no way to send a report yet,
- * because no contact address has been chosen. No table, no storage, nothing
- * submitted — this component has nothing to write and writes nothing.
+ * route, keeping source PDFs private). The dialog asks the reader to send a mail
+ * to a placeholder address (`DECISIONS.md`, 2026-09-24, which supersedes the
+ * earlier "invent no address" position). No table, no storage, nothing submitted:
+ * this component never calls the network, the reader's own mail app does the
+ * sending.
  */
-export function ReportProblemLink() {
+export function ReportProblemLink({ propertyName }: { propertyName?: string }) {
   const [open, setOpen] = React.useState(false);
 
   return (
@@ -49,8 +54,30 @@ export function ReportProblemLink() {
             id="report-problem-body"
             className="text-muted-foreground mt-3 text-sm"
           >
-            A way to send us a report is coming. There is nothing to submit here
-            yet, and this dialog does not send, save, or record anything.
+            Something wrong or out of date on this page, or a picture or fact
+            that should not be here? Send us an email and we will look at it.
+          </p>
+          <p
+            data-slot="report-problem-email"
+            className="text-foreground mt-4 text-base font-medium break-all"
+          >
+            {REPORT_PROBLEM_EMAIL}
+          </p>
+          {/* Built only once the dialog is open, in the browser, so the page address is real. */}
+          <a
+            data-slot="report-problem-mailto"
+            href={reportProblemMailto(
+              propertyName === undefined
+                ? undefined
+                : { name: propertyName, url: window.location.href },
+            )}
+            className="border-border text-foreground mt-5 inline-flex items-center rounded-lg border px-4 py-2 text-sm transition-colors hover:border-[var(--color-terracotta)]"
+          >
+            Write to us
+          </a>
+          <p className="text-muted-foreground mt-4 text-xs">
+            This address is a placeholder until our reporting inbox is set up.
+            Nothing is sent from this page.
           </p>
         </Dialog.Content>
       </Dialog.Portal>

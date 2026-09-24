@@ -302,7 +302,10 @@ describe("DossierScreen — the verified badge", () => {
     const badge = container.querySelector('[data-slot="verified-badge"]');
 
     expect(badge).not.toBeNull();
-    expect(badge).toHaveTextContent(
+    // The badge says "RERA Verified" alone; the number is in its tooltip and in
+    // the RERA section below.
+    expect(badge?.textContent?.trim()).toBe("RERA Verified");
+    expect(badge?.getAttribute("title")).toContain(
       richDossierFixture.rera.registrationNumber!,
     );
   });
@@ -516,5 +519,55 @@ describe("DossierScreen — crediting the regulator", () => {
         }).container,
       ),
     ).toHaveLength(0);
+  });
+
+  it("shows the location with a map, a link to Google Maps, and what is nearby as plain lists", () => {
+    const { main } = renderDossier(richDossierFixture);
+    const location = sectionOf(main, "dossier-location");
+
+    const frame = location.querySelector("iframe");
+    expect(frame).not.toBeNull();
+    expect(frame?.getAttribute("src")).toContain("output=embed");
+    expect(frame?.getAttribute("src")).toContain("23.0369");
+    expect(
+      within(location).getByRole("link", { name: "Open in Google Maps" }),
+    ).toHaveAttribute("href", richDossierFixture.location.mapUrl);
+
+    expect(
+      within(location).getByRole("heading", { name: "Connectivity" }),
+    ).toBeVisible();
+    expect(within(location).getByText("Airport 16.2 Km")).toBeVisible();
+    expect(
+      within(location).getByText("Apex Heart Institute 650 Mtr"),
+    ).toBeVisible();
+  });
+
+  it("draws no map for a short share link, but still offers the link; and says plainly when nothing nearby is stated", () => {
+    const { main } = renderDossier({
+      ...sparseDossierFixture,
+      location: {
+        ...sparseDossierFixture.location,
+        mapUrl: "https://maps.app.goo.gl/AbCdEf123",
+      },
+    });
+    const location = sectionOf(main, "dossier-location");
+    expect(location.querySelector("iframe")).toBeNull();
+    expect(
+      within(location).getByRole("link", { name: "Open in Google Maps" }),
+    ).toBeVisible();
+    expect(
+      within(location).getByText(
+        "Nearby connectivity, hospitals and schools are not stated.",
+      ),
+    ).toBeVisible();
+  });
+
+  it("shows no map and no link when none is set", () => {
+    const { main } = renderDossier(sparseDossierFixture);
+    const location = sectionOf(main, "dossier-location");
+    expect(location.querySelector("iframe")).toBeNull();
+    expect(
+      within(location).queryByRole("link", { name: "Open in Google Maps" }),
+    ).toBeNull();
   });
 });

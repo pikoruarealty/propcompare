@@ -98,6 +98,12 @@ export const LIST_CACHE_CONTROL =
   "public, s-maxage=60, stale-while-revalidate=300";
 export const DOSSIER_CACHE_CONTROL =
   "public, s-maxage=300, stale-while-revalidate=3600";
+/**
+ * The dossier route's policy since 2026-09-24: the body depends on whether the
+ * caller is signed in, so a shared cache must never hold one and serve it to the
+ * other.
+ */
+export const DOSSIER_LOCKED_CACHE_CONTROL = "private, no-store";
 
 /**
  * Errors are never cached. A 404 in particular must not stick: a property

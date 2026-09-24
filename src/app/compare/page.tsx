@@ -6,8 +6,10 @@ import {
   PageFrame,
   PageSection,
 } from "@/components/buyer/page-frame";
-import { MAX_COMPARED } from "@/lib/compare/model";
+import { lockComparison } from "@/lib/compare/lock";
+import { MAX_COMPARED, buildComparison } from "@/lib/compare/model";
 import { parseFocus } from "@/lib/compare/focus";
+import { hasBuyerPageSession } from "@/lib/buyer/page-session";
 import { assertNoExcludedData } from "@/lib/properties/no-price";
 import { getPublishedPropertyBySlug } from "@/lib/properties/queries";
 import type { PropertyDossier } from "@/lib/properties/types";
@@ -15,7 +17,10 @@ import type { PropertyDossier } from "@/lib/properties/types";
 /**
  * `/compare?p=slug-a,slug-b[,…]&v=slug~unitTypeId[,…]` — the comparison, which is
  * the product (`docs/design/comparison.v1.md`). The address is the whole state, so
- * a comparison is shareable and needs no sign-in. Properties that are not
+ * a comparison is shareable, but only its identity and summary are open: the row
+ * values go to a signed-in visitor alone. The gate is here, on the server; a
+ * signed-out request is sent the locked model and nothing it was built from
+ * (`AGENTS.md`, `DECISIONS.md` 2026-09-22). Properties that are not
  * published any more (unlisted, deleted, unknown) are simply left out, and the
  * page says how many.
  *
@@ -66,6 +71,7 @@ export default async function ComparePage({
     await Promise.all(slugs.map((slug) => getPublishedPropertyBySlug(db, slug)))
   ).filter((dossier): dossier is PropertyDossier => dossier !== null);
   const unavailable = slugs.length - found.length;
+  const signedIn = found.length >= 2 && (await hasBuyerPageSession());
 
   return (
     <PageFrame>
@@ -84,7 +90,14 @@ export default async function ComparePage({
           ) : null}
           {found.length >= 2 ? (
             <CompareScreen
-              dossiers={assertNoExcludedData(found)}
+              key={signedIn ? "full" : "locked"}
+              {...(signedIn
+                ? { dossiers: assertNoExcludedData(found) }
+                : {
+                    locked: lockComparison(
+                      buildComparison(assertNoExcludedData(found), requested),
+                    ),
+                  })}
               requested={requested}
               focus={parseFocus(first(f))}
             />

@@ -18,3 +18,16 @@ export const requireBuyerPageSession = async (
   if (!session) redirect(`/login?next=${encodeURIComponent(returnTo)}`);
   return { userId: session.user.id };
 };
+
+/**
+ * Whether the visitor has a session, for a page that is open to everyone but
+ * shows less to a signed-out visitor (`/compare`). The answer decides what the
+ * server sends, so it is read authoritatively, the same way as above.
+ */
+export const hasBuyerPageSession = async (): Promise<boolean> => {
+  const session = await auth.api.getSession({
+    headers: await headers(),
+    query: { disableCookieCache: true },
+  });
+  return session !== null;
+};
