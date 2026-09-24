@@ -32,6 +32,14 @@ const coreLayoutTypes = [
   { key: "penthouse", label: "Penthouse" },
 ];
 
+/** Contract fields switched off because the regulator now states the fact as a
+ * number (`DECISIONS.md` 2026-09-24, "RERA second pass, as built"): open area,
+ * and density from land area and units. Deactivated, never deleted. */
+const RETIRED_FIELD_KEYS = new Set([
+  "property.specifications.open_space",
+  "property.specifications.density_units_per_acre",
+]);
+
 const initialAmenityCatalog = [
   {
     key: "swimming_pool",
@@ -1023,7 +1031,8 @@ async function seed() {
                             ].includes(fieldKey)
                           ? "v12"
                           : "v1",
-          isActive: true,
+          // Retired fields stay in the table, switched off (schema v18).
+          isActive: !RETIRED_FIELD_KEYS.has(fieldKey),
           description,
         }),
       ),

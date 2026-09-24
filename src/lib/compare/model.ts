@@ -22,6 +22,11 @@ import type {
   PropertyDossier,
 } from "@/lib/properties/types";
 import type { ReraSourcedFact } from "@/lib/properties/rera-source";
+import {
+  landAreaOf,
+  landAreaText,
+  unitsPerAcre,
+} from "@/lib/properties/density";
 import { blockNamedIn, groupSqft } from "@/lib/rera/carpet-area";
 import type { ReraSnapshot } from "@/lib/rera/snapshot";
 import { areaToSqft } from "@/lib/units/measurements";
@@ -462,41 +467,6 @@ const positiveNumber = (value: string | number | null): number | null => {
 
 const oneDecimal = (value: number): string =>
   String(Math.round(value * 10) / 10);
-
-/** Square feet in an acre, from the one place units are defined. */
-const SQFT_PER_ACRE = areaToSqft(1, "acre");
-
-interface LandArea {
-  sqft: number;
-  /** True when the property states no plot area of its own and this is RERA's
-   * registered land area (owner-approved fallback, 2026-09-24). */
-  fromRera: boolean;
-}
-
-const landAreaOf = (dossier: PropertyDossier): LandArea | null => {
-  const own = positiveNumber(dossier.plotAreaSqft);
-  if (own !== null) return { sqft: own, fromRera: false };
-  const rera = positiveNumber(dossier.rera.projectLandAreaSqft);
-  return rera === null ? null : { sqft: rera, fromRera: true };
-};
-
-const landAreaText = (land: LandArea): string =>
-  `${formatSqft(String(Math.round(land.sqft)))} sq ft (${(land.sqft / SQFT_PER_ACRE).toFixed(2)} acres)${land.fromRera ? ", per RERA" : ""}`;
-
-const unitsPerAcre = (
-  dossier: PropertyDossier,
-): {
-  perAcre: number;
-  fromRera: boolean;
-} | null => {
-  const land = landAreaOf(dossier);
-  const units = positiveNumber(dossier.totalUnits);
-  if (land === null || units === null) return null;
-  return {
-    perAcre: units / (land.sqft / SQFT_PER_ACRE),
-    fromRera: land.fromRera,
-  };
-};
 
 /** Carpet as a share of super built-up area, only when both are stated and the
  * result is possible (carpet is inside super built-up, never larger). */

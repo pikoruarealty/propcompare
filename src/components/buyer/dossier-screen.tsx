@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { identityPicture } from "@/lib/properties/identity-picture";
 import { mapEmbedUrl } from "@/lib/properties/map-url";
+import { densityText } from "@/lib/properties/density";
 import { reraFactLines } from "@/lib/properties/rera-facts";
 import {
   MediaGallery,
@@ -654,7 +655,12 @@ export function DossierScreen({ dossier }: DossierScreenProps) {
     { label: "Hospitals", items: location.nearby.hospitals },
     { label: "Schools and institutions", items: location.nearby.schools },
   ];
-  const verifiedFact = reraVerifiedFact(rera);
+  const verifiedFact = reraVerifiedFact({
+    registered: rera.registered,
+    registrationNumber: rera.registrationNumber,
+    // The date of the latest successful check of the regulator's record.
+    lastVerifiedAt: rera.lastCheckedAt,
+  });
   const possessionDate = formatPossessionDate(possession.possessionDate);
   const launchDate = formatPossessionDate(possession.launchDate);
   const carpetRange = formatAreaRange(
@@ -917,16 +923,13 @@ export function DossierScreen({ dossier }: DossierScreenProps) {
                   <ReraSource rera={rera} fact="registration_number" />
                 </Fact>
                 {/* The date of the latest successful check of the regulator's
-                 * record. The `rera_last_verified_at` column has no writer, so it
-                 * is only a fallback for a value entered before checks were kept. */}
+                 * record. */}
                 <Fact label="Last checked with RERA">
                   <FactValue
                     value={
-                      rera.lastCheckedAt !== null
-                        ? shortDate(rera.lastCheckedAt)
-                        : rera.lastVerifiedAt === null
-                          ? null
-                          : rera.lastVerifiedAt.slice(0, 10)
+                      rera.lastCheckedAt === null
+                        ? null
+                        : shortDate(rera.lastCheckedAt)
                     }
                     tabular
                   />
@@ -940,6 +943,11 @@ export function DossierScreen({ dossier }: DossierScreenProps) {
                     }
                     tabular
                   />
+                </Fact>
+                {/* Calculated from the land area and the unit count; it replaced the
+                 * density specification (schema v18), so it is stated here. */}
+                <Fact label="Density">
+                  <FactValue value={densityText(dossier)} tabular />
                 </Fact>
                 <Fact label="Carpet area range">
                   <FactValue value={carpetRange} tabular />

@@ -302,9 +302,6 @@ export const properties = pgTable(
     ),
     reraRegistrationNumber: text("rera_registration_number"),
     reraRegistered: boolean("rera_registered").default(false).notNull(),
-    reraLastVerifiedAt: timestamp("rera_last_verified_at", {
-      withTimezone: true,
-    }),
     city: text("city").notNull(),
     locality: text("locality").notNull(),
     latitude: numeric("latitude"),
@@ -320,8 +317,6 @@ export const properties = pgTable(
     possessionDate: date("possession_date"),
     launchDate: date("launch_date"),
     reraProjectLandAreaSqft: numeric("rera_project_land_area_sqft"),
-    reraCarpetAreaRangeMinSqft: numeric("rera_carpet_area_range_min_sqft"),
-    reraCarpetAreaRangeMaxSqft: numeric("rera_carpet_area_range_max_sqft"),
     reraConstructionProgressPercent: numeric(
       "rera_construction_progress_percent",
     ),

@@ -571,3 +571,49 @@ describe("DossierScreen — crediting the regulator", () => {
     ).toBeNull();
   });
 });
+
+describe("DossierScreen — density", () => {
+  it("states the calculated density in the RERA section, in place of the retired specification", () => {
+    const { main } = renderDossier({
+      ...richDossierFixture,
+      plotAreaSqft: null,
+      totalUnits: 100,
+      rera: { ...richDossierFixture.rera, projectLandAreaSqft: "87120.00" },
+    });
+
+    const rera = within(sectionOf(main, "dossier-rera"));
+    expect(rera.getByText("Density")).toBeInTheDocument();
+    expect(
+      rera.getByText("50 units per acre (land area per RERA)"),
+    ).toBeInTheDocument();
+  });
+
+  it("says not stated when the land area is not known", () => {
+    const { main } = renderDossier({
+      ...richDossierFixture,
+      plotAreaSqft: null,
+      totalUnits: 100,
+      rera: { ...richDossierFixture.rera, projectLandAreaSqft: null },
+    });
+
+    const rera = sectionOf(main, "dossier-rera");
+    const fact = within(rera).getByText("Density").closest("div");
+    expect(fact).toHaveTextContent(/not stated/i);
+  });
+});
+
+describe("DossierScreen — the verified badge's date", () => {
+  it("carries the date of the latest successful RERA check", () => {
+    const { container } = renderDossier({
+      ...richDossierFixture,
+      rera: {
+        ...richDossierFixture.rera,
+        registered: true,
+        lastCheckedAt: "2026-09-20T06:00:00.000Z",
+      },
+    });
+
+    const badge = container.querySelector('[data-slot="verified-badge"]');
+    expect(badge?.getAttribute("title")).toMatch(/last verified 2026-09-20/);
+  });
+});

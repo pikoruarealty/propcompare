@@ -114,7 +114,6 @@ export const richDossierFixture: PropertyDossier = {
   rera: {
     registered: true,
     registrationNumber: "PR/GJ/AHMEDABAD/AHMEDABAD CITY/AUDA/RAA12345/010124",
-    lastVerifiedAt: "2026-08-20T09:15:00.000Z",
     projectLandAreaSqft: "48000.00",
     carpetAreaRangeMinSqft: "985.00",
     carpetAreaRangeMaxSqft: "1640.00",
@@ -256,7 +255,6 @@ export const sparseDossierFixture: PropertyDossier = {
   rera: {
     registered: false,
     registrationNumber: null,
-    lastVerifiedAt: null,
     projectLandAreaSqft: null,
     carpetAreaRangeMinSqft: null,
     carpetAreaRangeMaxSqft: null,

@@ -442,10 +442,7 @@ export const getPublishedPropertyBySlug = async (
       launchDate: properties.launchDate,
       reraRegistered: properties.reraRegistered,
       reraRegistrationNumber: properties.reraRegistrationNumber,
-      reraLastVerifiedAt: properties.reraLastVerifiedAt,
       reraProjectLandAreaSqft: properties.reraProjectLandAreaSqft,
-      reraCarpetAreaRangeMinSqft: properties.reraCarpetAreaRangeMinSqft,
-      reraCarpetAreaRangeMaxSqft: properties.reraCarpetAreaRangeMaxSqft,
       reraConstructionProgressPercent:
         properties.reraConstructionProgressPercent,
       reraSnapshot: properties.reraSnapshot,
@@ -663,16 +660,12 @@ export const getPublishedPropertyBySlug = async (
     rera: {
       registered: row.reraRegistered,
       registrationNumber: row.reraRegistrationNumber ?? null,
-      lastVerifiedAt: toIsoString(row.reraLastVerifiedAt),
       projectLandAreaSqft: row.reraProjectLandAreaSqft ?? null,
-      // The columns had no writer, so the range is read from the regulator's own
-      // "carpet area of units (range)" in the stored snapshot, converted once here.
-      carpetAreaRangeMinSqft:
-        row.reraCarpetAreaRangeMinSqft ??
-        rangeSqft(facts?.carpetAreaRangeSqm?.min),
-      carpetAreaRangeMaxSqft:
-        row.reraCarpetAreaRangeMaxSqft ??
-        rangeSqft(facts?.carpetAreaRangeSqm?.max),
+      // The regulator's own "carpet area of units (range)" from the stored
+      // snapshot, converted once here (the columns that used to hold it were
+      // dropped in schema v18: nothing ever wrote them).
+      carpetAreaRangeMinSqft: rangeSqft(facts?.carpetAreaRangeSqm?.min),
+      carpetAreaRangeMaxSqft: rangeSqft(facts?.carpetAreaRangeSqm?.max),
       constructionProgressPercent: row.reraConstructionProgressPercent ?? null,
       lastCheckedAt: toIsoString(regulatorCheck.checkedAt),
       sourcedFacts: reraSourcedFacts(regulatorCheck.record, {

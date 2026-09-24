@@ -118,8 +118,6 @@ import type { ReraSourcedFact } from "./rera-source";
 export interface DossierRera {
   registered: boolean;
   registrationNumber: string | null;
-  /** ISO-8601. */
-  lastVerifiedAt: string | null;
   projectLandAreaSqft: string | null;
   carpetAreaRangeMinSqft: string | null;
   carpetAreaRangeMaxSqft: string | null;
