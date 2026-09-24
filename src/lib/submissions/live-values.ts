@@ -46,6 +46,12 @@ export const loadLiveValues = async (
       progress: properties.reraConstructionProgressPercent,
       legalEntityId: properties.legalEntityId,
       mapUrl: properties.mapUrl,
+      pincode: properties.pincode,
+      launchDate: properties.launchDate,
+      landAreaSqft: properties.reraProjectLandAreaSqft,
+      latitude: properties.latitude,
+      longitude: properties.longitude,
+      reraSnapshot: properties.reraSnapshot,
     })
     .from(properties)
     .innerJoin(propertyTypes, eq(propertyTypes.id, properties.propertyTypeId))
@@ -69,6 +75,15 @@ export const loadLiveValues = async (
       row.progress === null ? null : Number(row.progress),
     "property.legal_entity_id": row.legalEntityId,
     "property.google_maps_url": row.mapUrl,
+    // These were published but never read back, so a RERA check saw them as not
+    // held and would have proposed them again every quarter.
+    "property.pincode": row.pincode,
+    "property.launch_date": row.launchDate,
+    "property.rera_project_land_area_sqft":
+      row.landAreaSqft === null ? null : Number(row.landAreaSqft),
+    "property.latitude": row.latitude === null ? null : Number(row.latitude),
+    "property.longitude": row.longitude === null ? null : Number(row.longitude),
+    "property.rera_snapshot": row.reraSnapshot,
   };
   const live: Record<string, unknown> = Object.fromEntries(
     Object.entries(values).filter(([, value]) => value !== null),

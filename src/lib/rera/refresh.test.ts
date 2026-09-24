@@ -17,6 +17,7 @@ const recordWithQuarter = (
   submittedOn: string | null,
 ): RegulatorRecord =>
   ({
+    details: { version: 1 },
     latestQuarter: {
       name: "Q",
       periodEndsOn,
@@ -24,7 +25,7 @@ const recordWithQuarter = (
       submittedOn,
       status: "SUBMITTED",
     },
-  }) as RegulatorRecord;
+  }) as unknown as RegulatorRecord;
 
 describe("the latest closed quarter", () => {
   it.each([

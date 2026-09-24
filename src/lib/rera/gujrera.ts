@@ -644,11 +644,7 @@ export const parseBoundary = (coordinates: unknown): RegulatorPoint[] => {
   }
   const first = points[0];
   const last = points[points.length - 1];
-  if (
-    points.length > 1 &&
-    first.lat === last.lat &&
-    first.lng === last.lng
-  ) {
+  if (points.length > 1 && first.lat === last.lat && first.lng === last.lng) {
     points.pop();
   }
   return points.length >= 3 ? points : [];
@@ -706,8 +702,7 @@ const parties = (
     return [
       {
         name,
-        projectsCompleted:
-          Number.isInteger(count) && count >= 0 ? count : null,
+        projectsCompleted: Number.isInteger(count) && count >= 0 ? count : null,
       },
     ];
   });

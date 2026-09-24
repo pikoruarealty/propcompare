@@ -425,3 +425,153 @@ describe("compareWithRecord — carpet area by unit type", () => {
     expect(item.note).toMatch(/no unit types are entered yet/i);
   });
 });
+
+describe("the second-pass items (position, map link, snapshot)", () => {
+  const withDetails: RegulatorRecord = {
+    ...record,
+    details: {
+      version: 1,
+      layoutLandAreaSqm: 7628,
+      openAreaSqm: 3131.1,
+      coveredAreaSqm: 4496.9,
+      coveredParkingAreaSqm: null,
+      filing: {
+        quarter: "Q-14",
+        periodEndsOn: "2026-06-30",
+        source: "quarterly_filing",
+        progressPercent: 67.71875,
+        blocks: [],
+      },
+      inventory: {
+        totalUnits: 76,
+        bookedUnits: 63,
+        availableUnits: 13,
+        asOn: "2026-07-03",
+      },
+      filings: { listed: 18, submitted: 17 },
+      planPassingAuthority: "AUDA",
+      registeredOn: "2022-11-11",
+      architects: [],
+      engineers: [],
+      contractors: [],
+      boundary: [
+        { lat: 23.0275, lng: 72.4888 },
+        { lat: 23.0274, lng: 72.49 },
+        { lat: 23.0269, lng: 72.49 },
+      ],
+      centre: { lat: 23.0272712, lng: 72.4894294 },
+    },
+  };
+
+  it("proposes the boundary's centre and a pin link where none is held", () => {
+    const items = byKey(compareWithRecord(withDetails, {}, entities));
+
+    expect(items["property.latitude"]).toMatchObject({
+      status: "not_held",
+      proposedValue: 23.0272712,
+    });
+    expect(items["property.longitude"]).toMatchObject({
+      status: "not_held",
+      proposedValue: 72.4894294,
+    });
+    expect(items["property.google_maps_url"]).toMatchObject({
+      status: "not_held",
+      proposedValue: "https://www.google.com/maps?q=23.0272712,72.4894294",
+    });
+    expect(items["property.google_maps_url"].note).toMatch(
+      /check it on the map/i,
+    );
+  });
+
+  it("never overwrites a pin or a link an admin already holds, but shows the difference", () => {
+    const held = {
+      "property.latitude": 23.03,
+      "property.longitude": 72.5,
+      "property.google_maps_url":
+        "https://www.google.com/maps/place/Kimana/@23.03,72.5,17z",
+    };
+    const compared = compareWithRecord(withDetails, held, entities);
+    const items = byKey(compared);
+
+    for (const key of [
+      "property.latitude",
+      "property.longitude",
+      "property.google_maps_url",
+    ]) {
+      expect(items[key].status).toBe("differs");
+      expect(items[key].proposedValue).toBeNull();
+    }
+    expect(writableItems(compared).map((item) => item.fieldKey)).not.toContain(
+      "property.latitude",
+    );
+  });
+
+  it("falls back to a search from the name when RERA drew no boundary, and says so", () => {
+    const noBoundary: RegulatorRecord = {
+      ...withDetails,
+      details: { ...withDetails.details!, boundary: [], centre: null },
+    };
+    const items = byKey(
+      compareWithRecord(noBoundary, { "property.locality": "Ambli" }, entities),
+    );
+
+    expect(items["property.latitude"].status).toBe("rera_silent");
+    expect(items["property.google_maps_url"].status).toBe("not_held");
+    expect(items["property.google_maps_url"].proposedValue).toBe(
+      "https://www.google.com/maps/search/?api=1&query=The%20Kimana%20Towers%20Ambli%20Ahmedabad",
+    );
+    expect(items["property.google_maps_url"].note).toMatch(/search/i);
+  });
+
+  it("says which filing the progress figure is from", () => {
+    const items = byKey(compareWithRecord(withDetails, {}, entities));
+
+    expect(items["property.rera_construction_progress_percent"].note).toMatch(
+      /quarterly filing \(Q-14, period ending 2026-06-30\)/,
+    );
+  });
+
+  it("proposes the snapshot, and calls it the same only when every fact matches", () => {
+    const first = byKey(compareWithRecord(withDetails, {}, entities));
+    const snapshot = first["property.rera_snapshot"];
+
+    expect(snapshot.status).toBe("not_held");
+    expect(snapshot.reraValue).toMatch(
+      /filing Q-14, 13 units available as on 2026-07-03/,
+    );
+
+    const held = { "property.rera_snapshot": snapshot.proposedValue };
+    expect(
+      byKey(compareWithRecord(withDetails, held, entities))[
+        "property.rera_snapshot"
+      ].status,
+    ).toBe("same");
+
+    const changed: RegulatorRecord = {
+      ...withDetails,
+      details: {
+        ...withDetails.details!,
+        inventory: { ...withDetails.details!.inventory!, availableUnits: 9 },
+      },
+    };
+    expect(
+      byKey(compareWithRecord(changed, held, entities))[
+        "property.rera_snapshot"
+      ].status,
+    ).toBe("differs");
+  });
+
+  it("adds none of these for a record that predates them", () => {
+    const keys = compareWithRecord(record, {}, entities).map(
+      (item) => item.fieldKey,
+    );
+
+    for (const key of [
+      "property.latitude",
+      "property.google_maps_url",
+      "property.rera_snapshot",
+    ]) {
+      expect(keys).not.toContain(key);
+    }
+  });
+});

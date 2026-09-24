@@ -20,6 +20,7 @@ import {
 import { createEditSubmission } from "@/lib/submissions/edit-property";
 import { loadLiveValues } from "@/lib/submissions/live-values";
 import { publishSubmission } from "@/lib/submissions/publisher";
+import { reviewSubmissionField } from "@/lib/submissions/reconciliation";
 import { createGujreraAdapter } from "./gujrera";
 import {
   detailResponse,
@@ -241,6 +242,18 @@ describe("RERA carpet area on a published property", () => {
       jobId: fetched.jobId,
     });
     expect(applied).toContain("unit_variants");
+    // The proposed pin and map link wait for someone to look at the map.
+    for (const fieldKey of [
+      "property.latitude",
+      "property.longitude",
+      "property.google_maps_url",
+    ]) {
+      await reviewSubmissionField(db, {
+        submissionId,
+        fieldKey,
+        reviewStatus: "confirmed",
+      });
+    }
 
     // The publish path is the only thing that changes the live listing.
     expect((await areasByVariant(propertyId))["Block B - 3rd Floor"]).toEqual({

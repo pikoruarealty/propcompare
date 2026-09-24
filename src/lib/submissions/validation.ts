@@ -1,4 +1,5 @@
 import { isGoogleMapsUrl } from "@/lib/properties/map-url";
+import { reraSnapshotProblem } from "@/lib/rera/snapshot";
 import { LISTING_STATUSES } from "./edit-only-fields";
 
 export class SubmissionPayloadError extends Error {
@@ -263,7 +264,20 @@ const validateFieldValue = (
     return readPositiveInteger(value, path);
   }
   if (dataType === "positive_number") {
-    return readPositiveNumber(value, path);
+    const number = readPositiveNumber(value, path);
+    // The project's position: a coordinate outside India is a typo, not a place.
+    if (fieldKey === "property.latitude" && (number < 6 || number > 38)) {
+      throw new SubmissionPayloadError(`${path} must be a latitude in India`);
+    }
+    if (fieldKey === "property.longitude" && (number < 68 || number > 98)) {
+      throw new SubmissionPayloadError(`${path} must be a longitude in India`);
+    }
+    return number;
+  }
+  if (dataType === "rera_snapshot") {
+    const problem = reraSnapshotProblem(value);
+    if (problem) throw new SubmissionPayloadError(`${path} ${problem}`);
+    return value;
   }
   if (dataType === "percentage_0_to_100") {
     if (

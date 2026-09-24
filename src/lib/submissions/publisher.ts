@@ -314,6 +314,9 @@ const runPublish = async (
     const reraProjectLandArea = getNumberField(
       "property.rera_project_land_area_sqft",
     );
+    const latitude = getNumberField("property.latitude");
+    const longitude = getNumberField("property.longitude");
+    const reraSnapshot = payload["property.rera_snapshot"];
     const developerProfileNarrative = getStringField(
       "developer.profile_narrative",
     );
@@ -407,6 +410,9 @@ const runPublish = async (
             reraProjectLandArea === undefined
               ? undefined
               : String(reraProjectLandArea),
+          latitude: latitude === undefined ? undefined : String(latitude),
+          longitude: longitude === undefined ? undefined : String(longitude),
+          reraSnapshot: reraSnapshot === undefined ? undefined : reraSnapshot,
         })
         .returning({ id: properties.id });
       propertyId = inserted.id;
@@ -439,6 +445,9 @@ const runPublish = async (
       if (reraProjectLandArea !== undefined) {
         updateColumns.reraProjectLandAreaSqft = String(reraProjectLandArea);
       }
+      if (latitude !== undefined) updateColumns.latitude = String(latitude);
+      if (longitude !== undefined) updateColumns.longitude = String(longitude);
+      if (reraSnapshot !== undefined) updateColumns.reraSnapshot = reraSnapshot;
       if (listingStatusValue !== undefined) {
         updateColumns.listingStatus = listingStatusValue;
         updateColumns.listingStatusChangedAt = new Date();

@@ -17,6 +17,9 @@ import {
 } from "@/lib/submissions/reconciliation";
 import {
   compareWithRecord,
+  LATITUDE_FIELD_KEY,
+  LONGITUDE_FIELD_KEY,
+  MAP_URL_KEY,
   writableItems,
   type LegalEntityChoice,
   type ReraComparisonItem,
@@ -385,6 +388,15 @@ export const getReraState = async (
  * Fields RERA is silent on are left alone. Still a draft: nothing reaches the live
  * catalogue except through review and publish.
  */
+/** RERA's proposed pin and map link are a place someone should look at before it
+ * is published, so they are written as needing review: publishing waits for an
+ * admin or the developer to check the small map and confirm or correct them. */
+const NEEDS_A_LOOK = new Set([
+  LATITUDE_FIELD_KEY,
+  LONGITUDE_FIELD_KEY,
+  MAP_URL_KEY,
+]);
+
 export const applyReraValues = async (
   database: PostgresJsDatabase,
   input: { submissionId: string; jobId: string },
@@ -420,7 +432,9 @@ export const applyReraValues = async (
         submissionId: submission.id,
         fieldKey: item.fieldKey,
         value: item.proposedValue,
-        reviewStatus: "confirmed",
+        reviewStatus: NEEDS_A_LOOK.has(item.fieldKey)
+          ? "needs_review"
+          : "confirmed",
       });
     } catch (cause) {
       if (cause instanceof ReconciliationError) {

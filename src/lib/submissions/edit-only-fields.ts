@@ -29,10 +29,16 @@ export const MAIN_PHOTO_FIELD_KEY = "property.main_photo";
  * never read from a brochure, so the extraction model is never asked for it. */
 export const MAP_URL_FIELD_KEY = "property.google_maps_url";
 
+/** The regulator's latest project facts as one versioned object (schema v17). It
+ * is shown and applied in the RERA panel, never as a typed field. */
+export const RERA_SNAPSHOT_FIELD_KEY = "property.rera_snapshot";
+
 /** Contract fields that are set from another panel or by a rule, never typed as
  * a field and never counted as one the listing is missing. */
 export const isManagedElsewhere = (fieldKey: string): boolean =>
-  isEditOnlyField(fieldKey) || fieldKey === MAIN_PHOTO_FIELD_KEY;
+  isEditOnlyField(fieldKey) ||
+  fieldKey === MAIN_PHOTO_FIELD_KEY ||
+  fieldKey === RERA_SNAPSHOT_FIELD_KEY;
 
 /**
  * Contract fields only a regulator's own record can state, never a brochure, so
@@ -44,6 +50,12 @@ export const isManagedElsewhere = (fieldKey: string): boolean =>
  */
 export const RERA_ONLY_FIELD_KEYS = [
   "property.rera_project_land_area_sqft",
+  RERA_SNAPSHOT_FIELD_KEY,
+  // The project's position, from the centre of the boundary the regulator draws
+  // (schema v17 gave the existing columns a writer). A brochure's map is not a
+  // coordinate, so the model is never asked for one.
+  "property.latitude",
+  "property.longitude",
 ] as const;
 
 export const LISTING_STATUSES = ["listed", "unlisted", "deleted"] as const;

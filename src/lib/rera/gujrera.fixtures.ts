@@ -295,7 +295,9 @@ export const latestFormOneResponse = {
         noOfFloors: 22,
         noOfLifts: 8,
         noOfUnitsBooked: 63,
-        photoDocList: [{ latitude: "", longitude: "", photoExternalId: POISON_TEXT }],
+        photoDocList: [
+          { latitude: "", longitude: "", photoExternalId: POISON_TEXT },
+        ],
       },
     ],
   },

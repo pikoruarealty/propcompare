@@ -325,6 +325,12 @@ export const properties = pgTable(
     reraConstructionProgressPercent: numeric(
       "rera_construction_progress_percent",
     ),
+    /** The regulator's latest project facts that no other source states (open and
+     * covered area, units available as on a date, lifts, filing record, the team,
+     * per-carpet-area availability), as one versioned object (schema v17). Money
+     * and contact details never enter it. Written only by the publish transaction
+     * from `property.rera_snapshot`. */
+    reraSnapshot: jsonb("rera_snapshot"),
     description: text("description"),
     /** Buyers see only `listed` properties. `unlisted` is reversible and hidden;
      * `deleted` is a soft delete (also hidden, restorable by an owner). Changed

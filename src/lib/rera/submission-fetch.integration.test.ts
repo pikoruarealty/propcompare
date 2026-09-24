@@ -198,6 +198,10 @@ describe("fetching a RERA record for a submission", () => {
       "not_held", // construction progress
       "rera_silent", // pincode: the saved Kimana fixture states none
       "not_held", // RERA project land area
+      "not_held", // latitude (centre of RERA's boundary)
+      "not_held", // longitude
+      "not_held", // map link
+      "not_held", // RERA project facts
       "not_held", // possession status (derived)
       "rera_silent", // amenities: Kimana declares no pool
       "not_held", // promoter
@@ -408,6 +412,10 @@ describe("using RERA's values", () => {
       "property.total_units",
       "property.rera_construction_progress_percent",
       "property.rera_project_land_area_sqft",
+      "property.latitude",
+      "property.longitude",
+      "property.google_maps_url",
+      "property.rera_snapshot",
       "property.possession_status",
       "property.legal_entity_id",
     ]);
@@ -424,9 +432,22 @@ describe("using RERA's values", () => {
       "under_construction",
     );
     expect(fields["property.rera_registration_number"].value).toBe(TEST_NUMBER);
-    for (const field of Object.values(fields)) {
-      expect(field.reviewStatus).toBe("confirmed");
+    // Everything RERA states is confirmed by taking it, except the pin and map
+    // link: a place someone should look at on the map before it is published.
+    const needsALook = [
+      "property.latitude",
+      "property.longitude",
+      "property.google_maps_url",
+    ];
+    for (const [key, field] of Object.entries(fields)) {
+      expect(field.reviewStatus).toBe(
+        needsALook.includes(key) ? "needs_review" : "confirmed",
+      );
     }
+    expect(fields["property.latitude"].value).toBeCloseTo(23.02727, 4);
+    expect(fields["property.google_maps_url"].value).toMatch(
+      /^https:\/\/www\.google\.com\/maps\?q=23\.0272/,
+    );
   });
 
   it("shows a later edit as different from RERA, without blocking it", async () => {

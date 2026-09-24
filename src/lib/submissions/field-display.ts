@@ -60,6 +60,8 @@ export const FIELD_GROUPS: {
  * (schema v12): what is near the project, not how it is built. */
 const LOCATION_SPECIFICATION_KEYS = new Set([
   "property.google_maps_url",
+  "property.latitude",
+  "property.longitude",
   "property.specifications.nearby_connectivity",
   "property.specifications.nearby_hospitals",
   "property.specifications.nearby_schools",

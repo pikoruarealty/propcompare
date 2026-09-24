@@ -547,6 +547,27 @@ const initialPropertySchemaFields = [
     "The project's registered land area from RERA only, in square feet; independent of the brochure's plot area and never asked of the extraction model.",
   ],
   [
+    "property.rera_snapshot",
+    "RERA project facts",
+    "rera_snapshot",
+    null,
+    "The regulator's latest project facts no other source states, as one versioned object with the quarter and dates they are as on; RERA only, applied in the RERA panel, never asked of the extraction model.",
+  ],
+  [
+    "property.latitude",
+    "Latitude",
+    "positive_number",
+    null,
+    "The project's latitude in degrees (India), proposed from the centre of the boundary RERA draws; confirmed or corrected by an admin.",
+  ],
+  [
+    "property.longitude",
+    "Longitude",
+    "positive_number",
+    null,
+    "The project's longitude in degrees (India), proposed from the centre of the boundary RERA draws; confirmed or corrected by an admin.",
+  ],
+  [
     "unit_variants",
     "Unit configurations",
     "unit_variant_array",
@@ -946,8 +967,13 @@ async function seed() {
           label,
           dataType,
           jsonbPath,
-          schemaVersion:
-            fieldKey === "property.google_maps_url"
+          schemaVersion: [
+            "property.rera_snapshot",
+            "property.latitude",
+            "property.longitude",
+          ].includes(fieldKey)
+            ? "v17"
+            : fieldKey === "property.google_maps_url"
               ? "v15"
               : fieldKey === "property.main_photo"
                 ? "v14"
