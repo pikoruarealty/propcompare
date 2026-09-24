@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { identityPicture } from "@/lib/properties/identity-picture";
 import { mapEmbedUrl } from "@/lib/properties/map-url";
+import { reraFactLines } from "@/lib/properties/rera-facts";
 import {
   MediaGallery,
   type GalleryItem,
@@ -945,6 +946,16 @@ export function DossierScreen({ dossier }: DossierScreenProps) {
                   />
                   <ReraSource rera={rera} fact="construction_progress" />
                 </Fact>
+                {/* Everything else the regulator states, each with the quarter or
+                 * date it is as on (schema v17). A figure it does not state has no
+                 * line. */}
+                {rera.facts
+                  ? reraFactLines(rera.facts).map((line) => (
+                      <Fact key={line.label} label={line.label}>
+                        <FactValue value={line.value} tabular />
+                      </Fact>
+                    ))
+                  : null}
               </dl>
             </Section>
 

@@ -1,6 +1,7 @@
 import { and, asc, count, desc, eq, inArray, sql, type SQL } from "drizzle-orm";
 import { isListed, mediaIsLive, variantIsLive } from "./visibility";
 import { splitNearbyFacts } from "./dossier";
+import { reraSnapshotProblem, type ReraSnapshot } from "@/lib/rera/snapshot";
 import { reraSourcedFacts, type CheckedRecord } from "./rera-source";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import {
@@ -446,6 +447,7 @@ export const getPublishedPropertyBySlug = async (
       reraCarpetAreaRangeMaxSqft: properties.reraCarpetAreaRangeMaxSqft,
       reraConstructionProgressPercent:
         properties.reraConstructionProgressPercent,
+      reraSnapshot: properties.reraSnapshot,
       totalTowers: properties.totalTowers,
       totalFloors: properties.totalFloors,
       totalUnits: properties.totalUnits,
@@ -664,6 +666,12 @@ export const getPublishedPropertyBySlug = async (
         possessionDate: row.possessionDate ?? null,
         totalUnits: row.totalUnits ?? null,
       }),
+      // A stored object that is not a snapshot of the current shape is not shown.
+      facts:
+        row.reraSnapshot !== null &&
+        reraSnapshotProblem(row.reraSnapshot) === null
+          ? (row.reraSnapshot as ReraSnapshot)
+          : null,
     },
     totalTowers: row.totalTowers ?? null,
     totalFloors: row.totalFloors ?? null,

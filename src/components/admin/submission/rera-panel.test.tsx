@@ -398,3 +398,80 @@ describe("ReraPanel — carpet area by unit type", () => {
     expect(document.querySelector('[data-slot="carpet-areas"]')).toBeNull();
   });
 });
+
+describe("ReraPanel — what the second pass reads", () => {
+  const details: NonNullable<RegulatorRecord["details"]> = {
+    version: 1,
+    layoutLandAreaSqm: 7628,
+    openAreaSqm: 3131.1,
+    coveredAreaSqm: 4496.9,
+    coveredParkingAreaSqm: null,
+    filing: {
+      quarter: "Q-14",
+      periodEndsOn: "2026-06-30",
+      source: "quarterly_filing",
+      progressPercent: 93.7,
+      blocks: [
+        { name: "A+B", progressPercent: 95.9, floors: 22, lifts: 8, slabs: 24 },
+      ],
+    },
+    inventory: {
+      totalUnits: 76,
+      bookedUnits: 63,
+      availableUnits: 13,
+      asOn: "2026-07-03",
+    },
+    filings: { listed: 18, submitted: 17 },
+    planPassingAuthority: "AUDA",
+    registeredOn: "2022-11-11",
+    architects: [],
+    engineers: [],
+    contractors: [],
+    boundary: [
+      { lat: 23.0275, lng: 72.4888 },
+      { lat: 23.0274, lng: 72.49 },
+      { lat: 23.0269, lng: 72.49 },
+    ],
+    centre: { lat: 23.0272712, lng: 72.4894294 },
+  };
+
+  it("shows the same lines a buyer would see, the boundary and the availability by carpet area", () => {
+    renderPanel(
+      fetched([], {
+        details,
+        carpetGroups: [
+          {
+            block: "A",
+            carpetAreaSqm: 369.54,
+            flatCount: 36,
+            firstFlat: "A-301",
+            lastFlat: "A-2002",
+            bookedCount: 12,
+          },
+        ],
+      }),
+    );
+
+    const extras = within(
+      document.querySelector('[data-slot="rera-extras"]') as HTMLElement,
+    );
+    expect(extras.getByText("Open area")).toBeInTheDocument();
+    expect(
+      extras.getByText("33,703 sq ft, 41% of the site"),
+    ).toBeInTheDocument();
+    expect(extras.getByText("13 of 76, as on 3 Jul 2026")).toBeInTheDocument();
+    expect(
+      extras.getByText("3 points, centre 23.0272712, 72.4894294"),
+    ).toBeInTheDocument();
+    expect(
+      extras.getByText("1 carpet area listed, 24 of 36 flats available"),
+    ).toBeInTheDocument();
+  });
+
+  it("adds nothing for a record fetched before these facts were read", () => {
+    renderPanel(fetched([]));
+
+    expect(screen.queryByText("Open area")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Boundary/)).not.toBeInTheDocument();
+  });
+});

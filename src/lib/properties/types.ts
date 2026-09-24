@@ -112,6 +112,7 @@ export interface DossierPossession {
   launchDate: string | null;
 }
 
+import type { ReraSnapshot } from "@/lib/rera/snapshot";
 import type { ReraSourcedFact } from "./rera-source";
 
 export interface DossierRera {
@@ -130,6 +131,11 @@ export interface DossierRera {
    * published. Only these may carry a "Source: GujRERA" line; a value that came
    * from a brochure or that differs from RERA's is not listed. */
   sourcedFacts: ReraSourcedFact[];
+  /** What the regulator states about the project beyond the fields above (schema
+   * v17), each figure with the quarter or date it is as on; null until a RERA check
+   * has been published. Every value in it is the regulator's, so it is credited to
+   * the regulator as a whole. */
+  facts: ReraSnapshot | null;
 }
 
 export interface UnitArea {

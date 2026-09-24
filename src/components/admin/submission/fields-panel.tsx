@@ -13,12 +13,29 @@ import {
   ROUTER_EVIDENCE_PREFIX,
   isRouterEvidence,
 } from "@/lib/ocr/single-facility";
-import { isManagedElsewhere } from "@/lib/submissions/edit-only-fields";
+import { mapEmbedUrl } from "@/lib/properties/map-url";
+import {
+  isManagedElsewhere,
+  MAP_URL_FIELD_KEY,
+} from "@/lib/submissions/edit-only-fields";
 import { ConfirmAction } from "./confirm-action";
 import { InlineField } from "./inline-field";
 import { ExpandableImage } from "./expandable-image";
 import { FieldValue } from "./field-value";
 import { displayReraValue } from "./rera-panel";
+
+/** The map link a submission would publish: its own candidate unless rejected,
+ * else what is live. */
+const mapUrlOf = (submission: SubmissionDetail): string | null => {
+  const candidate = submission.fields.find(
+    (field) =>
+      field.fieldKey === MAP_URL_FIELD_KEY && field.reviewStatus !== "rejected",
+  );
+  const value = candidate
+    ? candidate.value
+    : submission.live[MAP_URL_FIELD_KEY];
+  return typeof value === "string" && value.trim() !== "" ? value : null;
+};
 
 /** What an edit of a live property can and cannot do with a whole-set field. */
 const EDIT_NOTES: Record<string, string> = {
@@ -116,6 +133,56 @@ function RouterSuggestion({
         {snippet.replace(ROUTER_EVIDENCE_PREFIX, "Router-detected: ")} No
         extraction read this page, so check the picture before confirming.
       </p>
+    </div>
+  );
+}
+
+/**
+ * The map a link draws, beside the link, so an admin or the developer confirms a
+ * place by looking at it and not by reading a URL. RERA proposes the centre of the
+ * project's boundary (or a search from its name) and the proposal waits for review
+ * until someone has looked (`DECISIONS.md` 2026-09-24).
+ */
+function MapPreview({
+  url,
+  waiting,
+}: {
+  url: string | null;
+  waiting: boolean;
+}) {
+  const embed = mapEmbedUrl(url);
+  if (url === null) {
+    return (
+      <p
+        data-slot="map-preview-empty"
+        className="text-muted-foreground mt-3 text-sm"
+      >
+        No map link yet. Paste a Google Maps link above and the map it draws
+        appears here.
+      </p>
+    );
+  }
+  return (
+    <div data-slot="map-preview" className="mt-4 flex flex-col gap-2">
+      <p className="text-muted-foreground max-w-prose text-sm">
+        {waiting
+          ? "RERA proposed this place. Look at the map: is it the project? Then confirm the link above, or paste a better one."
+          : "The map this link draws, as buyers will see it."}
+      </p>
+      {embed ? (
+        <iframe
+          src={embed}
+          title="Map preview of the link above"
+          loading="lazy"
+          referrerPolicy="no-referrer-when-downgrade"
+          className="border-border aspect-[16/9] w-full rounded-lg border"
+        />
+      ) : (
+        <p className="text-muted-foreground text-sm">
+          This link opens in Google Maps but cannot be drawn here, so check it
+          by opening it.
+        </p>
+      )}
     </div>
   );
 }
@@ -465,6 +532,19 @@ export function FieldsPanel({
               );
             })}
           </ul>
+          {group.key === "location" ? (
+            <MapPreview
+              url={mapUrlOf(submission)}
+              waiting={
+                reviewable &&
+                submission.fields.some(
+                  (field) =>
+                    field.fieldKey === MAP_URL_FIELD_KEY &&
+                    field.reviewStatus === "needs_review",
+                )
+              }
+            />
+          ) : null}
         </section>
       ))}
     </div>

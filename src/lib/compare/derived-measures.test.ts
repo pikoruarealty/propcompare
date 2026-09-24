@@ -9,7 +9,7 @@ import { buildComparison } from "./model";
 
 /**
  * The comparison rows worked out from stated inputs (`docs/tasklists/
- * 2026-09-23-comparison-derived-metrics.md`): land area, units per acre, units per
+ * 2026-09-23-comparison-derived-metrics.md`): land area, density, units per
  * floor, efficiency, balcony share, the developer's completed projects, and the
  * category headings over amenities and specifications. The rule they share: a
  * missing input reads "not stated", never a smaller or wrong number.
@@ -110,8 +110,8 @@ describe("land area and units per acre", () => {
       "87,120 sq ft (2.00 acres)",
     ]);
     expect(rowOf(model, "units_per_acre")?.cells.map((c) => c.text)).toEqual([
-      "30 per acre",
-      "60 per acre",
+      "30 units per acre",
+      "60 units per acre",
     ]);
     expect(rowOf(model, "units_per_acre")?.status).toBe("differs");
   });
@@ -128,8 +128,8 @@ describe("land area and units per acre", () => {
       "87,120 sq ft (2.00 acres)",
     ]);
     expect(rowOf(model, "units_per_acre")?.cells.map((c) => c.text)).toEqual([
-      "50 per acre (land area per RERA)",
-      "50 per acre",
+      "50 units per acre (land area per RERA)",
+      "50 units per acre",
     ]);
   });
 

@@ -22,6 +22,8 @@ import type {
   PropertyDossier,
 } from "@/lib/properties/types";
 import type { ReraSourcedFact } from "@/lib/properties/rera-source";
+import { blockNamedIn, groupSqft } from "@/lib/rera/carpet-area";
+import type { ReraSnapshot } from "@/lib/rera/snapshot";
 import { areaToSqft } from "@/lib/units/measurements";
 
 /**
@@ -530,6 +532,98 @@ const balconyPercent = (variant: DossierUnitVariant | null): number | null => {
 };
 
 /* ------------------------------------------------------------------ */
+/* What the regulator states (schema v17 snapshot)                     */
+/* ------------------------------------------------------------------ */
+
+/*
+ * Every figure here is the regulator's, with the quarter or date it is as on, so
+ * each cell is credited to it. A figure the record does not state is "not stated",
+ * never zero, and the arithmetic (share of the site, units per lift) is done only
+ * when every input is stated.
+ */
+
+const sqmText = (sqm: number): string =>
+  `${formatSqft(String(Math.round(areaToSqft(sqm, "sqm"))))} sq ft`;
+
+/** Open area as a share of the whole site: open plus covered, else the layout land. */
+const openAreaShare = (facts: ReraSnapshot): number | null => {
+  if (facts.openAreaSqm === null) return null;
+  const whole =
+    facts.coveredAreaSqm !== null
+      ? facts.openAreaSqm + facts.coveredAreaSqm
+      : facts.layoutLandAreaSqm;
+  return whole !== null && whole > 0 ? (facts.openAreaSqm / whole) * 100 : null;
+};
+
+/** Lifts across the blocks, only when every block states its own. */
+const liftsTotal = (facts: ReraSnapshot): number | null => {
+  const blocks = facts.filing.blocks;
+  if (blocks.length === 0 || blocks.some((block) => block.lifts === null)) {
+    return null;
+  }
+  return blocks.reduce((sum, block) => sum + (block.lifts as number), 0);
+};
+
+/** The most floors any block states: a block can hold several towers, so this is
+ * the regulator's count and is labelled as such. */
+const floorsMostStated = (facts: ReraSnapshot): number | null => {
+  const floors = facts.filing.blocks
+    .map((block) => block.floors)
+    .filter((value): value is number => value !== null);
+  return floors.length === 0 ? null : Math.max(...floors);
+};
+
+/** The regulator's carpet-area groups that belong to a unit type: within a square
+ * foot of its stated carpet area, and in its block when its name names one. */
+const carpetGroupsFor = (
+  facts: ReraSnapshot,
+  variant: DossierUnitVariant | null,
+) => {
+  if (variant === null) return [];
+  const carpet = positiveNumber(areasByBasis(variant.areas).carpet);
+  if (carpet === null) return [];
+  const block = blockNamedIn(variant.variantName);
+  return facts.carpetGroups.filter(
+    (group) =>
+      (block === null || group.block === block) &&
+      Math.abs(groupSqft(group) - carpet) <= 1,
+  );
+};
+
+const partyText = (
+  parties: { name: string; projectsCompleted: number | null }[],
+): string | null =>
+  parties.length === 0
+    ? null
+    : parties
+        .map((party) =>
+          party.projectsCompleted === null
+            ? party.name
+            : `${party.name} (${party.projectsCompleted} projects)`,
+        )
+        .join("\n");
+
+/** Progress with the period it is to, when it is the regulator's own filing figure
+ * (a hand-entered figure that differs is not credited to a quarter). */
+const progressLabel = (dossier: PropertyDossier): string | null => {
+  const base = progressText(dossier.rera.constructionProgressPercent);
+  const filing = dossier.rera.facts?.filing;
+  if (
+    base === null ||
+    !filing ||
+    filing.source !== "quarterly_filing" ||
+    !filing.periodEndsOn ||
+    filing.progressPercent === null ||
+    Math.abs(
+      Number(dossier.rera.constructionProgressPercent) - filing.progressPercent,
+    ) > 0.05
+  ) {
+    return base;
+  }
+  return `${base} (to ${shortDate(filing.periodEndsOn)})`;
+};
+
+/* ------------------------------------------------------------------ */
 /* Rooms, compared by kind                                             */
 /* ------------------------------------------------------------------ */
 
@@ -692,7 +786,7 @@ export const buildComparison = (
             d.rera.constructionProgressPercent === null
               ? null
               : Number(d.rera.constructionProgressPercent),
-            progressText(d.rera.constructionProgressPercent),
+            progressLabel(d),
             sourced(d, "construction_progress"),
           ),
         { numeric: true },
@@ -766,6 +860,52 @@ export const buildComparison = (
       },
       { numeric: true },
     ),
+    row(
+      "units_available_of_type",
+      "Units of this type available",
+      (d, v) => {
+        const facts = d.rera.facts;
+        const matched = facts ? carpetGroupsFor(facts, v) : [];
+        if (
+          matched.length === 0 ||
+          matched.some((group) => group.bookedCount === undefined)
+        ) {
+          return textCell(null);
+        }
+        const flats = matched.reduce((sum, group) => sum + group.flatCount, 0);
+        const booked = matched.reduce(
+          (sum, group) => sum + (group.bookedCount ?? 0),
+          0,
+        );
+        const asOn = shortDate(facts?.inventory?.asOn ?? null);
+        return numberCell(
+          flats - booked,
+          `${flats - booked} of ${flats}${asOn ? `, as on ${asOn}` : ""}`,
+          true,
+        );
+      },
+      { numeric: true },
+    ),
+    row("exclusive_area", "Balcony and open terrace (RERA)", (d, v) => {
+      const facts = d.rera.facts;
+      const matched = facts ? carpetGroupsFor(facts, v) : [];
+      const mins = matched
+        .map((group) => group.exclusiveAreaMinSqm)
+        .filter((value): value is number => value !== undefined);
+      const maxes = matched
+        .map((group) => group.exclusiveAreaMaxSqm)
+        .filter((value): value is number => value !== undefined);
+      if (mins.length === 0 || maxes.length === 0) return textCell(null);
+      const low = Math.min(...mins);
+      const high = Math.max(...maxes);
+      return textCell(
+        Math.round(areaToSqft(low, "sqm")) ===
+          Math.round(areaToSqft(high, "sqm"))
+          ? sqmText(low)
+          : `${formatSqft(String(Math.round(areaToSqft(low, "sqm"))))} to ${sqmText(high)}`,
+        true,
+      );
+    }),
   );
   groups.push({ key: "unit_type", title: "The unit type", rows: unitRows });
 
@@ -800,6 +940,15 @@ export const buildComparison = (
     rows: [
       row("property_type", "Type", (d) => textCell(d.propertyType.label)),
       row("developer", "Developer", (d) => textCell(d.developer.name)),
+      row("architect", "Architect", (d) =>
+        textCell(partyText(d.rera.facts?.architects ?? []), true),
+      ),
+      row("engineer", "Structural engineer", (d) =>
+        textCell(partyText(d.rera.facts?.engineers ?? []), true),
+      ),
+      row("contractor", "Contractor", (d) =>
+        textCell(partyText(d.rera.facts?.contractors ?? []), true),
+      ),
       row("locality", "Locality", (d) => textCell(d.location.locality)),
       row("city", "City", (d) => textCell(d.location.city)),
       row("pincode", "Pincode", (d) => textCell(d.location.pincode)),
@@ -836,18 +985,109 @@ export const buildComparison = (
       ),
       row(
         "units_per_acre",
-        "Units per acre (calculated)",
+        "Density",
         (d) => {
           const density = unitsPerAcre(d);
           return numberCell(
             density === null ? null : Math.round(density.perAcre * 10) / 10,
             density === null
               ? null
-              : `${oneDecimal(density.perAcre)} per acre${density.fromRera ? " (land area per RERA)" : ""}`,
+              : `${oneDecimal(density.perAcre)} units per acre${density.fromRera ? " (land area per RERA)" : ""}`,
           );
         },
         { numeric: true },
       ),
+      row(
+        "open_area",
+        "Open area",
+        (d) => {
+          const facts = d.rera.facts;
+          const share = facts ? openAreaShare(facts) : null;
+          return numberCell(
+            share === null ? null : Math.round(share * 10) / 10,
+            facts === null || facts.openAreaSqm === null || share === null
+              ? null
+              : `${sqmText(facts.openAreaSqm)}, ${oneDecimal(share)}% of the site`,
+            true,
+          );
+        },
+        { numeric: true },
+      ),
+      row(
+        "units_available",
+        "Units available",
+        (d) => {
+          const inventory = d.rera.facts?.inventory;
+          if (
+            !inventory ||
+            inventory.availableUnits === null ||
+            inventory.totalUnits === null
+          ) {
+            return textCell(null);
+          }
+          const asOn = shortDate(inventory.asOn);
+          return numberCell(
+            inventory.availableUnits,
+            `${inventory.availableUnits} of ${inventory.totalUnits}${asOn ? `, as on ${asOn}` : ""}`,
+            true,
+          );
+        },
+        { numeric: true },
+      ),
+      row(
+        "lifts",
+        "Lifts",
+        (d) => {
+          const lifts = d.rera.facts ? liftsTotal(d.rera.facts) : null;
+          return numberCell(lifts, lifts === null ? null : String(lifts), true);
+        },
+        { numeric: true },
+      ),
+      row(
+        "units_per_lift",
+        "Units per lift (calculated)",
+        (d) => {
+          const lifts = d.rera.facts ? liftsTotal(d.rera.facts) : null;
+          const units = positiveNumber(
+            d.totalUnits ?? d.rera.facts?.inventory?.totalUnits ?? null,
+          );
+          if (lifts === null || lifts <= 0 || units === null) {
+            return textCell(null);
+          }
+          const perLift = units / lifts;
+          return numberCell(
+            Math.round(perLift * 10) / 10,
+            `${oneDecimal(perLift)} units per lift`,
+            true,
+          );
+        },
+        { numeric: true },
+      ),
+      row(
+        "floors_rera",
+        "Floors (per RERA)",
+        (d) => {
+          const floors = d.rera.facts ? floorsMostStated(d.rera.facts) : null;
+          return numberCell(
+            floors,
+            floors === null ? null : String(floors),
+            true,
+          );
+        },
+        { numeric: true },
+      ),
+      row("plan_authority", "Plans passed by", (d) =>
+        textCell(d.rera.facts?.planPassingAuthority ?? null, true),
+      ),
+      row("registered_on", "RERA registered on", (d) =>
+        textCell(shortDate(d.rera.facts?.registeredOn ?? null), true),
+      ),
+      row("filings", "Regulator filings submitted", (d) => {
+        const filings = d.rera.facts?.filings;
+        return filings
+          ? textCell(`${filings.submitted} of ${filings.listed}`, true)
+          : textCell(null);
+      }),
       row(
         "developer_completed",
         "Developer's completed projects listed here",

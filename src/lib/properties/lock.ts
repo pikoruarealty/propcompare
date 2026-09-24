@@ -38,6 +38,14 @@ export const lockDossier = (dossier: PropertyDossier): PropertyDossier => {
       areas: [],
     })),
     amenities: [],
+    // The project's facts stay open; what is listed per carpet area is unit-type
+    // depth, so it goes with the unit types' measurements.
+    rera: {
+      ...dossier.rera,
+      facts: dossier.rera.facts
+        ? { ...dossier.rera.facts, carpetGroups: [] }
+        : null,
+    },
     media: preview,
     lock: {
       hiddenPhotos: photos.length - preview.length,

@@ -6,6 +6,8 @@ import { describeGroup, type CarpetUnitRow } from "@/lib/rera/carpet-area";
 import type { ReraComparisonItem } from "@/lib/rera/mapping";
 import { writableItems } from "@/lib/rera/mapping";
 import type { ReraState } from "@/lib/rera/submission-fetch";
+import { reraFactLines } from "@/lib/properties/rera-facts";
+import { buildReraSnapshot } from "@/lib/rera/snapshot";
 import type { RegulatorRecord } from "@/lib/rera/types";
 import { cn } from "@/lib/utils";
 import { ConfirmAction } from "./confirm-action";
@@ -432,6 +434,34 @@ function ReraExtras({ record }: { record: RegulatorRecord }) {
   if (record.coveredParkingSlots !== null) {
     facts.push(["Covered parking", `${record.coveredParkingSlots} slots`]);
   }
+  // What the second pass reads (schema v17): the same lines a buyer sees, so an
+  // admin reviews exactly what would be shown, plus the boundary that gave the pin.
+  const snapshot = buildReraSnapshot(record);
+  if (snapshot) {
+    for (const line of reraFactLines(snapshot)) {
+      facts.push([line.label, line.value]);
+    }
+    if (snapshot.boundary.length > 0 && snapshot.centre) {
+      facts.push([
+        "Boundary",
+        `${snapshot.boundary.length} points, centre ${snapshot.centre.lat}, ${snapshot.centre.lng}`,
+      ]);
+    }
+    const groups = snapshot.carpetGroups.filter(
+      (group) => group.bookedCount !== undefined,
+    );
+    if (groups.length > 0) {
+      const flats = groups.reduce((sum, group) => sum + group.flatCount, 0);
+      const booked = groups.reduce(
+        (sum, group) => sum + (group.bookedCount ?? 0),
+        0,
+      );
+      facts.push([
+        "Availability by carpet area",
+        `${groups.length} carpet area${groups.length === 1 ? "" : "s"} listed, ${flats - booked} of ${flats} flats available`,
+      ]);
+    }
+  }
   if (facts.length === 0) return null;
   return (
     <div data-slot="rera-extras">
@@ -441,8 +471,9 @@ function ReraExtras({ record }: { record: RegulatorRecord }) {
         ))}
       </dl>
       <p className="text-muted-foreground mt-2 text-xs">
-        Also on the RERA record, for reference. Not written to the listing: a
-        block can hold several towers, so blocks are not tower or floor counts.
+        {
+          "Also on the RERA record. The facts with a quarter or date are kept on the listing as RERA project facts when you use RERA's values. A block can hold several towers, so blocks are not tower or floor counts."
+        }
       </p>
     </div>
   );

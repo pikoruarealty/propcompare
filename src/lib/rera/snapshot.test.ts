@@ -103,8 +103,9 @@ describe("reraSnapshotProblem", () => {
   });
 
   it("refuses a snapshot missing a list it must carry", () => {
-    const { boundary: _boundary, ...rest } = good();
-    expect(reraSnapshotProblem(rest)).toMatch(/boundary/);
+    const without = good();
+    delete without.boundary;
+    expect(reraSnapshotProblem(without)).toMatch(/boundary/);
   });
 
   it.each([
