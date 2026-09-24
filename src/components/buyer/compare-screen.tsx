@@ -22,6 +22,7 @@ import type {
   CompareModel,
   CompareRow,
 } from "@/lib/compare/model";
+import { humaniseCategory } from "@/lib/properties/dossier";
 import type { PropertyDossier } from "@/lib/properties/types";
 import { cn } from "@/lib/utils";
 import { BuyerLoginForm } from "@/components/auth/buyer-login-form";
@@ -136,6 +137,27 @@ function Cell({ cell, hidden }: { cell: CompareCell; hidden: boolean }) {
     </div>
   );
 }
+
+/**
+ * A heading over a run of rows that share a catalog category (amenities and
+ * specifications). Every row is still shown under it; it only adds structure.
+ */
+function CategoryHeading({ category }: { category: string }) {
+  return (
+    <div
+      role="row"
+      data-slot="compare-category"
+      className="border-border bg-tone-sage text-muted-foreground border-b px-3 py-1.5 text-xs font-semibold tracking-[0.08em] uppercase"
+    >
+      <span role="columnheader">{humaniseCategory(category)}</span>
+    </div>
+  );
+}
+
+/** Whether a row opens a new category run: it names one and the row before did not. */
+const startsCategory = (rows: CompareRow[], index: number): boolean =>
+  rows[index].category !== undefined &&
+  rows[index].category !== rows[index - 1]?.category;
 
 function Row({
   row,
@@ -1332,12 +1354,16 @@ export function CompareScreen({
                           />
                         ) : null}
                         {group.rows.map((row, rowIndex) => (
-                          <LockedRow
-                            key={row.key}
-                            label={row.label}
-                            count={count}
-                            index={(rowIndex + 1) * 2}
-                          />
+                          <React.Fragment key={row.key}>
+                            {startsCategory(group.rows, rowIndex) ? (
+                              <CategoryHeading category={row.category!} />
+                            ) : null}
+                            <LockedRow
+                              label={row.label}
+                              count={count}
+                              index={(rowIndex + 1) * 2}
+                            />
+                          </React.Fragment>
                         ))}
                       </>
                     ) : (
@@ -1348,13 +1374,13 @@ export function CompareScreen({
                             visible={visible}
                           />
                         ) : null}
-                        {group.rows.map((row) => (
-                          <Row
-                            key={row.key}
-                            row={row}
-                            count={count}
-                            visible={visible}
-                          />
+                        {group.rows.map((row, rowIndex) => (
+                          <React.Fragment key={row.key}>
+                            {startsCategory(group.rows, rowIndex) ? (
+                              <CategoryHeading category={row.category!} />
+                            ) : null}
+                            <Row row={row} count={count} visible={visible} />
+                          </React.Fragment>
                         ))}
                       </>
                     )}

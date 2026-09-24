@@ -22,6 +22,7 @@ import type {
   PropertyDossier,
 } from "@/lib/properties/types";
 import type { ReraSourcedFact } from "@/lib/properties/rera-source";
+import { areaToSqft } from "@/lib/units/measurements";
 
 /**
  * The comparison of two or three published properties, as data (specification:
@@ -74,6 +75,10 @@ export interface CompareRow {
   label: string;
   cells: CompareCell[];
   status: RowStatus;
+  /** The catalog category this row belongs to (amenities and specifications), so the
+   * screen can head each run of rows. A label of the vocabulary, not a fact about a
+   * property, so a locked model keeps it. */
+  category?: string;
 }
 
 export type GroupKey =
@@ -343,7 +348,7 @@ const finishRow = (
   key: string,
   label: string,
   cells: CompareCell[],
-  options: { numeric?: boolean } = {},
+  options: { numeric?: boolean; category?: string } = {},
 ): CompareRow => {
   const stated = cells.filter((cell) => cell.state === "value");
   let status: RowStatus;
@@ -376,7 +381,13 @@ const finishRow = (
         : cell,
     );
   }
-  return { key, label, cells: sized, status };
+  return {
+    key,
+    label,
+    cells: sized,
+    status,
+    ...(options.category === undefined ? {} : { category: options.category }),
+  };
 };
 
 const AMENITY_STATE = (status: CatalogItemStatus): CompareCell =>
@@ -429,6 +440,93 @@ const monthsBetween = (earlier: string, later: string): number => {
 const progressText = (value: string | null): string | null => {
   const number = value === null ? NaN : Number(value);
   return Number.isFinite(number) ? `${Math.round(number * 10) / 10}%` : null;
+};
+
+/* ------------------------------------------------------------------ */
+/* Measures worked out from stated inputs                              */
+/* ------------------------------------------------------------------ */
+
+/*
+ * Each of these is arithmetic over facts already held, never a guess: if any input
+ * is missing the cell says "not stated", not a smaller or wrong number, and a
+ * result that could not be real (an efficiency over 100%) is not shown either. No
+ * price, and nothing here ranks a property.
+ */
+
+const positiveNumber = (value: string | number | null): number | null => {
+  const number = value === null ? NaN : Number(value);
+  return Number.isFinite(number) && number > 0 ? number : null;
+};
+
+const oneDecimal = (value: number): string =>
+  String(Math.round(value * 10) / 10);
+
+/** Square feet in an acre, from the one place units are defined. */
+const SQFT_PER_ACRE = areaToSqft(1, "acre");
+
+interface LandArea {
+  sqft: number;
+  /** True when the property states no plot area of its own and this is RERA's
+   * registered land area (owner-approved fallback, 2026-09-24). */
+  fromRera: boolean;
+}
+
+const landAreaOf = (dossier: PropertyDossier): LandArea | null => {
+  const own = positiveNumber(dossier.plotAreaSqft);
+  if (own !== null) return { sqft: own, fromRera: false };
+  const rera = positiveNumber(dossier.rera.projectLandAreaSqft);
+  return rera === null ? null : { sqft: rera, fromRera: true };
+};
+
+const landAreaText = (land: LandArea): string =>
+  `${formatSqft(String(Math.round(land.sqft)))} sq ft (${(land.sqft / SQFT_PER_ACRE).toFixed(2)} acres)${land.fromRera ? ", per RERA" : ""}`;
+
+const unitsPerAcre = (
+  dossier: PropertyDossier,
+): {
+  perAcre: number;
+  fromRera: boolean;
+} | null => {
+  const land = landAreaOf(dossier);
+  const units = positiveNumber(dossier.totalUnits);
+  if (land === null || units === null) return null;
+  return {
+    perAcre: units / (land.sqft / SQFT_PER_ACRE),
+    fromRera: land.fromRera,
+  };
+};
+
+/** Carpet as a share of super built-up area, only when both are stated and the
+ * result is possible (carpet is inside super built-up, never larger). */
+const efficiencyPercent = (
+  variant: DossierUnitVariant | null,
+): number | null => {
+  if (variant === null) return null;
+  const areas = areasByBasis(variant.areas);
+  const carpet = positiveNumber(areas.carpet);
+  const superBuiltUp = positiveNumber(areas.super_built_up);
+  if (carpet === null || superBuiltUp === null || carpet > superBuiltUp) {
+    return null;
+  }
+  return (carpet / superBuiltUp) * 100;
+};
+
+/** Every balcony and terrace room's own area, summed (a room's printed area, or its
+ * two sides multiplied; `formatRoomDimension` labels the difference), as a share of
+ * the unit type's stated carpet area. Owner decision 2026-09-24: carpet, not super
+ * built-up. Not stated when there is no balcony room or no carpet area. */
+const balconyPercent = (variant: DossierUnitVariant | null): number | null => {
+  if (variant === null) return null;
+  const carpet = positiveNumber(areasByBasis(variant.areas).carpet);
+  const rooms = readRoomDimensions(variant.dimensions);
+  if (carpet === null || rooms === null) return null;
+  const balconies = rooms.filter((room) => roomKind(room.name) === "balcony");
+  if (balconies.length === 0) return null;
+  const area = balconies.reduce(
+    (total, room) => total + (room.areaSqft ?? room.lengthFt * room.widthFt),
+    0,
+  );
+  return area > 0 ? (area / carpet) * 100 : null;
 };
 
 /* ------------------------------------------------------------------ */
@@ -561,7 +659,7 @@ export const buildComparison = (
       dossier: PropertyDossier,
       variant: DossierUnitVariant | null,
     ) => CompareCell,
-    options?: { numeric?: boolean },
+    options?: { numeric?: boolean; category?: string },
   ) =>
     finishRow(
       key,
@@ -637,6 +735,38 @@ export const buildComparison = (
       ),
     ),
   );
+  unitRows.push(
+    row("units_per_floor", "Units per floor", (_d, v) =>
+      numberCell(
+        v?.unitsPerFloor ?? null,
+        v?.unitsPerFloor == null ? null : String(v.unitsPerFloor),
+      ),
+    ),
+    row(
+      "efficiency",
+      "Efficiency (carpet share of super built-up)",
+      (_d, v) => {
+        const percent = efficiencyPercent(v);
+        return numberCell(
+          percent === null ? null : Math.round(percent * 10) / 10,
+          percent === null ? null : `${oneDecimal(percent)}%`,
+        );
+      },
+      { numeric: true },
+    ),
+    row(
+      "balcony_ratio",
+      "Balcony area (share of carpet area)",
+      (_d, v) => {
+        const percent = balconyPercent(v);
+        return numberCell(
+          percent === null ? null : Math.round(percent * 10) / 10,
+          percent === null ? null : `${oneDecimal(percent)}%`,
+        );
+      },
+      { numeric: true },
+    ),
+  );
   groups.push({ key: "unit_type", title: "The unit type", rows: unitRows });
 
   groups.push({
@@ -692,6 +822,41 @@ export const buildComparison = (
           sourced(d, "total_units"),
         ),
       ),
+      row(
+        "land_area",
+        "Land area",
+        (d) => {
+          const land = landAreaOf(d);
+          return numberCell(
+            land === null ? null : land.sqft,
+            land === null ? null : landAreaText(land),
+          );
+        },
+        { numeric: true },
+      ),
+      row(
+        "units_per_acre",
+        "Units per acre (calculated)",
+        (d) => {
+          const density = unitsPerAcre(d);
+          return numberCell(
+            density === null ? null : Math.round(density.perAcre * 10) / 10,
+            density === null
+              ? null
+              : `${oneDecimal(density.perAcre)} per acre${density.fromRera ? " (land area per RERA)" : ""}`,
+          );
+        },
+        { numeric: true },
+      ),
+      row(
+        "developer_completed",
+        "Developer's completed projects listed here",
+        (d) =>
+          numberCell(
+            d.developer.completedProjectsCount,
+            String(d.developer.completedProjectsCount),
+          ),
+      ),
     ],
   });
 
@@ -717,10 +882,15 @@ export const buildComparison = (
           a[1].label.localeCompare(b[1].label),
       )
       .map(([key, meta]) =>
-        row(`amenity_${key}`, meta.label, (d) => {
-          const found = d.amenities.find((amenity) => amenity.key === key);
-          return AMENITY_STATE(found?.status ?? "not_stated");
-        }),
+        row(
+          `amenity_${key}`,
+          meta.label,
+          (d) => {
+            const found = d.amenities.find((amenity) => amenity.key === key);
+            return AMENITY_STATE(found?.status ?? "not_stated");
+          },
+          { category: meta.category },
+        ),
       ),
   });
 
@@ -781,16 +951,21 @@ export const buildComparison = (
           a[1].label.localeCompare(b[1].label),
       )
       .map(([key, meta]) =>
-        row(`spec_${key}`, meta.label, (d) => {
-          const found = d.specifications.find((spec) => spec.key === key);
-          if (!found) return missing("not_stated");
-          if (found.status === "explicitly_not_offered")
-            return missing("not_offered");
-          // A printed run of items ("A; B; C") is one item to a line.
-          return textCell(
-            splitListValue(found.valueText)?.join("\n") ?? found.valueText,
-          );
-        }),
+        row(
+          `spec_${key}`,
+          meta.label,
+          (d) => {
+            const found = d.specifications.find((spec) => spec.key === key);
+            if (!found) return missing("not_stated");
+            if (found.status === "explicitly_not_offered")
+              return missing("not_offered");
+            // A printed run of items ("A; B; C") is one item to a line.
+            return textCell(
+              splitListValue(found.valueText)?.join("\n") ?? found.valueText,
+            );
+          },
+          { category: meta.category },
+        ),
       ),
   });
 
