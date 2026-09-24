@@ -1,8 +1,10 @@
 import "dotenv/config";
 import { randomUUID } from "node:crypto";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, like } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { db } from "@/db";
+import { serviceDb } from "@/db/service";
+import { reraPriceRanges } from "@/db/schema/private";
 import { users } from "@/db/schema/auth";
 import {
   developerLegalEntities,
@@ -28,6 +30,7 @@ import {
   searchResponse,
   summaryResponse,
 } from "./gujrera.fixtures";
+import { readReraPriceRange } from "@/lib/pricing/ranges";
 import { createRegulatorRegistry } from "./registry";
 import {
   applyReraValues,
@@ -153,6 +156,10 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  // The price range each check keeps in the private schema (test numbers only).
+  await serviceDb
+    .delete(reraPriceRanges)
+    .where(like(reraPriceRanges.registrationNumber, "PR/GJ/TEST/%"));
   await db.delete(reraFetchJobs).where(eq(reraFetchJobs.requestedBy, userId));
   if (submissionIds.length > 0) {
     await db
@@ -214,6 +221,29 @@ describe("fetching a RERA record for a submission", () => {
     expect(stored).not.toContain(String(POISON));
     expect(stored).not.toMatch(/mincost|maxcost|estimatedCost|unitConsider/i);
     expect(stored).not.toMatch(/poison@|promoterEmail/i);
+  });
+
+  it("keeps the project's stated price range in the private schema and nowhere public", async () => {
+    const submissionId = await newDraft();
+
+    const result = await fetchReraForSubmission(db, {
+      submissionId,
+      registrationNumber: TEST_NUMBER,
+      requestedBy: userId,
+      registry: stubRegistry(),
+    });
+
+    // The fixture's search hit states POISON as both ends of the range.
+    expect(await readReraPriceRange(serviceDb, TEST_NUMBER)).toMatchObject({
+      minInr: String(POISON),
+      maxInr: String(POISON),
+    });
+    const [job] = await db
+      .select()
+      .from(reraFetchJobs)
+      .where(eq(reraFetchJobs.id, result.jobId));
+    expect(JSON.stringify(job)).not.toContain(String(POISON));
+    expect(JSON.stringify(result.record)).not.toContain(String(POISON));
   });
 
   it("proposes the developer's matching legal entity", async () => {

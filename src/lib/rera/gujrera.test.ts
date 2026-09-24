@@ -500,3 +500,66 @@ describe("GujRERA adapter — carpet area per flat", () => {
     ]);
   });
 });
+
+describe("GujRERA adapter, the project price range", () => {
+  const withCosts = (mincost: unknown, maxcost: unknown) =>
+    fakeSite({
+      "/project_reg/public/global-search": searchResponse([
+        { ...kimanaSearchHit, mincost, maxcost },
+      ]),
+    });
+
+  it("reads the project's stated minimum and maximum cost, and nothing else", async () => {
+    const site = withCosts(22_573_000, 66_319_200);
+    const range = await adapterFor(site).lookupPriceRange!(KIMANA_NUMBER);
+
+    expect(range).toEqual({ minInr: 22_573_000, maxInr: 66_319_200 });
+    // One search request; it does not touch the per-flat list where prices are masked.
+    expect(site.calls).toHaveLength(1);
+    expect(site.calls[0].url).toContain("/project_reg/public/global-search");
+  });
+
+  it("rounds to whole rupees", async () => {
+    const range = await adapterFor(withCosts(22_573_000.4, 66_319_200.6))
+      .lookupPriceRange!(KIMANA_NUMBER);
+
+    expect(range).toEqual({ minInr: 22_573_000, maxInr: 66_319_201 });
+  });
+
+  it.each([
+    ["missing", undefined, undefined],
+    ["zero", 0, 0],
+    ["masked", "******", "******"],
+    ["upside down", 66_319_200, 22_573_000],
+    ["one bound only", 22_573_000, null],
+  ])("returns null when the range is %s", async (_label, min, max) => {
+    expect(
+      await adapterFor(withCosts(min, max)).lookupPriceRange!(KIMANA_NUMBER),
+    ).toBeNull();
+  });
+
+  it("refuses a number that is not a Gujarat RERA number, and a project it cannot find", async () => {
+    const adapter = adapterFor(withCosts(1, 2));
+
+    await expect(adapter.lookupPriceRange!("NOT-A-NUMBER")).rejects.toThrow(
+      RegulatorError,
+    );
+    await expect(
+      adapterFor(
+        fakeSite({
+          "/project_reg/public/global-search": searchResponse([]),
+        }),
+      ).lookupPriceRange!(KIMANA_NUMBER),
+    ).rejects.toMatchObject({ code: "not_found" });
+  });
+
+  it("leaves the record itself free of money even when the search hit states a range", async () => {
+    const record = await adapterFor(
+      withCosts(22_573_000, 66_319_200),
+    ).lookupByRegistrationNumber(KIMANA_NUMBER);
+    const everything = JSON.stringify(record);
+
+    expect(everything).not.toContain("22573000");
+    expect(everything).not.toContain("66319200");
+  });
+});

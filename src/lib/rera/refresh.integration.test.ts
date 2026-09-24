@@ -1,8 +1,10 @@
 import "dotenv/config";
 import { randomUUID } from "node:crypto";
-import { eq, inArray } from "drizzle-orm";
+import { eq, inArray, like } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { db } from "@/db";
+import { serviceDb } from "@/db/service";
+import { reraPriceRanges } from "@/db/schema/private";
 import { users } from "@/db/schema/auth";
 import {
   developerLegalEntities,
@@ -140,6 +142,10 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  // The price range each check keeps in the private schema (test numbers only).
+  await serviceDb
+    .delete(reraPriceRanges)
+    .where(like(reraPriceRanges.registrationNumber, "PR/GJ/TEST/%"));
   if (propertyIds.length > 0) {
     await db
       .delete(reraFetchJobs)

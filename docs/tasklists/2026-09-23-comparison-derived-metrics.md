@@ -14,7 +14,7 @@ Reviewing a competitor (Propsoch) surfaced that `/compare`'s "The project" group
 
 1. **Land area row** — `properties.plotAreaSqft`, formatted (consider showing acres alongside sq ft, matching how Propsoch's audience reads land size — decide unit display, not raw addition).
 2. **Unit density** (units/acre) — `totalUnits / (plotAreaSqft / 43_560)`. Missing-data rule: if either input is null, the row is "not stated," never a guess.
-3. **Units per floor (project-level)** — sum `unit_variants[].unitsPerFloor` across a property's active variants. Only shown when *every* variant states it — a partial sum would misrepresent the property, not just be incomplete.
+3. **Units per floor (project-level)** — sum `unit_variants[].unitsPerFloor` across a property's active variants. Only shown when _every_ variant states it — a partial sum would misrepresent the property, not just be incomplete.
 4. **Efficiency %** (carpet ÷ super_built_up × 100) — per unit type, in "The unit type" group, not "The project" (Propsoch shows it per-configuration, and our unit-type matching already makes that the natural home). Only computed when a unit type states both bases.
 5. **Balcony area ratio %** — balcony room area(s) ÷ the unit type's own total area, same group and same missing-data rule.
 6. **Amenity category sub-headers** — `amenity_catalog.category` is already loaded and sorted by in `model.ts`; render it as a visible group heading within the Amenities section instead of a silent sort key. Every amenity still shown (principle 2, unchanged) — this only adds structure, not hiding.
@@ -35,7 +35,7 @@ Reviewing a competitor (Propsoch) surfaced that `/compare`'s "The project" group
 
 ## Implementation checklist
 
-- [ ] Confirm missing-data behavior for each computed row against `docs/design/comparison.v1.md`'s data rules (shown only when at least one side has a value; "differs" on normalized values) — a *computed* row needs the same honesty a stated one gets: never compute from a partial input and call it a real number.
+- [ ] Confirm missing-data behavior for each computed row against `docs/design/comparison.v1.md`'s data rules (shown only when at least one side has a value; "differs" on normalized values) — a _computed_ row needs the same honesty a stated one gets: never compute from a partial input and call it a real number.
 - [ ] Land area, unit density, units-per-floor rows in "The project" group.
 - [ ] Efficiency %, balcony area ratio rows in "The unit type" group.
 - [ ] Amenity category sub-headers in the Amenities group render.

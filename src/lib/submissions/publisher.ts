@@ -1,3 +1,7 @@
+import {
+  applyPricesAfterPublish,
+  type ApplyPricesResult,
+} from "@/lib/pricing/apply";
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
@@ -63,6 +67,10 @@ export interface PublishSubmissionResult {
   propertyId: string;
   revisionId: string;
   isNewProperty: boolean;
+  /** Set when unit-type prices an admin typed were applied after the commit, or could
+   * not be (`failed`); absent when there were none. Never affects whether the
+   * property published. */
+  prices?: ApplyPricesResult & { failed: boolean };
 }
 
 const SPEC_FIELD_PREFIX = "property.specifications.";
@@ -177,7 +185,19 @@ export const publishSubmission = async (
   params: PublishSubmissionParams,
 ): Promise<PublishSubmissionResult> => {
   try {
-    return await runPublish(params);
+    const published = await runPublish(params);
+    // The publish transaction runs on the app role, which cannot touch the private
+    // schema, so admin-typed prices are applied in a second step on the service
+    // role once it has committed (`DECISIONS.md` 2026-09-24, "price data").
+    const prices = await applyPricesAfterPublish({
+      submissionId: params.submissionId,
+      propertyId: published.propertyId,
+    });
+    const anything =
+      prices.failed ||
+      prices.applied.length + prices.unchanged.length + prices.unknown.length >
+        0;
+    return anything ? { ...published, prices } : published;
   } catch (error) {
     if (error instanceof DryRunRollback) {
       return {

@@ -1,3 +1,4 @@
+import { syncReraPriceRange } from "@/lib/pricing/ranges";
 import { and, desc, eq, inArray, isNotNull, lt, ne } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import {
@@ -355,6 +356,12 @@ export const runClaimedRefresh = async (
       })),
     })
     .where(eq(reraFetchJobs.id, claim.jobId));
+  // The project's stated price range goes to the private schema, never into the
+  // record above; best effort, so it cannot fail the check.
+  await syncReraPriceRange({
+    adapter,
+    registrationNumber: claim.registrationNumber,
+  });
 
   const items = writableItems(comparison);
   if (items.length === 0) return { outcome: "unchanged", jobId: claim.jobId };

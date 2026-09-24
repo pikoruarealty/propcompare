@@ -18,6 +18,7 @@ import { isManagedElsewhere } from "@/lib/submissions/edit-only-fields";
 import { WORKING_STATUSES } from "@/lib/submissions/working-statuses";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { MediaPanel, type MediaItem } from "./submission/media-panel";
+import { PricesPanel } from "./submission/prices-panel";
 import { ReraPanel } from "./submission/rera-panel";
 import { WorkflowPanel } from "./submission/workflow-panel";
 
@@ -575,6 +576,9 @@ export function SubmissionWorkbench({
             Images
             {media.length > 0 ? <TabBadge>{media.length}</TabBadge> : null}
           </TabsTrigger>
+          {permissionLevel === "owner" ? (
+            <TabsTrigger value="prices">Prices</TabsTrigger>
+          ) : null}
         </TabsList>
 
         {/* Every tab stays mounted, only hidden, so a half-edited field is kept
@@ -662,6 +666,16 @@ export function SubmissionWorkbench({
             onGo={goToTab}
           />
         </TabsContent>
+
+        {permissionLevel === "owner" ? (
+          <TabsContent value="prices" forceMount hidden={tab !== "prices"}>
+            <PricesPanel
+              submissionId={submission.id}
+              editable={editable}
+              active={tab === "prices"}
+            />
+          </TabsContent>
+        ) : null}
       </Tabs>
 
       <WorkflowPanel

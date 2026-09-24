@@ -7,8 +7,11 @@
  * Deliberately narrow: only facts we hold a field for, plus the filing status the
  * "last checked" and quarterly refresh need. Money is never part of it. Regulator
  * sites publish project costs and per-unit prices; those must not enter this
- * database (exact prices stay in the `private` schema), so an adapter copies named
- * fields and ignores everything else.
+ * record or the public tables it is stored in, so an adapter copies named fields and
+ * ignores everything else. The one price a regulator gives that we use, a project's
+ * minimum and maximum cost, travels separately (`RegulatorPriceRange`,
+ * `RegulatorAdapter.lookupPriceRange`) into the `private` schema only
+ * (`DECISIONS.md` 2026-09-24, "price data").
  */
 export interface RegulatorRecord {
   regulatorCode: string;
@@ -57,6 +60,14 @@ export interface RegulatorRecord {
   gaps: string[];
 }
 
+/** A project's cheapest and dearest unit as the regulator states them, in whole rupees.
+ * Commercial data: it goes to the `private` schema through the pricing module and
+ * is never part of a `RegulatorRecord`, a stored job payload, or a buyer response. */
+export interface RegulatorPriceRange {
+  minInr: number;
+  maxInr: number;
+}
+
 export interface RegulatorCarpetGroup {
   /** The block letter from the flat number ("A" for "A-301"), or null. */
   block: string | null;
@@ -98,4 +109,9 @@ export interface RegulatorAdapter {
   lookupByRegistrationNumber(
     registrationNumber: string,
   ): Promise<RegulatorRecord>;
+  /** The project's stated price range, or null when the regulator states none
+   * (or nothing usable). Kept off the record on purpose; see `RegulatorPriceRange`. */
+  lookupPriceRange?(
+    registrationNumber: string,
+  ): Promise<RegulatorPriceRange | null>;
 }

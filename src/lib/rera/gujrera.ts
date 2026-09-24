@@ -3,6 +3,7 @@ import { legacyTlsFetch } from "./legacy-tls-fetch";
 import {
   RegulatorError,
   type RegulatorAdapter,
+  type RegulatorPriceRange,
   type RegulatorQuarter,
   type RegulatorRecord,
 } from "./types";
@@ -16,10 +17,13 @@ import {
  * replay saved responses say what broke.
  *
  * Two hard rules apply here:
- *  - Money never enters our database. The search result carries min/max project
- *    cost, the detail carries land and construction cost, and the form-three
- *    inventory lists a price for every unit. This adapter reads only the named
- *    fields it needs and never stores a raw response.
+ *  - Money never enters the record or any public table. The search result carries
+ *    min/max project cost, the detail carries land and construction cost, and the
+ *    form-three inventory lists a price for every unit (masked as "******" in the
+ *    public list, checked 2026-09-24). This adapter reads only the named fields it
+ *    needs and never stores a raw response. The one exception is the project's
+ *    minimum and maximum cost, read by `lookupPriceRange` alone and handed to the
+ *    private schema (`DECISIONS.md` 2026-09-24, "price data").
  *  - The per-flat list carries a price, a buyer's name and a mobile number for every
  *    flat. Only the flat number, carpet area and usage are read from it, and only
  *    the distinct carpet areas per block are kept, never a per-flat row.
@@ -175,9 +179,64 @@ export const createGujreraAdapter = (
     return groupCarpetAreas(flats);
   };
 
+  /** The search hit for exactly this registration number, or a `RegulatorError`. */
+  const findHit = async (
+    registrationNumber: string,
+  ): Promise<Record<string, unknown>> => {
+    const number = normaliseNumber(registrationNumber);
+    if (
+      !REGISTRATION_PREFIX.test(number) ||
+      number.length > 200 ||
+      !/^[A-Z0-9/ .()&-]+$/.test(number)
+    ) {
+      throw new RegulatorError(
+        "invalid_number",
+        "That does not look like a Gujarat RERA registration number (it starts PR/GJ/).",
+      );
+    }
+    const search = asRecord(
+      await request("/project_reg/public/global-search", {
+        body: { query: number, startWith: 0, dataSize: 10 },
+      }),
+    );
+    const hits = (Array.isArray(search?.data) ? search.data : [])
+      .map(asRecord)
+      .filter(
+        (hit): hit is Record<string, unknown> =>
+          hit !== null &&
+          hit.entityType === "PROJECT" &&
+          typeof hit.regNo === "string" &&
+          normaliseNumber(hit.regNo) === number,
+      );
+    if (hits.length === 0) {
+      throw new RegulatorError(
+        "not_found",
+        "GujRERA has no registered project with that number. Check it and try again.",
+      );
+    }
+    if (hits.length > 1) {
+      throw new RegulatorError(
+        "ambiguous",
+        "GujRERA lists more than one project under that number.",
+      );
+    }
+    return hits[0];
+  };
+
   return {
     code: "gujrera",
     label: "GujRERA",
+
+    async lookupPriceRange(
+      registrationNumber,
+    ): Promise<RegulatorPriceRange | null> {
+      const hit = await findHit(registrationNumber);
+      const minInr = positive(hit.mincost);
+      const maxInr = positive(hit.maxcost);
+      // A range that is missing, zero or upside down is not a range we can use.
+      if (minInr === null || maxInr === null || minInr > maxInr) return null;
+      return { minInr: Math.round(minInr), maxInr: Math.round(maxInr) };
+    },
 
     ownsRegistrationNumber: (registrationNumber) =>
       REGISTRATION_PREFIX.test(normaliseNumber(registrationNumber)),

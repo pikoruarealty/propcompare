@@ -1,3 +1,4 @@
+import { syncReraPriceRange } from "@/lib/pricing/ranges";
 import { WORKING_STATUSES } from "@/lib/submissions/working-statuses";
 import { and, desc, eq, ne, or, sql } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
@@ -90,7 +91,7 @@ const requireEditable = (submission: SubmissionScope) => {
  * value for an edit of an existing property, overlaid with the submission's own
  * candidates (a rejected candidate does not count).
  */
-const loadCurrentValues = async (
+export const loadCurrentValues = async (
   database: PostgresJsDatabase,
   submission: SubmissionScope,
 ): Promise<Record<string, unknown>> => {
@@ -284,6 +285,9 @@ export const fetchReraForSubmission = async (
       })),
     })
     .where(eq(reraFetchJobs.id, job.id));
+  // The project's stated price range goes to the private schema, never into the
+  // record above; best effort, so it cannot fail the check.
+  await syncReraPriceRange({ adapter, registrationNumber: number });
   return { jobId: job.id, record, comparison };
 };
 

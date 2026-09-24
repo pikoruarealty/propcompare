@@ -680,12 +680,15 @@ describe("listing, unlisting and deleting a property", () => {
 });
 
 describe("the tabs of the edit screen", () => {
-  const renderScreen = (submission: SubmissionDetail) =>
+  const renderScreen = (
+    submission: SubmissionDetail,
+    permissionLevel: "owner" | "verifier" = "owner",
+  ) =>
     render(
       <SubmissionWorkbench
         submission={submission}
         media={[]}
-        permissionLevel="owner"
+        permissionLevel={permissionLevel}
       />,
     );
 
@@ -705,7 +708,14 @@ describe("the tabs of the edit screen", () => {
       "Specifications",
       "Unit types",
       "Images",
+      "Prices",
     ]);
+  });
+
+  it("shows the Prices tab to an owner only, since a price is commercial data", () => {
+    renderScreen(editing(), "verifier");
+
+    expect(screen.queryByRole("tab", { name: /^Prices/ })).toBeNull();
   });
 
   it("opens on Project and shows only that tab's fields", () => {

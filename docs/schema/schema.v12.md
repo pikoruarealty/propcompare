@@ -13,15 +13,15 @@ That run's `amenities`, `project-details`, `specifications`, and `floor-plans` s
 
 ## New fields
 
-| Key | Category |
-|---|---|
-| `windows`, `doors`, `toilet_flooring_dado`, `wall_finishing`, `kitchen_finishes`, `material_tolerances` | Finish quality |
-| `electricals`, `power_backup` | Mechanical systems |
-| `waterproofing`, `drainage`, `damp_proofing`, `safety_features` | Building operation |
-| `special_features`, `courtyard_area` | Design & space |
-| `vastu_compliance` | Certifications & compliance (new category) |
-| `plot_no`, `nearby_connectivity`, `nearby_hospitals`, `nearby_schools` | Location & legal (new category) |
-| `amenities_full_list` | Amenities as stated by developer (new category) |
+| Key                                                                                                     | Category                                        |
+| ------------------------------------------------------------------------------------------------------- | ----------------------------------------------- |
+| `windows`, `doors`, `toilet_flooring_dado`, `wall_finishing`, `kitchen_finishes`, `material_tolerances` | Finish quality                                  |
+| `electricals`, `power_backup`                                                                           | Mechanical systems                              |
+| `waterproofing`, `drainage`, `damp_proofing`, `safety_features`                                         | Building operation                              |
+| `special_features`, `courtyard_area`                                                                    | Design & space                                  |
+| `vastu_compliance`                                                                                      | Certifications & compliance (new category)      |
+| `plot_no`, `nearby_connectivity`, `nearby_hospitals`, `nearby_schools`                                  | Location & legal (new category)                 |
+| `amenities_full_list`                                                                                   | Amenities as stated by developer (new category) |
 
 Each field is `property.specifications.<key>` / `specification_text`, matched into `property_specifications` by the existing publish-transaction logic (`SPEC_FIELD_PREFIX` matching in `src/lib/submissions/publisher.ts`) — unchanged code, new data only.
 
