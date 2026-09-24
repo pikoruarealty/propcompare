@@ -1,3 +1,4 @@
+import { AMENITIES_FIELD_KEY, routerEvidenceSnippet } from "./single-facility";
 import { mkdir, rename, writeFile, readFile } from "node:fs/promises";
 import { readMeasurement } from "@/lib/units/measurements";
 import path from "node:path";
@@ -870,7 +871,7 @@ const canonicalVariantValue = (
   );
 };
 
-export const buildSubmissionFieldCandidates = (
+const candidatesFromExtraction = (
   input: NewPipelineExtraction,
   manifest: OcrRoutingManifest,
 ): SubmissionFieldCandidate[] => {
@@ -955,6 +956,64 @@ export const buildSubmissionFieldCandidates = (
   });
   return result;
 };
+
+/**
+ * The amenities a single-facility page's caption matched in the catalog
+ * (`OcrRoutingManifest.singleFacilities`), added to the amenities candidate as
+ * unconfirmed suggestions: the same field, still `needs_review`, with evidence
+ * that says plainly the router named them and no extraction read them. They are
+ * added to what the extraction found, or make the candidate on their own when the
+ * amenities read was skipped altogether.
+ */
+const withRouterAmenities = (
+  candidates: SubmissionFieldCandidate[],
+  manifest: OcrRoutingManifest,
+): SubmissionFieldCandidate[] => {
+  const pages = manifest.singleFacilities ?? [];
+  if (pages.length === 0) return candidates;
+  const evidence = pages.map((page) => ({
+    // The ignored scope: the page was kept out of every read.
+    scopeKey: "ignored",
+    pageNumber: page.pageNumber,
+    valuePath: "$",
+    sourceSnippet: routerEvidenceSnippet(page),
+  }));
+  const suggested = pages.map((page) => page.amenityKey);
+  const existing = candidates.find(
+    (candidate) => candidate.fieldKey === AMENITIES_FIELD_KEY,
+  );
+  if (existing === undefined) {
+    return [
+      ...candidates,
+      {
+        fieldKey: AMENITIES_FIELD_KEY,
+        value: [...new Set(suggested)],
+        evidence,
+      },
+    ];
+  }
+  const read = Array.isArray(existing.value)
+    ? existing.value.filter((key): key is string => typeof key === "string")
+    : [];
+  return candidates.map((candidate) =>
+    candidate === existing
+      ? {
+          ...candidate,
+          value: [...new Set([...read, ...suggested])],
+          evidence: deduplicateSubmissionEvidence([
+            ...candidate.evidence,
+            ...evidence,
+          ]),
+        }
+      : candidate,
+  );
+};
+
+export const buildSubmissionFieldCandidates = (
+  input: NewPipelineExtraction,
+  manifest: OcrRoutingManifest,
+): SubmissionFieldCandidate[] =>
+  withRouterAmenities(candidatesFromExtraction(input, manifest), manifest);
 
 const DEFAULT_OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 const DEFAULT_OPENROUTER_MODEL = "anthropic/claude-sonnet-5";

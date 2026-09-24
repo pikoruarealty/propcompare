@@ -1,8 +1,8 @@
 # Tasklist — match a single-facility amenity spread straight against the catalog
 
-**Status:** design complete, wiring not started — steps 1-3 all resolved below; the remaining work is the routing-contract implementation itself
+**Status:** done, verified 2026-09-24 (synthetic adapter only; no paid run, not looked at in a browser)
 **Owner:** Bhavarth
-**Branch:** none yet
+**Branch:** `task/phase-3-completion`
 **Depends on:** the router's single-facility amenities categorization, already built (`e2bfdc0`, `DECISIONS.md` 2026-09-22 "Refinements to the routing pass")
 **References:** `DECISIONS.md` 2026-09-22 (the categorization-fix test result and its caveat), `src/lib/ocr/page-router.ts` (`createPrompt`, the amenities category and caption rules), `docs/schema/schema.v1.md` (`amenity_catalog`, `amenity_synonyms`), `AGENTS.md` ("Controlled vocabularies... go through their catalog + synonym tables — no free-text amenity/spec fields")
 
@@ -28,7 +28,7 @@ A brochure's single-facility marketing spread ("Dive in for sheer bliss" over a 
 
 1. **Done, 2026-09-23:** tightened `createPrompt`'s caption instruction in `src/lib/ocr/page-router.ts` — the model must now return a plain noun facility name, with the two real observed taglines from the 2026-09-22 test ("Dive in for sheer bliss", "Elevate your fitness journey") named explicitly as counter-examples of what NOT to return, and an instruction to name the facility from the image itself when the only printed text is a tagline. Prompt-only change: no routing categories, confidence handling, or extraction wiring touched. Full suite (133 files, 1591 tests) passes unchanged — prompt wording has no unit-test coverage anywhere in this module, since the only real check is a live model call. **Verified live, same day** (`DECISIONS.md` 2026-09-23 "The router's caption prompt now names a facility..."): re-running categorization on Maruti 360 shows pages 14 and 15 — which previously returned taglines never named in the prompt ("Rise above all else", "Leave a lasting impression") — now correctly return "Observatory" and "Banquet Hall", proving the fix generalizes rather than just pattern-matching the two banned examples.
 2. **Resolved, 2026-09-23:** decisions 1-3 above, with the owner.
-3. **Not started:** the routing-contract change itself — remove a router-tagged single-facility page from what the amenities scope reads, generate a catalog-matched (or synonym-matched) suggestion from its caption, surface it in the review UI beside that page's actual image, labeled as router-detected, requiring explicit confirmation before it can reach `property_submissions`. Needs its own `DECISIONS.md` entry per `AGENTS.md` once implemented, since it changes what pages reach an extraction scope.
+3. **Done, 2026-09-24:** the routing-contract change itself — remove a router-tagged single-facility page from what the amenities scope reads, generate a catalog-matched (or synonym-matched) suggestion from its caption, surface it in the review UI beside that page's actual image, labeled as router-detected, requiring explicit confirmation before it can reach `property_submissions`. Needs its own `DECISIONS.md` entry per `AGENTS.md` once implemented, since it changes what pages reach an extraction scope.
 
 ## Acceptance (once built)
 
@@ -36,4 +36,4 @@ A single-facility marketing page's amenity reaches the review screen pre-matched
 
 ## Completion record
 
-_(fill in at completion)_
+Built in `src/lib/ocr/single-facility.ts` (matching, evidence label), `src/lib/ocr/routing.ts` (`singleFacilities` in the manifest), `src/lib/ingestion/routing-confirmation.ts` (skip at confirmation, catalog lookup), `src/lib/ingestion/confirmed-choices.ts` (read back as amenities), `src/lib/ocr/adapter.ts` (`withRouterAmenities`), `GET /api/v1/admin/submissions/{id}/brochure-page/{page}` and the review panel's `RouterSuggestion`. Tests: `single-facility.test.ts`, `single-facility-routing.test.ts`, `single-facility-ingestion.integration.test.ts`, `router-suggestion.test.tsx`, the brochure-page route test and a real-catalog case in `routing-confirmation.integration.test.ts`. Reasoning: `DECISIONS.md` 2026-09-24 (single-facility pages). Only a caption that exactly matches a catalog name or synonym is skipped, so a page with no match is still read.

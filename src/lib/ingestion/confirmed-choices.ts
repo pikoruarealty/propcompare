@@ -37,6 +37,16 @@ export const readConfirmedChoices = (
     );
     const claimed = new Set<number>();
     const choices: ConfirmedChoice[] = [];
+    // A page offered as an amenity suggestion sits in the ignored scope so extraction
+    // does not read it, but it was chosen as an amenities page with its caption.
+    for (const page of parsed.singleFacilities ?? []) {
+      claimed.add(page.pageNumber);
+      choices.push({
+        pageNumber: page.pageNumber,
+        category: "amenities",
+        label: page.caption,
+      });
+    }
     for (const scope of order) {
       const category: ConfirmedChoice["category"] =
         scope.kind === "property_details"

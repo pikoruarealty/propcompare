@@ -9,9 +9,14 @@ import {
 import type { ReraComparisonItem } from "@/lib/rera/mapping";
 import type { SubmissionDetail } from "@/lib/submissions/queue";
 import { cn } from "@/lib/utils";
+import {
+  ROUTER_EVIDENCE_PREFIX,
+  isRouterEvidence,
+} from "@/lib/ocr/single-facility";
 import { isManagedElsewhere } from "@/lib/submissions/edit-only-fields";
 import { ConfirmAction } from "./confirm-action";
 import { InlineField } from "./inline-field";
+import { ExpandableImage } from "./expandable-image";
 import { FieldValue } from "./field-value";
 import { displayReraValue } from "./rera-panel";
 
@@ -78,6 +83,43 @@ const STATUS_TONE: Record<string, string> = {
  * The prompt to confirm every value still waiting for review, once they have been
  * checked against the brochure. Shown above the fields (or above their tabs).
  */
+/**
+ * An amenity the page router named from a single-facility page, which no extraction
+ * read. Shown with the page's own image so confirming it is a check against the
+ * source, not against text (`DECISIONS.md` 2026-09-24): a reviewer looking at the
+ * photograph notices a mislabel, or a second amenity in the fine print.
+ */
+function RouterSuggestion({
+  submissionId,
+  pageNumber,
+  snippet,
+}: {
+  submissionId: string;
+  pageNumber: number;
+  snippet: string;
+}) {
+  const src = `/api/v1/admin/submissions/${submissionId}/brochure-page/${pageNumber}`;
+  return (
+    <div
+      data-slot="router-suggestion"
+      className="border-border bg-muted mt-2 flex flex-col gap-2 rounded-md border p-3 sm:flex-row"
+    >
+      <div className="w-full shrink-0 sm:w-40">
+        <ExpandableImage
+          src={src}
+          alt={`Brochure page ${pageNumber}`}
+          title={`Brochure page ${pageNumber}`}
+          className="border-border w-full rounded-md border"
+        />
+      </div>
+      <p className="text-muted-foreground text-xs">
+        {snippet.replace(ROUTER_EVIDENCE_PREFIX, "Router-detected: ")} No
+        extraction read this page, so check the picture before confirming.
+      </p>
+    </div>
+  );
+}
+
 export function ConfirmAllBar({
   waiting,
   pending,
@@ -390,15 +432,24 @@ export function FieldsPanel({
                         confidence
                       </p>
                     ) : null}
-                    {candidate?.evidence.map((e) => (
-                      <p
-                        key={`${e.sourcePage}-${e.sourceSnippet}`}
-                        className="text-muted-foreground mt-1 text-xs"
-                      >
-                        Brochure page {e.sourcePage}
-                        {e.sourceSnippet ? ` — “${e.sourceSnippet}”` : ""}
-                      </p>
-                    ))}
+                    {candidate?.evidence.map((e) =>
+                      isRouterEvidence(e.sourceSnippet) ? (
+                        <RouterSuggestion
+                          key={`${e.sourcePage}-${e.sourceSnippet}`}
+                          submissionId={submission.id}
+                          pageNumber={e.sourcePage}
+                          snippet={e.sourceSnippet ?? ""}
+                        />
+                      ) : (
+                        <p
+                          key={`${e.sourcePage}-${e.sourceSnippet}`}
+                          className="text-muted-foreground mt-1 text-xs"
+                        >
+                          Brochure page {e.sourcePage}
+                          {e.sourceSnippet ? ` — “${e.sourceSnippet}”` : ""}
+                        </p>
+                      ),
+                    )}
                     {editable &&
                     submission.propertyId &&
                     EDIT_NOTES[field.fieldKey] ? (
