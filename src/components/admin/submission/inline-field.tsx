@@ -256,7 +256,19 @@ export function InlineField({
       ) : type === "positive_number" || type === "percentage_0_to_100" ? (
         <input {...common} inputMode="decimal" className={inputClass} />
       ) : (
-        <input {...common} className={inputClass} />
+        // Text wraps and grows to fit, so a long link or a list of places is
+        // readable in full instead of cut off at the edge of a one-line box.
+        <textarea
+          {...common}
+          rows={1}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              event.currentTarget.blur();
+            }
+          }}
+          className={`${inputClass} field-sizing-content h-auto min-h-11 resize-none py-2.5 leading-6 [overflow-wrap:anywhere]`}
+        />
       );
   }
 

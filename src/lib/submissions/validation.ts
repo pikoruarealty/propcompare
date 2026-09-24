@@ -1,3 +1,4 @@
+import { isGoogleMapsUrl } from "@/lib/properties/map-url";
 import { LISTING_STATUSES } from "./edit-only-fields";
 
 export class SubmissionPayloadError extends Error {
@@ -300,6 +301,15 @@ const validateFieldValue = (
     }
     return value;
   }
+  if (dataType === "map_url") {
+    const trimmed = readNonEmptyString(value, path).trim();
+    if (!isGoogleMapsUrl(trimmed)) {
+      throw new SubmissionPayloadError(
+        `${path} must be an https Google Maps link`,
+      );
+    }
+    return trimmed;
+  }
   if (dataType === "pincode") {
     const trimmed = readNonEmptyString(value, path).trim();
     if (!/^\d{6}$/.test(trimmed)) {
@@ -364,6 +374,17 @@ const validateFieldValue = (
       throw new SubmissionPayloadError(`${path} names a unit type twice`);
     }
     return names;
+  }
+  if (dataType === "media_id") {
+    if (
+      typeof value !== "string" ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        value.trim(),
+      )
+    ) {
+      throw new SubmissionPayloadError(`${path} must be a picture id`);
+    }
+    return value.trim().toLowerCase();
   }
   if (dataType === "media_id_array") {
     const ids = Array.isArray(value)

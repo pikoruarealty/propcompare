@@ -14,7 +14,7 @@ import type { SubmissionDetail } from "@/lib/submissions/queue";
 import { ExtractionStatus } from "./extraction-status";
 import { ConfirmAction } from "./submission/confirm-action";
 import { ConfirmAllBar, FieldsPanel } from "./submission/fields-panel";
-import { isEditOnlyField } from "@/lib/submissions/edit-only-fields";
+import { isManagedElsewhere } from "@/lib/submissions/edit-only-fields";
 import { WORKING_STATUSES } from "@/lib/submissions/working-statuses";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { MediaPanel, type MediaItem } from "./submission/media-panel";
@@ -176,6 +176,20 @@ export function SubmissionWorkbench({
       : [];
   }, [submission.fields]);
 
+  // The main photo: the admin's pending choice if there is one, else the live
+  // primary picture (unless this edit takes it off the listing).
+  const mainPhotoId = React.useMemo(() => {
+    const chosen = submission.fields.find(
+      (field) => field.fieldKey === "property.main_photo",
+    )?.value;
+    if (typeof chosen === "string") return chosen;
+    return (
+      submission.publishedMedia.find(
+        (item) => item.isPrimary && !removedMediaIds.includes(item.id),
+      )?.id ?? null
+    );
+  }, [submission.fields, submission.publishedMedia, removedMediaIds]);
+
   const saveField = async (fieldKey: string, value: unknown) => {
     const message = await call(
       `${base}/fields/${encodeURIComponent(fieldKey)}`,
@@ -236,7 +250,7 @@ export function SubmissionWorkbench({
   const filledByGroup = Object.fromEntries(
     groups.map(({ group, rows }) => {
       const counted = rows.filter(
-        (row) => !isEditOnlyField(row.field.fieldKey),
+        (row) => !isManagedElsewhere(row.field.fieldKey),
       );
       return [
         group.key,
@@ -249,6 +263,17 @@ export function SubmissionWorkbench({
       ];
     }),
   );
+  // `unit_variants` is one field key holding every unit type as one array, so
+  // the group's field-count badge always reads "/1" no matter how many unit
+  // types are inside it — read instead of misleadingly labelled as a count.
+  // The actual number of unit types is more useful to show here.
+  const unitTypeCount = (() => {
+    const row = groups
+      .find(({ group }) => group.key === "unit_types")
+      ?.rows.find((row) => row.field.fieldKey === "unit_variants");
+    const value = row?.candidate?.value ?? submission.live["unit_variants"];
+    return Array.isArray(value) ? value.length : 0;
+  })();
   const filledTotal = Object.values(filledByGroup).reduce(
     (sum, item) => sum + item.filled,
     0,
@@ -531,7 +556,11 @@ export function SubmissionWorkbench({
           {groups.map(({ group }) => (
             <TabsTrigger key={group.key} value={group.key}>
               {group.title}
-              {editable ? (
+              {group.key === "unit_types" ? (
+                unitTypeCount > 0 ? (
+                  <TabBadge>{unitTypeCount}</TabBadge>
+                ) : null
+              ) : editable ? (
                 <TabBadge>
                   {filledByGroup[group.key].filled}/
                   {filledByGroup[group.key].total}
@@ -608,6 +637,8 @@ export function SubmissionWorkbench({
             published={submission.publishedMedia}
             removedIds={removedMediaIds}
             onSetRemoved={(ids) => saveField("property.media_removed", ids)}
+            mainPhotoId={mainPhotoId}
+            onSetMainPhoto={(id) => saveField("property.main_photo", id)}
             media={media}
             variantNames={variantNames}
             editable={editable}
@@ -617,6 +648,9 @@ export function SubmissionWorkbench({
               run(
                 ...post(`/media/${mediaId}/review`, { reviewStatus, isPublic }),
               )
+            }
+            onDelete={(mediaId) =>
+              run(`${base}/media/${mediaId}`, { method: "DELETE" })
             }
             onUploaded={() => router.refresh()}
           />
@@ -634,7 +668,9 @@ export function SubmissionWorkbench({
         status={submission.status}
         permissionLevel={permissionLevel}
         waitingFields={countNeedingReview(
-          submission.fields.filter((field) => !isEditOnlyField(field.fieldKey)),
+          submission.fields.filter(
+            (field) => !isManagedElsewhere(field.fieldKey),
+          ),
         )}
         waitingPictures={waitingPictures}
         pending={pending}

@@ -23,7 +23,7 @@ const coreBhkTypes = [
   { key: "2bhk", label: "2 BHK", bedroomCount: 2 },
   { key: "3bhk", label: "3 BHK", bedroomCount: 3 },
   { key: "4bhk", label: "4 BHK", bedroomCount: 4 },
-  { key: "5bhk_plus", label: "5 BHK+", bedroomCount: 5 },
+  { key: "5bhk_plus", label: "5 BHK", bedroomCount: 5 },
 ];
 
 const coreLayoutTypes = [
@@ -191,6 +191,19 @@ const initialAmenityCatalog = [
     label: "Visitor parking",
     category: "Access/safety",
     synonyms: ["visitor parking spaces"],
+  },
+  {
+    key: "ev_charging",
+    label: "EV charging",
+    category: "Access/safety",
+    synonyms: [
+      "ev car charging",
+      "ev car charging provision",
+      "ev charging point",
+      "ev charging station",
+      "electric vehicle charging",
+      "car charging point",
+    ],
   },
   {
     key: "service_lift",
@@ -569,6 +582,20 @@ const initialPropertySchemaFields = [
     "Ids of published pictures an edit takes off a live listing (hidden, not deleted); existing property only, never read from a brochure.",
   ],
   [
+    "property.google_maps_url",
+    "Google Maps link",
+    "map_url",
+    "$.google_maps_url",
+    "The project's Google Maps link, set by an admin. A full link is also drawn as a small map on the dossier; a short share link opens in Google Maps only. Never read from a brochure.",
+  ],
+  [
+    "property.main_photo",
+    "Main photo",
+    "media_id",
+    "$.main_photo",
+    "The picture that stands for the project on listing cards, comparison columns and the dossier: the id of a live picture, or of a new one proposed in this submission. A photo only; chosen by an admin, never read from a brochure.",
+  ],
+  [
     "property.listing_status",
     "Listing status",
     "listing_status",
@@ -919,52 +946,57 @@ async function seed() {
           label,
           dataType,
           jsonbPath,
-          schemaVersion: [
-            "developer.profile_narrative",
-            "property.total_floors",
-            "property.plot_area_sqft",
-            "unit_variants",
-          ].includes(fieldKey)
-            ? "v5"
-            : fieldKey === "property.legal_entity_id"
-              ? "v6"
-              : [
-                    "property.amenities_removed",
-                    "unit_variants_removed",
-                    "property.listing_status",
-                  ].includes(fieldKey)
-                ? "v8"
+          schemaVersion:
+            fieldKey === "property.google_maps_url"
+              ? "v15"
+              : fieldKey === "property.main_photo"
+                ? "v14"
                 : [
-                      "property.media_removed",
-                      "property.pincode",
-                      "property.launch_date",
-                      "property.rera_project_land_area_sqft",
+                      "developer.profile_narrative",
+                      "property.total_floors",
+                      "property.plot_area_sqft",
+                      "unit_variants",
                     ].includes(fieldKey)
-                  ? "v9"
-                  : [
-                        "property.specifications.windows",
-                        "property.specifications.doors",
-                        "property.specifications.toilet_flooring_dado",
-                        "property.specifications.wall_finishing",
-                        "property.specifications.kitchen_finishes",
-                        "property.specifications.material_tolerances",
-                        "property.specifications.electricals",
-                        "property.specifications.power_backup",
-                        "property.specifications.waterproofing",
-                        "property.specifications.drainage",
-                        "property.specifications.damp_proofing",
-                        "property.specifications.safety_features",
-                        "property.specifications.special_features",
-                        "property.specifications.courtyard_area",
-                        "property.specifications.vastu_compliance",
-                        "property.specifications.plot_no",
-                        "property.specifications.nearby_connectivity",
-                        "property.specifications.nearby_hospitals",
-                        "property.specifications.nearby_schools",
-                        "property.specifications.amenities_full_list",
-                      ].includes(fieldKey)
-                    ? "v12"
-                    : "v1",
+                  ? "v5"
+                  : fieldKey === "property.legal_entity_id"
+                    ? "v6"
+                    : [
+                          "property.amenities_removed",
+                          "unit_variants_removed",
+                          "property.listing_status",
+                        ].includes(fieldKey)
+                      ? "v8"
+                      : [
+                            "property.media_removed",
+                            "property.pincode",
+                            "property.launch_date",
+                            "property.rera_project_land_area_sqft",
+                          ].includes(fieldKey)
+                        ? "v9"
+                        : [
+                              "property.specifications.windows",
+                              "property.specifications.doors",
+                              "property.specifications.toilet_flooring_dado",
+                              "property.specifications.wall_finishing",
+                              "property.specifications.kitchen_finishes",
+                              "property.specifications.material_tolerances",
+                              "property.specifications.electricals",
+                              "property.specifications.power_backup",
+                              "property.specifications.waterproofing",
+                              "property.specifications.drainage",
+                              "property.specifications.damp_proofing",
+                              "property.specifications.safety_features",
+                              "property.specifications.special_features",
+                              "property.specifications.courtyard_area",
+                              "property.specifications.vastu_compliance",
+                              "property.specifications.plot_no",
+                              "property.specifications.nearby_connectivity",
+                              "property.specifications.nearby_hospitals",
+                              "property.specifications.nearby_schools",
+                              "property.specifications.amenities_full_list",
+                            ].includes(fieldKey)
+                          ? "v12"
+                          : "v1",
           isActive: true,
           description,
         }),

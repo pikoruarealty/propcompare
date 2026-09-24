@@ -522,7 +522,9 @@ function PageMeta({
         </select>
       </div>
       {caption ? (
-        <p className="text-muted-foreground text-xs">{caption}</p>
+        <p data-slot="page-caption" className="text-muted-foreground text-xs">
+          {caption}
+        </p>
       ) : null}
       {unclassified ? (
         <p className="text-primary text-xs">Not classified — please check</p>

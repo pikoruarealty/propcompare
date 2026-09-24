@@ -9,7 +9,7 @@ import {
 import type { ReraComparisonItem } from "@/lib/rera/mapping";
 import type { SubmissionDetail } from "@/lib/submissions/queue";
 import { cn } from "@/lib/utils";
-import { isEditOnlyField } from "@/lib/submissions/edit-only-fields";
+import { isManagedElsewhere } from "@/lib/submissions/edit-only-fields";
 import { ConfirmAction } from "./confirm-action";
 import { InlineField } from "./inline-field";
 import { FieldValue } from "./field-value";
@@ -28,6 +28,41 @@ const REMOVAL_FIELD: Record<string, string> = {
   "property.amenities": "property.amenities_removed",
   unit_variants: "unit_variants_removed",
 };
+
+/**
+ * Wraps `InlineField`, keyed by content so a value that arrives from
+ * elsewhere (a RERA fetch, another reviewer) starts the input afresh — except
+ * for the one save this same editor instance just made, which should not
+ * remount a field editor with rich internal state (`UnitVariantsEditor`'s
+ * selected tab) right when the person who saved it would expect to stay
+ * where they were. The `key` bump and the "was this my own save" check both
+ * happen in an effect/event handler, never during render, per the rules of
+ * refs: this is state React is allowed to see change, not a value mutated
+ * mid-render.
+ */
+function StableField(props: React.ComponentProps<typeof InlineField>) {
+  const { initial, onSave } = props;
+  const contentKey = JSON.stringify(initial ?? null);
+  const [key, setKey] = React.useState(contentKey);
+  const selfSavedRef = React.useRef<string | null>(null);
+
+  React.useEffect(() => {
+    if (selfSavedRef.current === contentKey) {
+      selfSavedRef.current = null;
+      return;
+    }
+    setKey(contentKey);
+  }, [contentKey]);
+
+  const handleSave = async (fieldKey: string, value: unknown) => {
+    selfSavedRef.current = JSON.stringify(value);
+    const message = await onSave(fieldKey, value);
+    if (message) selfSavedRef.current = null;
+    return message;
+  };
+
+  return <InlineField {...props} key={key} onSave={handleSave} />;
+}
 
 const STATUS_TONE: Record<string, string> = {
   needs_review: "bg-accent text-accent-foreground",
@@ -117,7 +152,7 @@ export function FieldsPanel({
     .map(({ group, rows }) => ({
       group,
       // Removal lists and listing status are shown as notes and buttons, not rows.
-      rows: rows.filter(({ field }) => !isEditOnlyField(field.fieldKey)),
+      rows: rows.filter(({ field }) => !isManagedElsewhere(field.fieldKey)),
     }))
     .filter(
       ({ group, rows }) =>
@@ -280,12 +315,9 @@ export function FieldsPanel({
                     </div>
                   </div>
 
-                  <div className="mt-3 min-w-0">
+                  <div className="mt-3 min-w-0 [overflow-wrap:anywhere]">
                     {editable ? (
-                      <InlineField
-                        // A value that arrives from elsewhere (a RERA fetch, a
-                        // review) starts the input afresh.
-                        key={JSON.stringify(candidate?.value ?? live ?? null)}
+                      <StableField
                         field={field}
                         initial={candidate?.value ?? live}
                         lookups={submission.lookups}
@@ -316,7 +348,7 @@ export function FieldsPanel({
                     field.fieldKey !== "property.legal_entity_id" ? (
                       <p
                         data-slot="live-value"
-                        className="text-muted-foreground mt-2 text-xs"
+                        className="text-muted-foreground mt-2 text-xs [overflow-wrap:anywhere]"
                       >
                         Currently published:{" "}
                         {displayReraValue(field.fieldKey, live)}

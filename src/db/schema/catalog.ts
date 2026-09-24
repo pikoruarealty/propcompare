@@ -310,6 +310,8 @@ export const properties = pgTable(
     latitude: numeric("latitude"),
     longitude: numeric("longitude"),
     pincode: text("pincode"),
+    /** The Google Maps link an admin sets for the project (schema v15). */
+    mapUrl: text("map_url"),
     totalTowers: integer("total_towers"),
     totalFloors: integer("total_floors"),
     totalUnits: integer("total_units"),
@@ -487,6 +489,11 @@ export const propertyMedia = pgTable(
       table.propertyId,
       table.displayOrder,
     ),
+    // At most one main photo per property (schema v14). The publisher clears the
+    // previous one in the same transaction it sets the next.
+    uniqueIndex("property_media_one_primary_idx")
+      .on(table.propertyId)
+      .where(sql`${table.isPrimary} and ${table.removedAt} is null`),
   ],
 );
 
@@ -537,6 +544,10 @@ export const propertySubmissions = pgTable(
     submittedAt: timestamp("submitted_at", { withTimezone: true }),
     reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
     publishedAt: timestamp("published_at", { withTimezone: true }),
+    /** Set when an owner clears a published submission out of the admin queue
+     * (schema v13). Only ever set on a published one: anything never published is
+     * deleted outright. The record and its live listing are untouched. */
+    archivedAt: timestamp("archived_at", { withTimezone: true }),
     ...timestamps(),
   },
   (table) => [

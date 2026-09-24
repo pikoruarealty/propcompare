@@ -692,10 +692,11 @@ describe("the tabs of the edit screen", () => {
   it("groups the screen into tabs instead of one long page", () => {
     renderScreen(editing());
 
-    // Each tab also shows how much of it is filled in ("4/4").
+    // Each tab also shows how much of it is filled in ("4/4"), except Unit
+    // types, which shows a plain count of unit types instead ("1").
     const tabs = screen
       .getAllByRole("tab")
-      .map((tab) => tab.textContent?.replace(/\d+\/\d+.*$/, ""));
+      .map((tab) => tab.textContent?.replace(/\d+(\/\d+)?.*$/, ""));
     expect(tabs).toEqual([
       "RERA",
       "Project",

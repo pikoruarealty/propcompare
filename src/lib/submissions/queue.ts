@@ -5,7 +5,7 @@ import {
   SUBMISSION_STATUS_LABEL,
   type SubmissionStatus,
 } from "./status-labels";
-import { and, asc, desc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import {
   amenityCatalog,
@@ -79,6 +79,8 @@ export interface SubmissionQueueItem {
   needsReviewCount: number;
   submittedAt: Date | null;
   createdAt: Date;
+  /** When an owner archived it; null for one still in the queue. */
+  archivedAt: Date | null;
 }
 
 const fieldText = (key: string) =>
@@ -88,7 +90,13 @@ const fieldText = (key: string) =>
 
 export const listSubmissionQueue = async (
   database: PostgresJsDatabase,
-  filter: { status?: SubmissionStatus; id?: string } = {},
+  filter: {
+    status?: SubmissionStatus;
+    id?: string;
+    /** The archived view: only submissions an owner has archived. Every other
+     * view leaves them out. Looking one up by id is never filtered. */
+    archived?: boolean;
+  } = {},
 ): Promise<SubmissionQueueItem[]> => {
   const rows = await database
     .select({
@@ -112,6 +120,7 @@ export const listSubmissionQueue = async (
       needsReviewCount: sql<number>`(select count(*)::int from ${propertySubmissionFields} f where f.submission_id = ${propertySubmissions.id} and f.review_status = 'needs_review')`,
       submittedAt: propertySubmissions.submittedAt,
       createdAt: propertySubmissions.createdAt,
+      archivedAt: propertySubmissions.archivedAt,
     })
     .from(propertySubmissions)
     .leftJoin(developers, eq(developers.id, propertySubmissions.developerId))
@@ -122,12 +131,21 @@ export const listSubmissionQueue = async (
           ? eq(propertySubmissions.status, filter.status)
           : undefined,
         filter.id ? eq(propertySubmissions.id, filter.id) : undefined,
+        // Archived submissions are out of every view but their own.
+        filter.id
+          ? undefined
+          : filter.archived
+            ? isNotNull(propertySubmissions.archivedAt)
+            : isNull(propertySubmissions.archivedAt),
         // One row per property: a property's newest submission that was not
         // rejected. A brochure that became a property and the edits made to it
         // are versions of one thing, not separate rows. Rejected edits are history
         // and appear only under the Rejected filter. Looking one up by id is never
-        // filtered.
-        filter.id
+        // filtered. The newest version is picked whether or not it is archived, so
+        // archiving a property's newest submission takes the property out of the
+        // queue instead of resurfacing an older version; the archived view lists
+        // every archived submission, newest or not.
+        filter.id || filter.archived
           ? undefined
           : sql`(${propertySubmissions.propertyId} is null or ${propertySubmissions.id} = (select s2.id from ${propertySubmissions} s2 where s2.property_id = ${propertySubmissions.propertyId} and s2.status <> 'rejected' order by s2.created_at desc limit 1)${filter.status === "rejected" ? sql` or ${propertySubmissions.status} = 'rejected'` : sql``})`,
       ),

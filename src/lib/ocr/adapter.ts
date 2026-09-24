@@ -53,6 +53,9 @@ export interface OcrUnitVariantCandidate {
   scopeKey: string;
   /** Present only when a v2 floor-plans scope discovered the identity itself. */
   variantName?: string;
+  /** Only when the plan's own heading printed the configuration, and only ever
+   * one of the BHK catalog's keys. */
+  bhkTypeKey?: string;
   details: OcrUnitVariantDetailsCandidate;
   confidence?: number;
   evidence: OcrEvidenceCandidate[];
@@ -854,7 +857,13 @@ const canonicalVariantValue = (
     };
   }
   if (scope.kind === "floor_plans" && candidate.variantName !== undefined) {
-    return { variantName: candidate.variantName, ...candidate.details };
+    return {
+      variantName: candidate.variantName,
+      ...(candidate.bhkTypeKey === undefined
+        ? {}
+        : { bhkTypeKey: candidate.bhkTypeKey }),
+      ...candidate.details,
+    };
   }
   throw new OcrContractError(
     `unit variant candidate cannot be assembled for scope ${scope.scopeKey}`,
@@ -871,15 +880,40 @@ export const buildSubmissionFieldCandidates = (
     );
   }
   const extraction = input;
-  const result: SubmissionFieldCandidate[] = extraction.fields.map((field) => ({
-    ...field,
-    evidence: deduplicateSubmissionEvidence(
-      field.evidence.map((evidence) => ({
-        ...evidence,
-        valuePath: "$",
-      })),
-    ),
-  }));
+  /*
+   * One field key, one candidate. Several scopes are offered the same keys
+   * (a specification fact can be printed on a project page as well as the
+   * spec sheet), so the same key can come back twice. The more confident
+   * reading wins and both readings' evidence is kept, so a reviewer sees
+   * every page the fact was found on. Ties keep the first, which preserves
+   * scope order.
+   */
+  const byFieldKey = new Map<string, SubmissionFieldCandidate>();
+  for (const field of extraction.fields) {
+    const candidate: SubmissionFieldCandidate = {
+      ...field,
+      evidence: deduplicateSubmissionEvidence(
+        field.evidence.map((evidence) => ({ ...evidence, valuePath: "$" })),
+      ),
+    };
+    const existing = byFieldKey.get(field.fieldKey);
+    if (existing === undefined) {
+      byFieldKey.set(field.fieldKey, candidate);
+      continue;
+    }
+    const winner =
+      (candidate.confidence ?? 0) > (existing.confidence ?? 0)
+        ? candidate
+        : existing;
+    byFieldKey.set(field.fieldKey, {
+      ...winner,
+      evidence: deduplicateSubmissionEvidence([
+        ...existing.evidence,
+        ...candidate.evidence,
+      ]),
+    });
+  }
+  const result: SubmissionFieldCandidate[] = [...byFieldKey.values()];
 
   if (extraction.unitVariants.length === 0) {
     return result;
@@ -1058,12 +1092,22 @@ const fieldsForScope = (
       field.fieldKey.startsWith("property.specifications."),
     );
   }
+  /*
+   * A project-details page carries specification facts too, and the partition
+   * used to hide them: Anamika High Point printed "Vastu Compliant" and its
+   * nearby hospitals/schools/malls with distances on project pages, so the
+   * model was never offered `property.specifications.vastu_compliance`,
+   * `nearby_hospitals`, `nearby_schools` or `nearby_connectivity` (schema v12)
+   * for those pages. It read every one of them correctly and dropped them all
+   * into unmappedRawEvidence, which nothing persists. The specification keys
+   * are cheap to offer here (they are keys in a prompt, not extra pages), and
+   * a key returned by two scopes is merged by `buildSubmissionFieldCandidates`.
+   */
   if (scope.kind === "property_details") {
     return activeFields.filter(
       (field) =>
         field.fieldKey !== "unit_variants" &&
-        field.fieldKey !== "property.amenities" &&
-        !field.fieldKey.startsWith("property.specifications."),
+        field.fieldKey !== "property.amenities",
     );
   }
   return [];
@@ -1099,7 +1143,7 @@ const createScopePrompt = (
     scope.kind === "unit_variant"
       ? `Extract exactly one unit variant for \"${scope.variant.variantName}\". Put its values in unitVariant.details using only: ${variantDetails}. Combine all excerpt pages into this one variant; never emit a second variant.`
       : scope.kind === "floor_plans"
-        ? `Discover every distinct unit variant explicitly shown across these floor-plan pages. Return one unitVariants entry per distinct variant, merging pages that show levels of the same duplex or penthouse. ${MIRRORED_UNIT_MERGE_RULE} Each variantName must be a concise, evidence-backed name printed in the brochure and, when it covers more than one unit or floor number, must say so (for example "Block B - Units 301 & 302 (3rd Floor)" or "Flat Type 02 - Typical Floor (3rd-20th)"); do not invent BHK or layout catalog keys. Put each variant's values in details using only: ${variantDetails}. Return an empty unitVariants array when these pages do not explicitly show a unit variant.`
+        ? `Discover every distinct unit variant explicitly shown across these floor-plan pages. Return one unitVariants entry per distinct variant, merging pages that show levels of the same duplex or penthouse. ${MIRRORED_UNIT_MERGE_RULE} Each variantName must be a concise, evidence-backed name printed in the brochure and, when it covers more than one unit or floor number, must say so (for example "Block B - Units 301 & 302 (3rd Floor)" or "Flat Type 02 - Typical Floor (3rd-20th)"); when the plan's own heading states the configuration, keep it in the name too (for example "Block B & E - 4 BHK Classy Residences - Units 201"). Set bhkTypeKey ONLY when the plan's own printed heading states the configuration ("4 BHK Classy Residences" gives 4bhk, "5 BHLK Lifestyle Living" gives the 5-bedroom key), choosing the exact key from the allowed values given for unit_variants; omit bhkTypeKey entirely when no configuration is printed — never infer one by counting bedrooms on the drawing. Never set layoutTypeKey. Put each variant's values in details using only: ${variantDetails}. Return an empty unitVariants array when these pages do not explicitly show a unit variant.`
         : "This is not a unit-discovery scope. Return unitVariant as null.";
 
   return `You extract evidence-backed real-estate brochure facts into a reviewed submission. Return one complete JSON object only, with no markdown or commentary.
@@ -1113,7 +1157,9 @@ Output shape:
 
 Rules:
 - UNITS ARE EXACT. Copy every measurement exactly as printed and NEVER convert, round, or assume a unit. Give the unit exactly as printed: with the number when it is printed there ("4.36 m", "1,250 sq ft"), or once as lengthUnit / areaUnit / unit when the plan states it for everything (a scale note or legend such as "all dimensions in mm"). If no unit is printed anywhere for a measurement, set its unit to null and still copy the number: it will be held for a person to check, not guessed. Never treat a number as feet or square feet unless feet are printed. For any field whose key ends in _sqft, return value exactly as printed plus a unit key (for example {"fieldKey": "property.plot_area_sqft", "value": 1200, "unit": "sq yd", ...}); do not convert it yourself.
-- Extract only facts explicitly printed on these pages. Never infer, count, summarize marketing copy, or fabricate missing values.
+- Extract only facts explicitly printed on these pages. Never infer, summarize marketing copy, or fabricate missing values. Transcribing a printed list or grid item by item is NOT inferring and is required (see exhaustiveness below); what is forbidden is counting things up to invent a total the brochure never prints.
+- BE EXHAUSTIVE on any field whose value is a list. When a page prints a grid, legend, icon set or list (an amenities icon grid, a specification table, a legend of numbered facilities), work through it item by item, in reading order, and return EVERY entry that matches an allowed value — not a representative sample and not only the well-known ones. A grid of 30+ amenity icons must yield every one of those icons that maps to an allowed value. Silently omitting a printed item that has a matching allowed value is an error, not a judgement call.
+- A storey or floor count is NEVER a tower or block count. Marketing copy such as "31-Storey Iconic Towers" states 31 FLOORS and says nothing at all about how many towers exist; a tower count comes from its own printed evidence ("5 Blocks", "Towers A to E", a block legend). Read property.total_floors and property.total_towers each from their own evidence, and omit either one that is not separately printed rather than reusing the other's number.
 - Never return a price, currency amount, rate per square foot, or commercial term anywhere, including unmappedRawEvidence.
 - The only active scalar fields for this scope are: ${JSON.stringify(scalarFields)}. Use their exact fieldKey and dataType-compatible value. Omit missing fields.
 - If a useful non-price fact has no active field key, put it in unmappedRawEvidence instead of inventing a destination or silently dropping it.
@@ -1475,14 +1521,37 @@ const parseScopeResponse = (
           `${path} must be an object`,
         );
       }
-      if (
-        candidate.bhkTypeKey !== undefined ||
-        candidate.layoutTypeKey !== undefined
-      ) {
+      /*
+       * A layout key is never printed on a plan, so it stays forbidden. A BHK
+       * key often IS printed as the plan's own heading ("4 BHK Classy
+       * Residences"), and refusing it meant a brochure that states the
+       * configuration outright still reached review with it blank. It is
+       * accepted only when it is one of the catalog's own keys, supplied as
+       * this field's allowed values — an invented key still fails the run
+       * rather than reaching the publish transaction as an unknown key.
+       */
+      if (candidate.layoutTypeKey !== undefined) {
         throw new OcrAdapterError(
           "invalid_response",
-          `${path} must not assign BHK or layout catalog keys`,
+          `${path} must not assign a layout catalog key`,
         );
+      }
+      let bhkTypeKey: string | undefined;
+      if (candidate.bhkTypeKey !== undefined) {
+        const allowed =
+          activeFields.find((field) => field.fieldKey === "unit_variants")
+            ?.allowedValues ?? [];
+        const proposed = readNonEmptyString(
+          candidate.bhkTypeKey,
+          `${path}.bhkTypeKey`,
+        );
+        if (!allowed.includes(proposed)) {
+          throw new OcrAdapterError(
+            "invalid_response",
+            `${path}.bhkTypeKey is not a catalog key: ${proposed}`,
+          );
+        }
+        bhkTypeKey = proposed;
       }
       const variantName = readNonEmptyString(
         candidate.variantName,
@@ -1503,6 +1572,7 @@ const parseScopeResponse = (
       return {
         scopeKey: scope.scopeKey,
         variantName,
+        ...(bhkTypeKey === undefined ? {} : { bhkTypeKey }),
         // The model's raw reading is converted here, once, and then validated.
         details: parseVariantDetails(
           convertProviderDetails(candidate.details, `${path}.details`),

@@ -33,5 +33,8 @@ Reason: `property.amenities` (catalog-matched, schema v1) is what makes a compar
 
 ## Not done here
 
-- The dossier does not yet render `amenities_full_list` in a distinct "Amenities — as stated by developer" section; it currently falls into the generic specifications list alongside true specs. Cosmetic, tracked as a follow-up.
 - `unmappedRawEvidence` itself is still discarded once extraction finishes — this closes the specific gap a real brochure just proved costly, not the general one. A masterplan legend item, a floor-level note, or any other one-off fact this schema didn't anticipate still has nowhere to go. Whether that becomes a genuinely general admin-reviewable store, versus continuing to promote named gaps as they're found (as this entry does), is an open product question, not decided here.
+
+## Follow-up closed 2026-09-23
+
+The dossier now renders `amenities_full_list` in its own labelled block beside the catalog-matched Amenities section (`splitAmenitiesFullList` in `src/lib/properties/dossier.ts`), rather than inside the generic Specifications category grouping alongside true specs. It is the one field this schema version treats differently by design (see above), so it is the one field with dedicated dossier UI — every other v12 field still renders through the generic `specification_text` path with no per-field code.

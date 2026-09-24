@@ -18,6 +18,7 @@ import {
 import { createBrochureSubmission } from "@/lib/ingestion/brochure-upload";
 import { createLocalStorageAdapter } from "@/lib/storage/local-adapter";
 import { addBrochurePageImage } from "./brochure-page-media";
+import { autoMapFloorPlanImages } from "./floor-plan-auto-map";
 
 const userId = `page-media-${randomUUID()}`;
 const developerName = `Page Media Developer ${randomUUID().slice(0, 8)}`;
@@ -235,5 +236,55 @@ describe("addBrochurePageImage", () => {
         },
       ),
     ).rejects.toMatchObject({ code: "invalid_media" });
+  });
+});
+
+describe("floor plans tied to unit types by page caption", () => {
+  const variants = [
+    { variantName: "Tower A - Type 1 (Unit 1)", evidencePages: [3] },
+    { variantName: "Tower A - Type 2 (Unit 2)", evidencePages: [2] },
+  ];
+  // The model's citations are the wrong way round on purpose: the captions win.
+  const pages = [
+    { pageNumber: 1, label: "Tower A" },
+    { pageNumber: 2, label: "2 BHK - Tower A | Type - 1" },
+    { pageNumber: 3, label: "2 BHK - Tower A | Type - 2" },
+  ];
+
+  it("adds each as a private, unreviewed candidate for its own unit type, once", async () => {
+    const created = await createBrochureSubmission(
+      { database: db, storage: storage() },
+      { developerId, uploadedBy: userId, bytes: await makePdf(3) },
+    );
+    createdSubmissionIds.push(created.submissionId);
+    const deps = { database: db, storage: storage() };
+    const input = { submissionId: created.submissionId, variants, pages };
+
+    const first = await autoMapFloorPlanImages(deps, input);
+    expect(first.added.map((m) => m.pageNumber)).toEqual([2, 3]);
+
+    const rows = (await rowsFor(created.submissionId)).sort(
+      (a, b) => a.displayOrder - b.displayOrder,
+    );
+    expect(
+      rows.map((r) => [r.unitVariantName, r.gcsPath.split("-page-")[1]]),
+    ).toEqual([
+      ["Tower A - Type 1 (Unit 1)", "2.webp"],
+      ["Tower A - Type 2 (Unit 2)", "3.webp"],
+    ]);
+    for (const row of rows) {
+      expect(row).toMatchObject({
+        mediaType: "floor_plan",
+        isPublic: false,
+        reviewStatus: "needs_review",
+        uploadedBy: null,
+      });
+    }
+
+    // A second run neither duplicates nor overwrites.
+    const again = await autoMapFloorPlanImages(deps, input);
+    expect(again.added).toEqual([]);
+    expect(again.skipped).toHaveLength(2);
+    expect(await rowsFor(created.submissionId)).toHaveLength(2);
   });
 });

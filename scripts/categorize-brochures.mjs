@@ -99,6 +99,7 @@ for (const file of files) {
     const lowConfidence = [];
     const notClassified = [];
     const imagery = {};
+    const captions = {};
     for (let i = 1; i <= n; i += 1) {
       const select = document.getElementById(`type-${i}`);
       const card = select?.closest("li");
@@ -113,8 +114,15 @@ for (const file of files) {
       ) ?? []) {
         imagery[chip.textContent] = (imagery[chip.textContent] ?? 0) + 1;
       }
+      // data-slot="page-caption" (page-review.tsx) distinguishes the real
+      // router caption from the imageLayout label paragraph beside it,
+      // which shares the same classes ("Image fills the page" and so on).
+      const caption = card?.querySelector(
+        '[data-slot="page-caption"]',
+      )?.textContent;
+      if (caption) captions[i] = caption;
     }
-    return { byType, lowConfidence, notClassified, imagery };
+    return { byType, lowConfidence, notClassified, imagery, captions };
   }, total);
 
   const compact = (pages) => pages.join(",");
@@ -124,6 +132,9 @@ for (const file of files) {
   console.log(`  low confidence: ${compact(result.lowConfidence) || "none"}`);
   console.log(`  not classified: ${compact(result.notClassified) || "none"}`);
   console.log(`  imagery tags: ${JSON.stringify(result.imagery)}`);
+  for (const [pageNum, caption] of Object.entries(result.captions)) {
+    console.log(`  caption p${pageNum}: ${caption}`);
+  }
   const summary = await page.getByText(/No floor plans were found/).count();
   console.log(
     `  floor-plan step skipped notice: ${summary > 0 ? "shown" : "not shown"}`,

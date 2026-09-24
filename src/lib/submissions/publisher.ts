@@ -286,6 +286,7 @@ const runPublish = async (
     const possessionDate = getStringField("property.possession_date");
     const launchDate = getStringField("property.launch_date");
     const pincode = getStringField("property.pincode");
+    const mapUrl = getStringField("property.google_maps_url");
     const totalTowers = getNumberField("property.total_towers");
     const totalFloors = getNumberField("property.total_floors");
     const totalUnits = getNumberField("property.total_units");
@@ -373,6 +374,7 @@ const runPublish = async (
           possessionDate,
           launchDate,
           pincode,
+          mapUrl,
           totalTowers,
           totalFloors,
           totalUnits,
@@ -409,6 +411,7 @@ const runPublish = async (
       }
       if (launchDate !== undefined) updateColumns.launchDate = launchDate;
       if (pincode !== undefined) updateColumns.pincode = pincode;
+      if (mapUrl !== undefined) updateColumns.mapUrl = mapUrl;
       if (totalTowers !== undefined) updateColumns.totalTowers = totalTowers;
       if (totalFloors !== undefined) updateColumns.totalFloors = totalFloors;
       if (totalUnits !== undefined) updateColumns.totalUnits = totalUnits;
@@ -620,6 +623,72 @@ const runPublish = async (
       }
     }
 
+    // The project's main photo (schema v14): the one picture that stands for it on
+    // cards, comparison columns and the dossier. Exactly one per property, and it
+    // must be a photo that is live after this publish: either a new picture this
+    // submission approves, or a live picture this edit does not remove. Choosing
+    // one replaces the previous main photo in the same transaction.
+    const mainPhotoId = getStringField("property.main_photo");
+    let mainCandidateId: string | undefined;
+    if (mainPhotoId !== undefined) {
+      const candidate = submissionMedia.find(
+        (media) => media.id === mainPhotoId,
+      );
+      let mainLiveId: string | undefined;
+      if (candidate) {
+        if (
+          candidate.mediaType !== "photo" ||
+          candidate.reviewStatus !== "confirmed" ||
+          !candidate.isPublic
+        ) {
+          throw new SubmissionPublishError(
+            "the main photo must be an approved, public photo; choose another or approve this one",
+          );
+        }
+        mainCandidateId = candidate.id;
+      } else {
+        const [live] = await tx
+          .select({
+            id: propertyMedia.id,
+            mediaType: propertyMedia.mediaType,
+            removedAt: propertyMedia.removedAt,
+          })
+          .from(propertyMedia)
+          .where(
+            and(
+              eq(propertyMedia.id, mainPhotoId),
+              eq(propertyMedia.propertyId, propertyId),
+            ),
+          );
+        if (
+          !live ||
+          live.removedAt !== null ||
+          live.mediaType !== "photo" ||
+          removedMediaIds.includes(mainPhotoId)
+        ) {
+          throw new SubmissionPublishError(
+            "the main photo is not a live photo of this property",
+          );
+        }
+        mainLiveId = live.id;
+      }
+      await tx
+        .update(propertyMedia)
+        .set({ isPrimary: false })
+        .where(
+          and(
+            eq(propertyMedia.propertyId, propertyId),
+            eq(propertyMedia.isPrimary, true),
+          ),
+        );
+      if (mainLiveId !== undefined) {
+        await tx
+          .update(propertyMedia)
+          .set({ isPrimary: true })
+          .where(eq(propertyMedia.id, mainLiveId));
+      }
+    }
+
     const publicConfirmedMedia = submissionMedia.filter(
       (media) => media.reviewStatus === "confirmed" && media.isPublic,
     );
@@ -663,6 +732,7 @@ const runPublish = async (
             attribution: media.attribution,
             sourceKind: media.sourceKind,
             displayOrder: media.displayOrder,
+            isPrimary: media.id === mainCandidateId,
           };
         },
       );

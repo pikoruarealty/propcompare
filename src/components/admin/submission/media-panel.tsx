@@ -5,6 +5,7 @@ import { ImagePlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { SubmissionDetail } from "@/lib/submissions/queue";
 import { REVIEW_STATUS_LABEL } from "@/lib/submissions/field-display";
+import { ExpandableImage } from "./expandable-image";
 import { inputClass, labelClass } from "./form-classes";
 
 export type MediaItem = SubmissionDetail["media"][number] & {
@@ -29,12 +30,15 @@ export function MediaPanel({
   published,
   removedIds,
   onSetRemoved,
+  mainPhotoId,
+  onSetMainPhoto,
   media,
   variantNames,
   editable,
   reviewable,
   pending,
   onReview,
+  onDelete,
   onUploaded,
 }: {
   submissionId: string;
@@ -44,6 +48,11 @@ export function MediaPanel({
   removedIds: string[];
   /** Saves the new list of pictures to take off; resolves to an error message. */
   onSetRemoved: (ids: string[]) => Promise<string | null>;
+  /** The picture that stands for the project (schema v14): a live picture's id,
+   * or a candidate's, once published. Null when none is chosen yet. */
+  mainPhotoId: string | null;
+  /** Saves the choice; resolves to an error message. */
+  onSetMainPhoto: (id: string) => Promise<string | null>;
   media: MediaItem[];
   variantNames: string[];
   editable: boolean;
@@ -55,6 +64,8 @@ export function MediaPanel({
     status: "confirmed" | "rejected",
     isPublic: boolean,
   ) => void;
+  /** Permanently removes a rejected candidate — storage object and row both. */
+  onDelete: (mediaId: string) => void;
   onUploaded: () => void;
 }) {
   const [file, setFile] = React.useState<File | null>(null);
@@ -71,6 +82,31 @@ export function MediaPanel({
   const [error, setError] = React.useState<string | null>(null);
   const fileInput = React.useRef<HTMLInputElement>(null);
   const [removeError, setRemoveError] = React.useState<string | null>(null);
+  const [mainError, setMainError] = React.useState<string | null>(null);
+  const makeMain = async (id: string) => {
+    setMainError(null);
+    setMainError(await onSetMainPhoto(id));
+  };
+  /** The marker, or the action that sets it, for one photo. */
+  const mainControl = (id: string) =>
+    id === mainPhotoId ? (
+      <p
+        data-slot="main-photo-marker"
+        className="text-primary text-xs font-semibold"
+      >
+        Main photo: stands for the project on cards and comparisons
+      </p>
+    ) : (
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        disabled={pending}
+        onClick={() => void makeMain(id)}
+      >
+        Make main photo
+      </Button>
+    );
   const setRemoved = async (id: string, remove: boolean) => {
     setRemoveError(null);
     const next = remove
@@ -131,6 +167,11 @@ export function MediaPanel({
         go live, and shows its attribution.
       </p>
 
+      {mainError ? (
+        <p role="alert" className="text-destructive mb-3 text-sm">
+          {mainError}
+        </p>
+      ) : null}
       {published.length > 0 ? (
         <div data-slot="published-pictures" className="mb-8">
           <h3 className="font-display text-xl">Pictures on the listing now</h3>
@@ -157,10 +198,11 @@ export function MediaPanel({
                   className="border-border bg-card overflow-hidden rounded-lg border"
                 >
                   {isImage ? (
-                    // eslint-disable-next-line @next/next/no-img-element -- a served thumbnail, not a static asset
-                    <img
+                    <ExpandableImage
                       src={`/api/v1/media/${item.id}?size=thumb`}
+                      fullSrc={`/api/v1/media/${item.id}`}
                       alt={item.caption ?? "A picture on the listing"}
+                      title={item.caption ?? "A picture on the listing"}
                       className={
                         removed
                           ? "bg-muted aspect-[3/2] w-full object-cover opacity-40 grayscale"
@@ -211,6 +253,13 @@ export function MediaPanel({
                         </Button>
                       </div>
                     ) : null}
+                    {!removed && item.mediaType === "photo" ? (
+                      <div>
+                        {editable || item.id === mainPhotoId
+                          ? mainControl(item.id)
+                          : null}
+                      </div>
+                    ) : null}
                   </div>
                 </li>
               );
@@ -237,10 +286,13 @@ export function MediaPanel({
               className="border-border bg-card overflow-hidden rounded-lg border"
             >
               {item.previewUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element -- a short-lived signed URL to private storage, not a static asset
-                <img
+                <ExpandableImage
                   src={item.previewUrl}
                   alt={
+                    item.caption ??
+                    `${item.mediaType.replace("_", " ")} proposed for the listing`
+                  }
+                  title={
                     item.caption ??
                     `${item.mediaType.replace("_", " ")} proposed for the listing`
                   }
@@ -271,6 +323,15 @@ export function MediaPanel({
                       : " · kept private"
                     : ""}
                 </p>
+                {item.mediaType === "photo" &&
+                item.reviewStatus === "confirmed" &&
+                item.isPublic ? (
+                  <div>
+                    {editable || item.id === mainPhotoId
+                      ? mainControl(item.id)
+                      : null}
+                  </div>
+                ) : null}
                 {reviewable ? (
                   <div className="flex flex-wrap gap-2 pt-1">
                     {item.reviewStatus === "confirmed" &&
@@ -284,15 +345,29 @@ export function MediaPanel({
                         Approve
                       </Button>
                     )}
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      disabled={pending}
-                      onClick={() => onReview(item.id, "rejected", false)}
-                    >
-                      Reject
-                    </Button>
+                    {item.reviewStatus === "rejected" ? (
+                      // Rejecting an already-rejected picture is a no-op; what
+                      // an admin wants here is to stop seeing it.
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={pending}
+                        onClick={() => onDelete(item.id)}
+                      >
+                        Delete
+                      </Button>
+                    ) : (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={pending}
+                        onClick={() => onReview(item.id, "rejected", false)}
+                      >
+                        Reject
+                      </Button>
+                    )}
                   </div>
                 ) : null}
               </div>

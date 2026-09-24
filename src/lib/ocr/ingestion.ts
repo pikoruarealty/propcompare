@@ -1,11 +1,14 @@
 import {
   EDIT_ONLY_FIELD_KEYS,
+  MAIN_PHOTO_FIELD_KEY,
+  MAP_URL_FIELD_KEY,
   RERA_ONLY_FIELD_KEYS,
 } from "@/lib/submissions/edit-only-fields";
 import { and, eq, ne, notInArray } from "drizzle-orm";
 import { db } from "@/db";
 import {
   amenityCatalog,
+  bhkTypes,
   ocrExtractionJobs,
   propertyTypes,
   propertySchemaFields,
@@ -29,6 +32,8 @@ import {
   splitProviderKey,
   type AiUsageInput,
 } from "@/lib/usage/ledger";
+import { storageAdapter } from "@/lib/storage";
+import { autoMapFloorPlanImages } from "@/lib/submissions/floor-plan-auto-map";
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
@@ -230,7 +235,48 @@ export const retryOcrExtractionPersistence = async (params: {
     throw new OcrPersistenceError(job.id, params.result, error);
   }
 
+  // Best effort, after the extraction is safely stored: a failure here costs an
+  // admin one manual "Use as image", and must never turn a finished, paid-for
+  // extraction into a failed one.
+  await tieFloorPlanImages(job.submissionId, params.result, manifest).catch(
+    (error) => {
+      console.error("Floor-plan image mapping failed:", error);
+    },
+  );
+
   return params.result;
+};
+
+/**
+ * Offers each discovered unit type's floor-plan page as a needs-review image
+ * candidate (`autoMapFloorPlanImages`), keyed on the router's page captions.
+ */
+const tieFloorPlanImages = async (
+  submissionId: string,
+  result: OcrProviderExtractionResult,
+  confirmedManifest: OcrExtractionRequest["manifest"],
+): Promise<void> => {
+  const manifest = result.effectiveManifest ?? confirmedManifest;
+  const pages = manifest.scopes
+    .filter(
+      (scope) => scope.kind === "floor_plans" || scope.kind === "unit_variant",
+    )
+    .flatMap((scope) => scope.pages);
+  const variants = result.extraction.unitVariants.flatMap((variant) =>
+    variant.variantName
+      ? [
+          {
+            variantName: variant.variantName,
+            evidencePages: variant.evidence.map((item) => item.pageNumber),
+          },
+        ]
+      : [],
+  );
+  if (pages.length === 0 || variants.length === 0) return;
+  await autoMapFloorPlanImages(
+    { database: db, storage: storageAdapter },
+    { submissionId, variants, pages },
+  );
 };
 
 export const executeOcrExtractionJob = async (params: {
@@ -286,6 +332,8 @@ export const executeOcrExtractionJob = async (params: {
         ne(propertySchemaFields.dataType, "legal_entity_id"),
         notInArray(propertySchemaFields.fieldKey, [
           ...EDIT_ONLY_FIELD_KEYS,
+          MAIN_PHOTO_FIELD_KEY,
+          MAP_URL_FIELD_KEY,
           ...RERA_ONLY_FIELD_KEYS,
         ]),
       ),
@@ -296,6 +344,7 @@ export const executeOcrExtractionJob = async (params: {
   const amenityRows = await db
     .select({ key: amenityCatalog.key })
     .from(amenityCatalog);
+  const bhkTypeRows = await db.select({ key: bhkTypes.key }).from(bhkTypes);
   const activeFieldsWithVocabularies = activeFields.map((field) => {
     if (field.fieldKey === "property.type") {
       return {
@@ -308,6 +357,12 @@ export const executeOcrExtractionJob = async (params: {
         ...field,
         allowedValues: amenityRows.map((row) => row.key),
       };
+    }
+    // The BHK catalog's own keys, so a floor plan whose heading prints the
+    // configuration can carry it into review instead of arriving blank. The
+    // adapter accepts a key only when it appears here.
+    if (field.fieldKey === "unit_variants") {
+      return { ...field, allowedValues: bhkTypeRows.map((row) => row.key) };
     }
     return field;
   });

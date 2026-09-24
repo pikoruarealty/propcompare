@@ -45,6 +45,7 @@ export const loadLiveValues = async (
       reraNumber: properties.reraRegistrationNumber,
       progress: properties.reraConstructionProgressPercent,
       legalEntityId: properties.legalEntityId,
+      mapUrl: properties.mapUrl,
     })
     .from(properties)
     .innerJoin(propertyTypes, eq(propertyTypes.id, properties.propertyTypeId))
@@ -67,6 +68,7 @@ export const loadLiveValues = async (
     "property.rera_construction_progress_percent":
       row.progress === null ? null : Number(row.progress),
     "property.legal_entity_id": row.legalEntityId,
+    "property.google_maps_url": row.mapUrl,
   };
   const live: Record<string, unknown> = Object.fromEntries(
     Object.entries(values).filter(([, value]) => value !== null),
