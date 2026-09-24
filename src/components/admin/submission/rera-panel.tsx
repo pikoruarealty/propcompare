@@ -4,7 +4,7 @@ import * as React from "react";
 import { Button } from "@/components/ui/button";
 import { describeGroup, type CarpetUnitRow } from "@/lib/rera/carpet-area";
 import type { ReraComparisonItem } from "@/lib/rera/mapping";
-import { writableItems } from "@/lib/rera/mapping";
+import { LEGAL_ENTITY_FIELD_KEY, writableItems } from "@/lib/rera/mapping";
 import type { ReraState } from "@/lib/rera/submission-fetch";
 import { reraFactLines } from "@/lib/properties/rera-facts";
 import { buildReraSnapshot } from "@/lib/rera/snapshot";
@@ -76,6 +76,7 @@ export function ReraPanel({
   pending,
   onFetch,
   onApply,
+  onAddPromoter,
 }: {
   rera: ReraState;
   editable: boolean;
@@ -84,6 +85,9 @@ export function ReraPanel({
   onFetch: (registrationNumber: string) => Promise<string | null>;
   /** Resolves to an error message, or null when the values were applied. */
   onApply: (jobId: string) => Promise<string | null>;
+  /** Records the promoter RERA names as a legal entity of the developer. Resolves
+   * to an error message, or null when it was added. */
+  onAddPromoter?: () => Promise<string | null>;
 }) {
   // What the admin typed, else the number the submission holds (which changes
   // when a field is edited, so it is read rather than copied into state).
@@ -103,6 +107,14 @@ export function ReraPanel({
     setBusy(true);
     setError(null);
     setError(await onApply(rera.lastFetch.jobId));
+    setBusy(false);
+  };
+
+  const addPromoter = async () => {
+    if (!onAddPromoter) return;
+    setBusy(true);
+    setError(null);
+    setError(await onAddPromoter());
     setBusy(false);
   };
 
@@ -254,6 +266,24 @@ export function ReraPanel({
                         <p className="text-muted-foreground mt-1 max-w-xs text-xs">
                           {item.note}
                         </p>
+                      ) : null}
+                      {/* The promoter is named but no recorded entity matches:
+                       * offer to record it, once, from what RERA prints. */}
+                      {editable &&
+                      onAddPromoter &&
+                      item.fieldKey === LEGAL_ENTITY_FIELD_KEY &&
+                      item.reraValue !== null &&
+                      item.proposedValue === null ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="mt-2"
+                          disabled={disabled}
+                          onClick={() => void addPromoter()}
+                        >
+                          Add as a legal entity
+                        </Button>
                       ) : null}
                     </td>
                     <td className="p-3 text-right">

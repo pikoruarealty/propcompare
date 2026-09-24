@@ -34,6 +34,7 @@ import {
 import { readReraPriceRange } from "@/lib/pricing/ranges";
 import { createRegulatorRegistry } from "./registry";
 import {
+  addPromoterAsLegalEntity,
   applyReraValues,
   fetchReraForSubmission,
   getReraState,
@@ -47,6 +48,7 @@ let developerId: string;
 let entityId: string;
 const submissionIds: string[] = [];
 const propertyIds: string[] = [];
+const extraDeveloperIds: string[] = [];
 
 /** GujRERA stand-in answering with the saved Kimana shapes. */
 const stubRegistry = (overrides: Record<string, unknown> = {}) => {
@@ -175,6 +177,11 @@ afterAll(async () => {
     await db.delete(properties).where(inArray(properties.id, propertyIds));
   }
   await db.delete(developers).where(eq(developers.id, developerId));
+  if (extraDeveloperIds.length > 0) {
+    await db
+      .delete(developers)
+      .where(inArray(developers.id, extraDeveloperIds));
+  }
   await db.delete(users).where(eq(users.id, userId));
 });
 
@@ -640,5 +647,101 @@ describe("an edit of an already-published property", () => {
       .where(eq(properties.id, propertyId));
     expect(live.name).toMatch(/^RERA Test Tower/);
     expect(live.reraNumber).toBeNull();
+  });
+});
+
+describe("adding RERA's promoter as a legal entity", () => {
+  /** A developer with no recorded legal entity, and a draft that has fetched. */
+  const draftWithoutEntity = async (fetch = true) => {
+    const [developer] = await db
+      .insert(developers)
+      .values({ name: `No Entity Developer ${randomUUID()}` })
+      .returning({ id: developers.id });
+    extraDeveloperIds.push(developer.id);
+    const { submissionId } = await createManualSubmission(db, {
+      developerId: developer.id,
+      submittedBy: userId,
+    });
+    submissionIds.push(submissionId);
+    if (fetch) {
+      await fetchReraForSubmission(db, {
+        submissionId,
+        registrationNumber: TEST_NUMBER,
+        requestedBy: userId,
+        registry: stubRegistry(),
+      });
+    }
+    return { developerId: developer.id, submissionId };
+  };
+
+  it("records the promoter as RERA prints it, typed from RERA's wording, and the comparison then proposes it", async () => {
+    const { developerId: owner, submissionId } = await draftWithoutEntity();
+    const before = (await getReraState(db, submissionId)).comparison.find(
+      (item) => item.fieldKey === "property.legal_entity_id",
+    );
+    expect(before).toMatchObject({ proposedValue: null, status: "not_held" });
+    expect(before?.note).toMatch(/none of this developer/i);
+
+    const added = await addPromoterAsLegalEntity(db, { submissionId });
+
+    expect(added.legalName).toBe("SUN VN DEVELOPERS LLP");
+    const [row] = await db
+      .select()
+      .from(developerLegalEntities)
+      .where(eq(developerLegalEntities.id, added.id));
+    expect(row).toMatchObject({
+      developerId: owner,
+      legalName: "SUN VN DEVELOPERS LLP",
+      entityType: "llp",
+      reraPromoterRegistrationNumber: null,
+    });
+    const after = (await getReraState(db, submissionId)).comparison.find(
+      (item) => item.fieldKey === "property.legal_entity_id",
+    );
+    expect(after).toMatchObject({
+      proposedValue: added.id,
+      status: "not_held",
+    });
+  });
+
+  it("does not add a second entity when one already matches, ignoring case and punctuation", async () => {
+    const { submissionId } = await draftWithoutEntity();
+    await addPromoterAsLegalEntity(db, { submissionId });
+
+    await expect(
+      addPromoterAsLegalEntity(db, { submissionId }),
+    ).rejects.toMatchObject({ code: "entity_exists" });
+  });
+
+  it("asks for a fetch first, and refuses once the submission is no longer editable", async () => {
+    const { submissionId } = await draftWithoutEntity(false);
+    await expect(
+      addPromoterAsLegalEntity(db, { submissionId }),
+    ).rejects.toMatchObject({ code: "job_not_found" });
+
+    await db
+      .update(propertySubmissions)
+      .set({ status: "rejected" })
+      .where(eq(propertySubmissions.id, submissionId));
+    await expect(
+      addPromoterAsLegalEntity(db, { submissionId }),
+    ).rejects.toMatchObject({ code: "invalid_state" });
+  });
+
+  it("says so when RERA names no promoter", async () => {
+    const { submissionId } = await draftWithoutEntity();
+    const [job] = await db
+      .select({ payload: reraFetchJobs.fetchedPayload })
+      .from(reraFetchJobs)
+      .where(eq(reraFetchJobs.submissionId, submissionId));
+    const record = (job.payload as { record: object }).record;
+    await db
+      .update(reraFetchJobs)
+      .set({ fetchedPayload: { record: { ...record, promoterName: null } } })
+      .where(eq(reraFetchJobs.submissionId, submissionId));
+
+    await expect(
+      addPromoterAsLegalEntity(db, { submissionId }),
+    ).rejects.toMatchObject({ code: "no_promoter" });
   });
 });

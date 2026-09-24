@@ -399,6 +399,88 @@ describe("ReraPanel — carpet area by unit type", () => {
   });
 });
 
+describe("ReraPanel — adding the promoter as a legal entity", () => {
+  const promoterItem = (proposedValue: string | null) => ({
+    fieldKey: "property.legal_entity_id",
+    label: "Promoter (legal entity)",
+    reraValue: "SUN VN DEVELOPERS LLP",
+    proposedValue,
+    currentValue: null,
+    status: "not_held" as const,
+    note: "None of this developer's recorded legal entities matches this promoter name.",
+  });
+  const addButton = () =>
+    screen.queryByRole("button", { name: "Add as a legal entity" });
+
+  it("offers to record the promoter when none matches, and does so on a click", async () => {
+    const onAddPromoter = vi.fn(async () => null);
+    render(
+      <ReraPanel
+        rera={fetched([promoterItem(null)])}
+        editable
+        pending={false}
+        onFetch={async () => null}
+        onApply={async () => null}
+        onAddPromoter={onAddPromoter}
+      />,
+    );
+
+    await userEvent.click(addButton()!);
+
+    expect(onAddPromoter).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows the reason when it cannot be added", async () => {
+    render(
+      <ReraPanel
+        rera={fetched([promoterItem(null)])}
+        editable
+        pending={false}
+        onFetch={async () => null}
+        onApply={async () => null}
+        onAddPromoter={async () => "RERA names no promoter for this project."}
+      />,
+    );
+
+    await userEvent.click(addButton()!);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "RERA names no promoter",
+    );
+  });
+
+  it("does not offer it when an entity already matches, when read-only, or with no handler", () => {
+    const matched = render(
+      <ReraPanel
+        rera={fetched([promoterItem("entity-1")])}
+        editable
+        pending={false}
+        onFetch={async () => null}
+        onApply={async () => null}
+        onAddPromoter={async () => null}
+      />,
+    );
+    expect(addButton()).not.toBeInTheDocument();
+    matched.unmount();
+
+    const readOnly = render(
+      <ReraPanel
+        rera={fetched([promoterItem(null)])}
+        editable={false}
+        pending={false}
+        onFetch={async () => null}
+        onApply={async () => null}
+        onAddPromoter={async () => null}
+      />,
+    );
+    expect(addButton()).not.toBeInTheDocument();
+    readOnly.unmount();
+
+    renderPanel(fetched([promoterItem(null)]));
+    expect(addButton()).not.toBeInTheDocument();
+  });
+});
+
 describe("ReraPanel — what the second pass reads", () => {
   const details: NonNullable<RegulatorRecord["details"]> = {
     version: 1,

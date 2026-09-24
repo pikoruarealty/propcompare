@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   compareWithRecord,
   derivePossessionStatus,
+  legalEntityTypeFromRera,
   LEGAL_ENTITY_FIELD_KEY,
   matchLegalEntity,
   writableItems,
@@ -614,5 +615,25 @@ describe("the second-pass items (position, map link, snapshot)", () => {
     ]) {
       expect(keys).not.toContain(key);
     }
+  });
+});
+
+describe("legalEntityTypeFromRera", () => {
+  it.each([
+    ["LIMITED LIABILITY PARTNERSHIP FIRM", "llp"],
+    ["Limited Liability Partnership", "llp"],
+    ["PARTNERSHIP FIRM", "partnership"],
+    ["COMPANY", "company"],
+    ["PRIVATE LIMITED COMPANY", "company"],
+    ["INDIVIDUAL/PROPRIETORSHIP", "proprietorship"],
+    ["TRUST", "trust"],
+  ])("reads %j as %s", (wording, expected) => {
+    expect(legalEntityTypeFromRera(wording)).toBe(expected);
+  });
+
+  it("says other, never a guess, for wording it does not know or none at all", () => {
+    expect(legalEntityTypeFromRera("SOCIETY")).toBe("other");
+    expect(legalEntityTypeFromRera("")).toBe("other");
+    expect(legalEntityTypeFromRera(null)).toBe("other");
   });
 });

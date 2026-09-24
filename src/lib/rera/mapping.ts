@@ -1,3 +1,4 @@
+import type { LegalEntityType } from "@/lib/developers/legal-entity-types";
 import { areaToSqft } from "@/lib/units/measurements";
 import { compareCarpetAreas, type CarpetUnitRow } from "./carpet-area";
 import { buildReraSnapshot, snapshotFingerprint } from "./snapshot";
@@ -92,6 +93,33 @@ export const LATITUDE_FIELD_KEY = "property.latitude";
 export const LONGITUDE_FIELD_KEY = "property.longitude";
 export const MAP_URL_KEY = "property.google_maps_url";
 export const LEGAL_ENTITY_FIELD_KEY = "property.legal_entity_id";
+
+/**
+ * Our kind of legal entity for the regulator's own wording of the promoter's type
+ * ("LIMITED LIABILITY PARTNERSHIP FIRM", "COMPANY"). Order matters: an LLP's name
+ * contains both "LIMITED" and "PARTNERSHIP". Anything not clearly one kind is
+ * "other", for an admin to correct, never guessed into a specific kind.
+ */
+export const legalEntityTypeFromRera = (
+  promoterType: string | null,
+): LegalEntityType => {
+  const type = (promoterType ?? "").toUpperCase();
+  if (type.includes("LIMITED LIABILITY") || /\bLLP\b/.test(type)) return "llp";
+  if (type.includes("PARTNERSHIP")) return "partnership";
+  if (
+    type.includes("COMPANY") ||
+    type.includes("PRIVATE LIMITED") ||
+    type.includes("PUBLIC LIMITED") ||
+    /\b(PVT|LTD)\b/.test(type)
+  ) {
+    return "company";
+  }
+  if (type.includes("PROPRIETOR") || type.includes("INDIVIDUAL")) {
+    return "proprietorship";
+  }
+  if (type.includes("TRUST")) return "trust";
+  return "other";
+};
 export const POSSESSION_STATUS_FIELD_KEY = "property.possession_status";
 export const AMENITIES_FIELD_KEY = "property.amenities";
 export const UNIT_VARIANTS_FIELD_KEY = "unit_variants";

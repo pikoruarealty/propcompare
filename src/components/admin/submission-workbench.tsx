@@ -592,6 +592,7 @@ export function SubmissionWorkbench({
               postJson("/rera/fetch", { registrationNumber })
             }
             onApply={(jobId) => postJson("/rera/apply", { jobId })}
+            onAddPromoter={() => postJson("/rera/promoter", {})}
           />
           <GuidedFooter
             show={editable}
