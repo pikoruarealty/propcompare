@@ -97,6 +97,8 @@ No summary object contains a price, price-per-square-foot, or bucket value, at a
 
 Published dossier for one property, resolved by `properties.slug`.
 
+`rera.facts` may carry `towers` (per tower: `name`, `floors`, `unitsPerFloor`, `minPerFloor`, `maxPerFloor`, `flats`) and `towerCount`, counted from the regulator's registered flats and blocks (2026-09-25).
+
 **Who gets what (2026-09-24, narrowed 2026-09-25, `DECISIONS.md`).** Since 2026-09-25 a caller with no session also receives `specifications` empty; `location` with only `city` and `locality` (pincode, coordinates and map link null, `nearby` empty); `rera` with only `registered`, `registrationNumber`, `lastCheckedAt` and the `sourcedFacts` the top of the page shows (every other field null, `facts` null); `developer` with only `id` and `name`; `totalFloors` and `plotAreaSqft` null; and `lock.specificationCatalog` (the specification names, never the answers). Before that: A caller with a session receives the full dossier. A caller with none receives the locked dossier (`lockDossier`): identity, possession, RERA, specifications, location and developer as usual; each unit variant with its `variantName` and `bhkType` only (`areas` and `amenities` empty; `layoutType`, `totalUnitsOfVariant`, `unitsPerFloor` and `dimensions` null); `amenities` empty; `media` reduced to at most three photographs (the primary first) with no floor plan, video or brochure; and a `lock` object `{ hiddenPhotos, hiddenFloorPlans, amenityCatalog: [{ label, category }] }` saying what was withheld. `lock` is absent from the full dossier. The response is `Cache-Control: private, no-store` either way, because the body depends on the caller.
 
 **Response `200`** — a `PropertyDossier`:

@@ -86,6 +86,14 @@ export const RERA_AUTHORITATIVE_FIELDS: ReraFieldRule[] = [
       return floors.length === 0 ? null : Math.max(...floors);
     },
   },
+  {
+    // The towers the registered blocks name ("T1+T2+T3+T4" is four), else the
+    // towers the flat numbers name (owner direction, 2026-09-25).
+    fieldKey: "property.total_towers",
+    label: "Towers (RERA's registered blocks)",
+    read: (record) =>
+      record.details?.towerCount ?? record.details?.towers?.length ?? null,
+  },
 ];
 
 export const SNAPSHOT_FIELD_KEY = "property.rera_snapshot";
@@ -267,6 +275,14 @@ export const compareWithRecord = (
   const floors = items.find(
     (item) => item.fieldKey === "property.total_floors",
   );
+  const towers = items.find(
+    (item) => item.fieldKey === "property.total_towers",
+  );
+  if (towers && towers.status === "differs") {
+    towers.note =
+      'RERA names these towers in the project\'s registered blocks. A brochure can print a storey count where the towers should be ("31-storey towers"), so check before keeping it.';
+  }
+
   if (floors && floors.status === "differs") {
     floors.note =
       "RERA counts the floors of its blocks as filed. A brochure can count podium, stilt or terrace levels as floors, so check which is meant before using RERA's number.";

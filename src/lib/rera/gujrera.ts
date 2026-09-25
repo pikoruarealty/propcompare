@@ -1,5 +1,6 @@
 import { groupCarpetAreas, type FlatCarpetArea } from "./carpet-area";
 import { legacyTlsFetch } from "./legacy-tls-fetch";
+import { towerCountOfBlocks, towerFloorsOf } from "./towers";
 import {
   RegulatorError,
   type RegulatorAdapter,
@@ -158,6 +159,9 @@ export const createGujreraAdapter = (
     const flats: FlatCarpetArea[] = [];
     let failed = false;
     let asOn: string | null = null;
+    // Every residential flat's number and block, for towers and units per floor
+    // (the number alone: nothing else of the row).
+    const numbered: { block: string; flatNumber: string }[] = [];
     for (const block of blocks) {
       await sleep(delayMs);
       try {
@@ -171,6 +175,9 @@ export const createGujreraAdapter = (
           const flatNumber = text(flat?.flatNo);
           const carpetAreaSqm = positive(flat?.carpetArea);
           const usage = text(flat?.usage);
+          if (flatNumber && (usage === null || /resid/i.test(usage))) {
+            numbered.push({ block: block.name, flatNumber });
+          }
           if (!flatNumber || carpetAreaSqm === null) continue;
           // A flat is at least a few square metres and never a hectare.
           if (carpetAreaSqm < 1 || carpetAreaSqm > 5000) continue;
@@ -199,7 +206,12 @@ export const createGujreraAdapter = (
       }
     }
     if (failed || flats.length === 0) gaps.push("flat carpet areas");
-    return { groups: groupCarpetAreas(flats), asOn };
+    return {
+      groups: groupCarpetAreas(flats),
+      asOn,
+      // Only from a complete list: a block that failed would undercount.
+      towers: failed ? null : towerFloorsOf(numbered),
+    };
   };
 
   /** The search hit for exactly this registration number, or a `RegulatorError`. */
@@ -499,8 +511,11 @@ export const createGujreraAdapter = (
       // Carpet area of every flat, in square metres, reduced to the distinct areas
       // per block, with how many are booked. Read from the same list the site's
       // own inventory tab shows; only the named fields are taken.
-      const { groups: carpetGroups, asOn: inventoryAsOn } =
-        await readCarpetGroups(formThreeId, blocks, gaps);
+      const {
+        groups: carpetGroups,
+        asOn: inventoryAsOn,
+        towers,
+      } = await readCarpetGroups(formThreeId, blocks, gaps);
 
       const developments = Array.isArray(detail?.dev) ? detail.dev : [];
       const amenityFlags = readAmenityFlags(
@@ -597,6 +612,8 @@ export const createGujreraAdapter = (
         boundary,
         centre: boundaryCentre(boundary),
         promoter: promoterHistory(promoterRecord),
+        towers,
+        towerCount: towerCountOfBlocks(blocks.map((block) => block.name)),
       };
 
       return {

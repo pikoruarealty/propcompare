@@ -284,36 +284,73 @@ describe("units per floor", () => {
 });
 
 describe("units per floor for the whole floor", () => {
-  it("is worked out from units, towers and floors, apart from a unit type's own count", () => {
+  it("counts it from RERA's flat numbers, marked as the regulator's, apart from a unit type's own count", () => {
+    const tower = (name: string, unitsPerFloor: number) => ({
+      name,
+      floors: 29,
+      unitsPerFloor,
+      minPerFloor: unitsPerFloor,
+      maxPerFloor: unitsPerFloor,
+      flats: 29 * unitsPerFloor,
+    });
     const a = property("a", {
-      totalUnits: 580,
-      totalTowers: 5,
-      totalFloors: 31,
       unitVariants: [variant("Typical", "3bhk", 1200, { unitsPerFloor: 2 })],
     });
+    a.rera = {
+      ...a.rera,
+      facts: {
+        version: 1,
+        source: "gujrera",
+        layoutLandAreaSqm: null,
+        openAreaSqm: null,
+        coveredAreaSqm: null,
+        coveredParkingAreaSqm: null,
+        filing: {
+          quarter: null,
+          periodEndsOn: null,
+          source: null,
+          progressPercent: null,
+          blocks: [],
+        },
+        inventory: null,
+        filings: null,
+        planPassingAuthority: null,
+        registeredOn: null,
+        architects: [],
+        engineers: [],
+        contractors: [],
+        boundary: [],
+        centre: null,
+        carpetGroups: [],
+        towers: ["A", "B", "C", "D", "E"].map((name) => tower(name, 4)),
+      },
+    };
     const b = property("b", {
       totalUnits: 76,
-      totalTowers: null,
-      totalFloors: null,
       unitVariants: [variant("Typical", "3bhk", 1200, { unitsPerFloor: 2 })],
     });
     const model = buildComparison([a, b]);
 
     const whole = rowOf(model, "floor_units");
-    expect(whole?.label).toBe("Units per floor (calculated)");
-    expect(whole?.cells.map((c) => c.text)).toEqual(["about 3.7", null]);
+    expect(whole?.label).toBe("Units per floor");
+    // Never a division of units by towers and floors: b states no towers from
+    // RERA and no whole-floor plan names a block, so it is not stated.
+    expect(whole?.cells.map((c) => c.text)).toEqual([
+      "4 in each of 5 towers",
+      null,
+    ]);
     expect(whole?.cells.map((c) => c.state)).toEqual(["value", "not_stated"]);
+    expect(whole?.cells[0].regulatorChecked).toBe(true);
 
-    // The unit type's own stated count is a different row, and says so.
     const own = rowOf(model, "units_per_floor");
     expect(own?.label).toBe("This unit type's units per floor");
     expect(own?.cells.map((c) => c.text)).toEqual(["2", "2"]);
   });
 
-  it("has no row when no property has the three inputs", () => {
+  it("has no row when neither RERA nor a whole-floor plan states it", () => {
     const model = buildComparison([
-      property("a", { totalUnits: 10, totalTowers: null, totalFloors: 5 }),
-      property("b", { totalUnits: null, totalTowers: 1, totalFloors: 5 }),
+      property("a", { totalUnits: 10, totalTowers: 2, totalFloors: 5 }),
+      property("b", { totalUnits: 20, totalTowers: 1, totalFloors: 5 }),
     ]);
     expect(rowOf(model, "floor_units")).toBeUndefined();
   });

@@ -124,6 +124,8 @@ export interface RegulatorParty {
  * areas the group has built, which are not kept because the regulator reports an
  * area for "completed projects" even where the completed count is zero.
  */
+import type { TowerFloors } from "./towers";
+
 export interface RegulatorPromoterHistory {
   yearsInGujarat: number | null;
   completedProjects: number | null;
@@ -181,6 +183,12 @@ export interface RegulatorDetails {
   /** The promoter group's stated history. Absent in a snapshot stored before it was
    * read; `null` when the record states none. */
   promoter?: RegulatorPromoterHistory | null;
+  /** Each tower's floors and flats per floor, counted from the registered flat
+   * numbers (`towerFloorsOf`). Absent in an older snapshot; null when the list was
+   * incomplete or its numbers did not read. */
+  towers?: TowerFloors[] | null;
+  /** Towers the registered blocks name ("T1+T2+T3+T4" is four). */
+  towerCount?: number | null;
 }
 
 export interface RegulatorQuarter {

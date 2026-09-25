@@ -206,6 +206,7 @@ describe("fetching a RERA record for a submission", () => {
       "rera_silent", // pincode: the saved Kimana fixture states none
       "not_held", // RERA project land area
       "not_held", // floors (22 in the latest filing)
+      "not_held", // towers (the blocks name A and B)
       "not_held", // latitude (centre of RERA's boundary)
       "not_held", // longitude
       "not_held", // map link
@@ -421,6 +422,7 @@ describe("using RERA's values", () => {
       "property.rera_construction_progress_percent",
       "property.rera_project_land_area_sqft",
       "property.total_floors",
+      "property.total_towers",
       "property.latitude",
       "property.longitude",
       "property.google_maps_url",

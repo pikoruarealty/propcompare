@@ -131,18 +131,20 @@ describe("DossierScreen — the full property", () => {
 });
 
 describe("DossierScreen — units per floor", () => {
-  it("states the whole floor with its working, not a unit type's own count", () => {
+  it("states what a whole-floor plan says, saying where it came from, never a division", () => {
+    // The fixture's towers each have one unit type stating 4 a floor.
     const { main } = renderDossier(richDossierFixture);
-    // 184 units over 2 towers of 14 floors.
-    expect(main).toHaveTextContent(
-      "about 6.6 (184 units, 2 towers, 14 floors)",
-    );
+    expect(main).toHaveTextContent("4 in A and B (floor plans)");
+    expect(main).not.toHaveTextContent("about 6.6");
   });
 
-  it("says not stated when the towers or floors are not", () => {
+  it("says not stated when no plan covers a whole floor and RERA has not counted it", () => {
     const { container } = renderDossier({
       ...richDossierFixture,
-      totalTowers: null,
+      unitVariants: richDossierFixture.unitVariants.map((variant) => ({
+        ...variant,
+        unitsPerFloor: null,
+      })),
     });
     const fact = [...container.querySelectorAll("dt")].find(
       (term) => term.textContent === "Units per floor",

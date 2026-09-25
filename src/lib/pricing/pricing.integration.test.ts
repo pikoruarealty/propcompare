@@ -568,7 +568,7 @@ describe("budget matching with the RERA range and admin prices", () => {
     expect(matches.map((m) => m.propertyId)).toContain(high.propertyId);
   });
 
-  it("ignores the RERA range once any unit type has an admin price", async () => {
+  it("prefers a typed price for its own unit type, and falls back to RERA's range for an unpriced one", async () => {
     const { submissionId, propertyId, typeA, typeB } = await withRange(
       20_000_000,
       60_000_000,
@@ -584,9 +584,10 @@ describe("budget matching with the RERA range and admin prices", () => {
 
     const matches = await matchPropertiesByBudgetRange(serviceDb, band);
 
-    // Neither the priced type (too cheap) nor the unpriced one (no fallback) matches.
+    // Type A's typed price wins (too cheap for the band); Type B has no typed
+    // price, so RERA's range stands in for it (owner direction, 2026-09-25).
     expect(matches).not.toContainEqual({ propertyId, unitVariantId: typeA });
-    expect(matches).not.toContainEqual({ propertyId, unitVariantId: typeB });
+    expect(matches).toContainEqual({ propertyId, unitVariantId: typeB });
 
     const cheap = await matchPropertiesByBudgetRange(serviceDb, {
       minInr: 9_000_000,
@@ -723,17 +724,21 @@ describe("the Prices tab's state and rules", () => {
     expect(await listStagedPrices(serviceDb, submissionId)).toEqual([]);
   });
 
-  it("refuses to change prices once the submission is published, and reports orphaned ones", async () => {
+  it("applies a price typed on a published property at once, never removes a live one, and reports orphaned ones", async () => {
     const { submissionId, propertyId } = await publishProperty();
 
-    await expect(
-      stagePrice(db, serviceDb, {
-        submissionId,
-        unitVariantName: "Type A",
-        priceInr: "1000",
-        enteredBy: testUserId,
-      }),
-    ).rejects.toMatchObject({ code: "invalid_state" });
+    // Owner direction 2026-09-25: a published property's prices can still be
+    // typed, and take effect straight away.
+    await stagePrice(db, serviceDb, {
+      submissionId,
+      unitVariantName: "Type A",
+      priceInr: "31000000",
+      enteredBy: testUserId,
+    });
+    expect(await listCurrentPrices(serviceDb, propertyId)).toContainEqual({
+      unitVariantName: "Type A",
+      priceInr: "31000000",
+    });
     await expect(
       unstagePrice(db, serviceDb, {
         submissionId,
@@ -749,12 +754,11 @@ describe("the Prices tab's state and rules", () => {
       enteredBy: testUserId,
     });
     const state = await getPricesState(db, serviceDb, submissionId);
-    expect(state.editable).toBe(false);
+    expect(state.editable).toBe(true);
     expect(state.orphanedStaged).toEqual(["Removed type"]);
     // The retry applies what it can and reports the rest.
     const retried = await retryApplyPrices(db, serviceDb, submissionId);
     expect(retried.unknown).toEqual(["Removed type"]);
-    expect(propertyId).toBeTruthy();
   });
 
   it("does not offer a retry for a submission that is not published", async () => {

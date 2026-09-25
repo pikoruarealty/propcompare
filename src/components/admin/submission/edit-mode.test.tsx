@@ -791,14 +791,24 @@ describe("the tabs of the edit screen", () => {
       "Specifications",
       "Unit types",
       "Images",
-      "Prices",
     ]);
   });
 
-  it("shows the Prices tab to an owner only, since a price is commercial data", () => {
-    renderScreen(editing(), "verifier");
-
+  it("keeps the prices in the Unit types tab, for an owner only, since a price is commercial data", () => {
+    const { container, unmount } = renderScreen(editing());
     expect(screen.queryByRole("tab", { name: /^Prices/ })).toBeNull();
+    const unitTypes =
+      container.querySelector('[role="tabpanel"][id$="unit_types"]') ??
+      container;
+    expect(
+      unitTypes.querySelector('[data-slot="prices-panel"]'),
+    ).not.toBeNull();
+    unmount();
+
+    const verifier = renderScreen(editing(), "verifier");
+    expect(
+      verifier.container.querySelector('[data-slot="prices-panel"]'),
+    ).toBeNull();
   });
 
   it("opens on Project and shows only that tab's fields", () => {

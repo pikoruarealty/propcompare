@@ -141,7 +141,7 @@ export const matchPropertiesByBudgetRange = async (
       ),
     );
 
-  // The regulator's project range, for a property nobody has priced by unit type.
+  // The regulator's project range, for each unit type nobody has typed a price for.
   // A stated max bounds the band from above; "no upper limit" leaves it open.
   const upperOverlap =
     "maxInr" in params
@@ -160,12 +160,12 @@ export const matchPropertiesByBudgetRange = async (
       on uv.property_id = p.id and uv.removed_at is null
     where r.max_inr >= (${params.minInr}::numeric * 0.80)
       ${upperOverlap}
+      -- Per unit type (owner direction, 2026-09-25): a typed price always wins, and
+      -- a unit type nobody has priced falls back to the regulator's project range.
       and not exists (
         select 1
-        from public.unit_variants priced
-        join private.unit_price_history ph
-          on ph.unit_variant_id = priced.id and ph.effective_to is null
-        where priced.property_id = p.id and priced.removed_at is null
+        from private.unit_price_history ph
+        where ph.unit_variant_id = uv.id and ph.effective_to is null
       )
   `);
 

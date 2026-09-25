@@ -144,6 +144,7 @@ describe("compareWithRecord", () => {
       "property.pincode",
       "property.rera_project_land_area_sqft",
       "property.total_floors",
+      "property.total_towers",
       "property.possession_status",
       "property.amenities",
       LEGAL_ENTITY_FIELD_KEY,

@@ -37,6 +37,16 @@ export class PricesError extends Error {
 const UUID = /^[0-9a-f-]{36}$/i;
 const EDITABLE = new Set<string>(WORKING_STATUSES);
 
+/**
+ * Prices can be typed while a submission is worked on, and also on a published one
+ * (owner direction, 2026-09-25): a price is private, never a live catalog field, so
+ * it needs no edit and no review to change. On a published submission a typed price
+ * is applied to the live unit type at once.
+ */
+const pricesEditable = (scope: SubmissionScope): boolean =>
+  EDITABLE.has(scope.status) ||
+  (scope.status === "published" && scope.propertyId !== null);
+
 interface SubmissionScope {
   id: string;
   status: string;
@@ -147,7 +157,7 @@ export const getPricesState = async (
 
   return {
     submissionStatus: scope.status,
-    editable: EDITABLE.has(scope.status),
+    editable: pricesEditable(scope),
     unitTypes: names.map((name) => ({
       name,
       staged: stagedBy.get(nameKey(name))?.priceInr ?? null,
@@ -175,10 +185,10 @@ const requireEditableUnitType = async (
   unitVariantName: string,
 ): Promise<SubmissionScope> => {
   const scope = await loadScope(database, submissionId);
-  if (!EDITABLE.has(scope.status)) {
+  if (!pricesEditable(scope)) {
     throw new PricesError(
       "invalid_state",
-      "Prices can only be entered before the submission is published or rejected.",
+      "Prices cannot be entered on a rejected submission.",
     );
   }
   const values = await loadCurrentValues(database, {
@@ -215,7 +225,7 @@ export const stagePrice = async (
       "Enter the price in whole rupees, for example 25000000.",
     );
   }
-  await requireEditableUnitType(
+  const scope = await requireEditableUnitType(
     database,
     input.submissionId,
     input.unitVariantName,
@@ -226,6 +236,19 @@ export const stagePrice = async (
     priceInr: price,
     enteredBy: input.enteredBy,
   });
+  // Already live: nothing is left to publish, so the price takes effect now.
+  if (scope.status === "published" && scope.propertyId) {
+    const applied = await applyStagedPrices(pricing, {
+      submissionId: scope.id,
+      propertyId: scope.propertyId,
+    });
+    if (applied.unknown.length > 0) {
+      throw new PricesError(
+        "unknown_unit_type",
+        "That unit type is not live on the property, so its price could not be applied.",
+      );
+    }
+  }
 };
 
 export const unstagePrice = async (
@@ -237,7 +260,7 @@ export const unstagePrice = async (
   if (!EDITABLE.has(scope.status)) {
     throw new PricesError(
       "invalid_state",
-      "Prices can only be changed before the submission is published or rejected.",
+      "A live price cannot be removed here. Type the new price instead.",
     );
   }
   await clearStagedPrice(pricing, input);

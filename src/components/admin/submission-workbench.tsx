@@ -576,9 +576,6 @@ export function SubmissionWorkbench({
             Images
             {media.length > 0 ? <TabBadge>{media.length}</TabBadge> : null}
           </TabsTrigger>
-          {permissionLevel === "owner" ? (
-            <TabsTrigger value="prices">Prices</TabsTrigger>
-          ) : null}
         </TabsList>
 
         {/* Every tab stays mounted, only hidden, so a half-edited field is kept
@@ -626,6 +623,14 @@ export function SubmissionWorkbench({
                 )
               }
             />
+            {/* Each unit type's private price sits with the unit types (owner
+                only; never shown to buyers). */}
+            {group.key === "unit_types" && permissionLevel === "owner" ? (
+              <PricesPanel
+                submissionId={submission.id}
+                active={tab === "unit_types"}
+              />
+            ) : null}
             <GuidedFooter
               show={editable}
               current={group.key}
@@ -667,16 +672,6 @@ export function SubmissionWorkbench({
             onGo={goToTab}
           />
         </TabsContent>
-
-        {permissionLevel === "owner" ? (
-          <TabsContent value="prices" forceMount hidden={tab !== "prices"}>
-            <PricesPanel
-              submissionId={submission.id}
-              editable={editable}
-              active={tab === "prices"}
-            />
-          </TabsContent>
-        ) : null}
       </Tabs>
 
       <WorkflowPanel

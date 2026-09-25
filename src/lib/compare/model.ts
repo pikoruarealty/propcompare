@@ -28,8 +28,9 @@ import {
   unitsPerAcre,
 } from "@/lib/properties/density";
 import {
+  typicalUnitsPerFloor,
   unitsPerFloorOf,
-  unitsPerFloorShort,
+  unitsPerFloorText,
 } from "@/lib/properties/floor-density";
 import { blockNamedIn, groupSqft } from "@/lib/rera/carpet-area";
 import type { ReraSnapshot } from "@/lib/rera/snapshot";
@@ -1045,16 +1046,18 @@ export const buildComparison = (
         },
         { numeric: true },
       ),
-      // The whole floor, from the project's units, towers and floors; the unit
-      // type's own count on its floor is a separate row in "The unit type".
+      // The whole floor per tower, counted from RERA's flat numbers, else stated
+      // by a floor plan that covers the whole floor (`floor-density.ts`); never a
+      // division. A unit type's own count is a separate row in "The unit type".
       row(
         "floor_units",
-        "Units per floor (calculated)",
+        "Units per floor",
         (d) => {
           const found = unitsPerFloorOf(d);
           return numberCell(
-            found === null ? null : Math.round(found.perFloor * 10) / 10,
-            unitsPerFloorShort(d),
+            found === null ? null : typicalUnitsPerFloor(found),
+            unitsPerFloorText(d),
+            found?.source === "rera",
           );
         },
         { numeric: true },

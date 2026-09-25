@@ -1,5 +1,11 @@
 # Progress
 
+## 2026-09-25 (7) - Units per floor and towers read from RERA, prices per unit type with RERA as the fallback, prices in the Units tab
+
+**Done (`DECISIONS.md` 2026-09-25 "Units per floor and towers are read from RERA..."):** (1) **Units per floor** counted per tower from GujRERA's flat numbers (kept in the RERA snapshot), else from a floor plan that is a whole floor, else not stated; no division anywhere. (2) **Towers** from RERA's block names, proposed as `property.total_towers` on each RERA check. (3) **Prices:** typed first, and each unpriced unit type falls back to RERA's project range; the inputs are in the Unit types tab and work on a published property, applying at once. (4) The rate-limit item for the events endpoint was added to `docs/production-readiness.md`, beside the purge schedule and privacy-policy notes already there.
+
+**Verified:** typecheck, lint, format check, targeted suites (components, comparison, properties, RERA, pricing, matching, analytics, buyer, units and submissions: 118 files, 1562 tests; the full suite was not run because the OCR worker was up), and the real adapter against GujRERA for Anamika (5 towers, 4 a floor on 29 floors) and Kimana (2 towers, 2 a floor on 19), plus a one-off count for Amaris and Maruti 360 (4 and 2). No live property shows these yet: they arrive with the next RERA check applied from the RERA panel. Not looked at in a browser.
+
 ## 2026-09-25 (6) - Less is open to a signed-out visitor; the dossier puts Location before RERA
 
 **Done (`DECISIONS.md` 2026-09-25 "A signed-out visitor sees less"):** the comparison's differences-first summary is withheld by the server and drawn as placeholder lines with a sign-in link; the dossier is open only down to the unit types' names (specifications, location detail, the RERA record beyond the registration badge, and developer detail are now withheld by `lockDossier` and drawn as named placeholders); the dossier's sections run Specifications, Location, RERA; `AGENTS.md`, the comparison design and the API spec state the new rule.

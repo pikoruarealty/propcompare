@@ -44,3 +44,7 @@ Written only by the publish transaction, from the contract field `property.rera_
 ## Addendum, 2026-09-25: `promoter` (no migration)
 
 The snapshot object gains an optional `promoter`: `{ yearsInGujarat, completedProjects, ongoingProjects }`, each a whole number or `null`, read from the promoter's own record (`/user_reg/promoter/promoter{id}`, the id being the project summary's `promoterId`). RERA prints the counts "by Group Entity". Absent in a snapshot stored before it was read, and `null` when the record states none of the three. A jsonb key inside an existing versioned object, so `version` stays 1 and nothing is migrated; `reraSnapshotProblem` checks the three figures. The promoter's contact details, PAN, address and website are not read, and neither are the areas the group has built (RERA reports an area for "completed projects" even where the completed count is zero). See `DECISIONS.md` 2026-09-25.
+
+## Addendum, 2026-09-25: `towers` and `towerCount` (no migration)
+
+Optional keys of the same versioned object. `towers`: per tower, `{ name, floors, unitsPerFloor, minPerFloor, maxPerFloor, flats }`, whole numbers counted from the registered flat numbers (`src/lib/rera/towers.ts`); null when the list was incomplete or its numbers did not read. `towerCount`: the towers the registered block names join ("A+B" is two). Only flat numbers and block names are read for these, nothing else of a flat's row. See `DECISIONS.md` 2026-09-25.

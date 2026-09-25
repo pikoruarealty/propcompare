@@ -184,11 +184,9 @@ function PriceRow({
 
 export function PricesPanel({
   submissionId,
-  editable,
   active,
 }: {
   submissionId: string;
-  editable: boolean;
   /** The tab is showing; the unit types may have changed since it last did. */
   active: boolean;
 }) {
@@ -327,7 +325,9 @@ export function PricesPanel({
                 <PriceRow
                   key={row.name}
                   {...row}
-                  editable={editable && state.editable}
+                  // The server decides: a published property's prices can still be
+                  // typed, and apply at once (2026-09-25).
+                  editable={state.editable}
                   submissionId={submissionId}
                   onState={setState}
                 />

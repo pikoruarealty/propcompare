@@ -56,7 +56,7 @@ afterEach(() => vi.unstubAllGlobals());
 describe("PricesPanel", () => {
   it("says at the top that prices are private and never shown to buyers", async () => {
     stubRoute(() => json(base));
-    render(<PricesPanel submissionId={ID} editable active />);
+    render(<PricesPanel submissionId={ID} active />);
 
     expect(
       await screen.findByText(/never shown to buyers anywhere/i),
@@ -65,9 +65,7 @@ describe("PricesPanel", () => {
 
   it("shows RERA's range as a reference and a row per unit type", async () => {
     stubRoute(() => json(base));
-    const { container } = render(
-      <PricesPanel submissionId={ID} editable active />,
-    );
+    const { container } = render(<PricesPanel submissionId={ID} active />);
 
     const rera = await waitFor(() => {
       const el = container.querySelector('[data-slot="prices-rera"]');
@@ -96,9 +94,7 @@ describe("PricesPanel", () => {
           })
         : json(base),
     );
-    const { container } = render(
-      <PricesPanel submissionId={ID} editable active />,
-    );
+    const { container } = render(<PricesPanel submissionId={ID} active />);
     const input = await screen.findByLabelText("Type A");
 
     await user.type(input, "25000000");
@@ -138,7 +134,7 @@ describe("PricesPanel", () => {
           )
         : json(base),
     );
-    render(<PricesPanel submissionId={ID} editable active />);
+    render(<PricesPanel submissionId={ID} active />);
     const input = await screen.findByLabelText("Type A");
 
     await user.type(input, "2a5.5");
@@ -162,7 +158,7 @@ describe("PricesPanel", () => {
     const calls = stubRoute((method) =>
       json(method === "DELETE" ? base : typed),
     );
-    render(<PricesPanel submissionId={ID} editable active />);
+    render(<PricesPanel submissionId={ID} active />);
     const input = await screen.findByLabelText("Type A");
     expect(input).toHaveValue("2,50,00,000");
 
@@ -184,9 +180,7 @@ describe("PricesPanel", () => {
         ],
       }),
     );
-    const { container } = render(
-      <PricesPanel submissionId={ID} editable active />,
-    );
+    const { container } = render(<PricesPanel submissionId={ID} active />);
 
     const note = await waitFor(() => {
       const el = container.querySelector('[data-slot="prices-unpriced"]');
@@ -204,9 +198,7 @@ describe("PricesPanel", () => {
         unitTypes: [{ ...base.unitTypes[0], current: "38000000" }],
       }),
     );
-    const { container } = render(
-      <PricesPanel submissionId={ID} editable active />,
-    );
+    const { container } = render(<PricesPanel submissionId={ID} active />);
 
     const row = await waitFor(() => {
       const el = container.querySelector('[data-slot="price-row"]');
@@ -231,7 +223,7 @@ describe("PricesPanel", () => {
             ],
           }),
     );
-    render(<PricesPanel submissionId={ID} editable={false} active />);
+    render(<PricesPanel submissionId={ID} active />);
 
     expect(await screen.findByLabelText("Type A")).toBeDisabled();
     await user.click(screen.getByRole("button", { name: "Apply now" }));
@@ -242,9 +234,7 @@ describe("PricesPanel", () => {
 
   it("says plainly when the private store is not configured", async () => {
     stubRoute(() => json({ ...base, unavailable: true, editable: false }));
-    const { container } = render(
-      <PricesPanel submissionId={ID} editable active />,
-    );
+    const { container } = render(<PricesPanel submissionId={ID} active />);
 
     await waitFor(() =>
       expect(
@@ -257,11 +247,11 @@ describe("PricesPanel", () => {
   it("does not load until its tab is showing, and asks again when it is shown", async () => {
     const calls = stubRoute(() => json(base));
     const { rerender } = render(
-      <PricesPanel submissionId={ID} editable active={false} />,
+      <PricesPanel submissionId={ID} active={false} />,
     );
     expect(calls).toHaveLength(0);
 
-    rerender(<PricesPanel submissionId={ID} editable active />);
+    rerender(<PricesPanel submissionId={ID} active />);
     await screen.findByLabelText("Type A");
     expect(calls).toHaveLength(1);
     expect(within(document.body).queryByText(/could not be loaded/)).toBeNull();
@@ -269,7 +259,7 @@ describe("PricesPanel", () => {
 
   it("offers to try again when the prices cannot be loaded", async () => {
     stubRoute(() => json({ error: { message: "no" } }, 500));
-    render(<PricesPanel submissionId={ID} editable active />);
+    render(<PricesPanel submissionId={ID} active />);
 
     expect(
       await screen.findByText(/prices could not be loaded/i),

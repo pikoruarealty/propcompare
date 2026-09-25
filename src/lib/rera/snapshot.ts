@@ -105,6 +105,37 @@ export const reraSnapshotProblem = (value: unknown): string | null => {
       }
     }
   }
+  // Towers counted from the flat numbers, when a snapshot carries them.
+  if (value.towers !== undefined && value.towers !== null) {
+    if (!Array.isArray(value.towers)) return "must list towers";
+    for (const tower of value.towers) {
+      if (
+        !isRecord(tower) ||
+        typeof tower.name !== "string" ||
+        ![
+          "floors",
+          "unitsPerFloor",
+          "minPerFloor",
+          "maxPerFloor",
+          "flats",
+        ].every(
+          (key) =>
+            typeof tower[key] === "number" &&
+            Number.isInteger(tower[key]) &&
+            (tower[key] as number) >= 0,
+        )
+      ) {
+        return "must state each tower's floors and flats as whole numbers";
+      }
+    }
+  }
+  if (
+    value.towerCount !== undefined &&
+    value.towerCount !== null &&
+    !(Number.isInteger(value.towerCount) && (value.towerCount as number) > 0)
+  ) {
+    return "must state the tower count as a whole number";
+  }
   const key = forbiddenKey(value);
   if (key)
     return `may not carry "${key}": no money or contact detail is stored`;
