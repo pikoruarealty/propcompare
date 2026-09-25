@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "property_media_one_primary_idx" ON "property_media" USING btree ("property_id") WHERE "property_media"."is_primary" and "property_media"."removed_at" is null;

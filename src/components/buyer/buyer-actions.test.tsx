@@ -184,18 +184,61 @@ describe("the comparison's focus chips and saving", () => {
       items: [],
     };
     vi.spyOn(globalThis, "fetch").mockImplementation((_url, init) => {
-      body = JSON.parse(String(init?.body));
+      if (init?.method !== "POST") return json({ data: [] });
+      body = JSON.parse(String(init.body));
       return json({ id: "c1" }, 201);
     });
     render(<CompareScreen dossiers={two()} requested={{}} />);
 
     await userEvent.click(
-      screen.getByRole("button", { name: "Save this comparison" }),
+      await screen.findByRole("button", { name: "Save this comparison" }),
     );
 
     expect(await screen.findByRole("status")).toHaveTextContent(/saved/i);
     expect(body.items).toHaveLength(2);
     expect(body.items[0].propertyId).toBe(richDossierFixture.id);
     expect(body.items[0].unitVariantId).toBeDefined();
+  });
+
+  it("shows a comparison already saved as saved, and unsaves it", async () => {
+    signedIn();
+    const pair = two();
+    const variantId = richDossierFixture.unitVariants[0].id;
+    const calls: { url: string; method: string }[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation((url, init) => {
+      const method = init?.method ?? "GET";
+      calls.push({ url: String(url), method });
+      if (method === "DELETE")
+        return Promise.resolve(new Response(null, { status: 204 }));
+      return json({
+        data: [
+          {
+            id: "c9",
+            createdAt: "2026-09-24T00:00:00.000Z",
+            items: pair.map((dossier, index) => ({
+              propertyId: dossier.id,
+              unitVariantId: variantId,
+              displayOrder: index,
+            })),
+          },
+        ],
+      });
+    });
+    render(<CompareScreen dossiers={pair} requested={{}} />);
+
+    expect(await screen.findByRole("status")).toHaveTextContent(/saved/i);
+    expect(
+      screen.queryByRole("button", { name: "Save this comparison" }),
+    ).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Unsave" }));
+
+    expect(
+      await screen.findByRole("button", { name: "Save this comparison" }),
+    ).toBeInTheDocument();
+    expect(calls).toContainEqual({
+      url: "/api/v1/comparisons/c9",
+      method: "DELETE",
+    });
   });
 });

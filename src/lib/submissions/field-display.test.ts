@@ -14,6 +14,11 @@ describe("groupOfField", () => {
     ["property.amenities", "amenities"],
     ["property.specifications.flooring", "specifications"],
     ["unit_variants", "unit_types"],
+    ["property.specifications.nearby_connectivity", "location"],
+    ["property.specifications.nearby_hospitals", "location"],
+    ["property.specifications.nearby_schools", "location"],
+    ["property.specifications.plot_no", "location"],
+    ["property.specifications.amenities_full_list", "amenities"],
     ["something.new", "project"],
   ])("%s is in %s", (key, group) => {
     expect(groupOfField(key)).toBe(group);

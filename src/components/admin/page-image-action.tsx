@@ -49,12 +49,19 @@ export function PageImageAction({
   page,
   suggestion,
   suggestedType,
+  defaultCaption,
 }: {
   submissionId: string;
   page: number;
   suggestion: PageSuggestion | undefined;
   /** What the admin has marked this page as, if anything. */
   suggestedType?: string;
+  /**
+   * The caption to default "Unit type" to — the router's own suggestion
+   * where still available, otherwise a caption a previous confirm already
+   * persisted onto this page's `OcrRoutedPage.label`.
+   */
+  defaultCaption?: string;
 }) {
   const defaultType: "photo" | "floor_plan" =
     suggestedType === "floor_plan" || suggestion?.category === "floor_plan"
@@ -62,7 +69,9 @@ export function PageImageAction({
       : "photo";
   const [open, setOpen] = React.useState(false);
   const [mediaType, setMediaType] = React.useState(defaultType);
-  const [unit, setUnit] = React.useState(suggestion?.caption ?? "");
+  const [unit, setUnit] = React.useState(
+    defaultCaption ?? suggestion?.caption ?? "",
+  );
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [added, setAdded] = React.useState(false);

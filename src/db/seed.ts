@@ -23,7 +23,7 @@ const coreBhkTypes = [
   { key: "2bhk", label: "2 BHK", bedroomCount: 2 },
   { key: "3bhk", label: "3 BHK", bedroomCount: 3 },
   { key: "4bhk", label: "4 BHK", bedroomCount: 4 },
-  { key: "5bhk_plus", label: "5 BHK+", bedroomCount: 5 },
+  { key: "5bhk_plus", label: "5 BHK", bedroomCount: 5 },
 ];
 
 const coreLayoutTypes = [
@@ -31,6 +31,17 @@ const coreLayoutTypes = [
   { key: "duplex", label: "Duplex" },
   { key: "penthouse", label: "Penthouse" },
 ];
+
+/** Contract fields switched off because the regulator now states the fact as a
+ * number (`DECISIONS.md` 2026-09-24, "RERA second pass, as built"): open area,
+ * and density from land area and units; and (2026-09-25) lifts per block and
+ * covered parking. Deactivated, never deleted. */
+const RETIRED_FIELD_KEYS = new Set([
+  "property.specifications.open_space",
+  "property.specifications.density_units_per_acre",
+  "property.specifications.lifts_per_tower",
+  "property.specifications.parking_levels",
+]);
 
 const initialAmenityCatalog = [
   {
@@ -181,6 +192,14 @@ const initialAmenityCatalog = [
     synonyms: ["open amphitheatre stage"],
   },
   {
+    // Added 2026-09-25 so a unit type that has its own terrace (Maruti 360's
+    // penthouses) can say so; it is a project amenity only when a brochure lists one.
+    key: "terrace",
+    label: "Terrace",
+    category: "Outdoor/family",
+    synonyms: ["private terrace", "sky terrace"],
+  },
+  {
     key: "security",
     label: "24×7 security",
     category: "Access/safety",
@@ -191,6 +210,19 @@ const initialAmenityCatalog = [
     label: "Visitor parking",
     category: "Access/safety",
     synonyms: ["visitor parking spaces"],
+  },
+  {
+    key: "ev_charging",
+    label: "EV charging",
+    category: "Access/safety",
+    synonyms: [
+      "ev car charging",
+      "ev car charging provision",
+      "ev charging point",
+      "ev charging station",
+      "electric vehicle charging",
+      "car charging point",
+    ],
   },
   {
     key: "service_lift",
@@ -247,7 +279,7 @@ const initialSpecificationCatalog = [
     key: "clubhouse_size",
     label: "Clubhouse size",
     category: "Design & space",
-    synonyms: ["clubhouse_size"],
+    synonyms: ["clubhouse_size", "clubhouse_area"],
   },
   {
     key: "lifts_per_tower",
@@ -278,6 +310,131 @@ const initialSpecificationCatalog = [
     label: "VRV air conditioning",
     category: "Mechanical systems",
     synonyms: ["vrv_ac_provided"],
+  },
+  // Added schema v12 (docs/schema/schema.v12.md): every one of these is a
+  // fact Claude Sonnet already read correctly on a real brochure (Godrej
+  // Altus flipchart, 2026-09-23) and had nowhere to put, so it fell into
+  // unmappedRawEvidence, which nothing downstream persists. Giving each its
+  // own catalog key is what makes it a real field instead of a discarded one.
+  {
+    key: "windows",
+    label: "Windows",
+    category: "Finish quality",
+    synonyms: ["windows"],
+  },
+  {
+    key: "doors",
+    label: "Doors",
+    category: "Finish quality",
+    synonyms: ["doors"],
+  },
+  {
+    key: "toilet_flooring_dado",
+    label: "Toilet flooring & dado",
+    category: "Finish quality",
+    synonyms: ["toilet_flooring_dado"],
+  },
+  {
+    key: "wall_finishing",
+    label: "Wall finishing",
+    category: "Finish quality",
+    synonyms: ["wall_finishing"],
+  },
+  {
+    key: "kitchen_finishes",
+    label: "Kitchen finishes",
+    category: "Finish quality",
+    synonyms: ["kitchen"],
+  },
+  {
+    key: "material_tolerances",
+    label: "Material tolerances",
+    category: "Finish quality",
+    synonyms: ["material_tolerances"],
+  },
+  {
+    key: "electricals",
+    label: "Electricals",
+    category: "Mechanical systems",
+    synonyms: ["electricals"],
+  },
+  {
+    key: "power_backup",
+    label: "Power backup",
+    category: "Mechanical systems",
+    synonyms: ["power_backup"],
+  },
+  {
+    key: "waterproofing",
+    label: "Waterproofing",
+    category: "Building operation",
+    synonyms: ["waterproofing"],
+  },
+  {
+    key: "drainage",
+    label: "Drainage",
+    category: "Building operation",
+    synonyms: ["drainage"],
+  },
+  {
+    key: "damp_proofing",
+    label: "Damp proofing",
+    category: "Building operation",
+    synonyms: ["damp_proofing"],
+  },
+  {
+    key: "safety_features",
+    label: "Safety features",
+    category: "Building operation",
+    synonyms: ["safety_features"],
+  },
+  {
+    key: "special_features",
+    label: "Special features",
+    category: "Design & space",
+    synonyms: ["special_features"],
+  },
+  {
+    key: "courtyard_area",
+    label: "Courtyard area",
+    category: "Design & space",
+    synonyms: ["courtyard_area"],
+  },
+  {
+    key: "vastu_compliance",
+    label: "Vastu compliance",
+    category: "Certifications & compliance",
+    synonyms: ["vastu_compliance", "vastu_compliance_declaration"],
+  },
+  {
+    key: "plot_no",
+    label: "Plot number",
+    category: "Location & legal",
+    synonyms: ["plot_no"],
+  },
+  {
+    key: "nearby_connectivity",
+    label: "Nearby connectivity",
+    category: "Location & legal",
+    synonyms: ["nearby_connectivity", "connectivity_nearby_landmarks"],
+  },
+  {
+    key: "nearby_hospitals",
+    label: "Nearby hospitals",
+    category: "Location & legal",
+    synonyms: ["nearby_hospitals"],
+  },
+  {
+    key: "nearby_schools",
+    label: "Nearby schools & institutions",
+    category: "Location & legal",
+    synonyms: ["nearby_schools", "nearby_educational_institutions"],
+  },
+  {
+    key: "amenities_full_list",
+    label: "Amenities as stated by developer",
+    category: "Amenities as stated by developer",
+    synonyms: ["amenities_full_list"],
   },
 ];
 
@@ -409,6 +566,27 @@ const initialPropertySchemaFields = [
     "The project's registered land area from RERA only, in square feet; independent of the brochure's plot area and never asked of the extraction model.",
   ],
   [
+    "property.rera_snapshot",
+    "RERA project facts",
+    "rera_snapshot",
+    null,
+    "The regulator's latest project facts no other source states, as one versioned object with the quarter and dates they are as on; RERA only, applied in the RERA panel, never asked of the extraction model.",
+  ],
+  [
+    "property.latitude",
+    "Latitude",
+    "positive_number",
+    null,
+    "The project's latitude in degrees (India), proposed from the centre of the boundary RERA draws; confirmed or corrected by an admin.",
+  ],
+  [
+    "property.longitude",
+    "Longitude",
+    "positive_number",
+    null,
+    "The project's longitude in degrees (India), proposed from the centre of the boundary RERA draws; confirmed or corrected by an admin.",
+  ],
+  [
     "unit_variants",
     "Unit configurations",
     "unit_variant_array",
@@ -442,6 +620,20 @@ const initialPropertySchemaFields = [
     "media_id_array",
     "$.edit.media_removed",
     "Ids of published pictures an edit takes off a live listing (hidden, not deleted); existing property only, never read from a brochure.",
+  ],
+  [
+    "property.google_maps_url",
+    "Google Maps link",
+    "map_url",
+    "$.google_maps_url",
+    "The project's Google Maps link, set by an admin. A full link is also drawn as a small map on the dossier; a short share link opens in Google Maps only. Never read from a brochure.",
+  ],
+  [
+    "property.main_photo",
+    "Main photo",
+    "media_id",
+    "$.main_photo",
+    "The picture that stands for the project on listing cards, comparison columns and the dossier: the id of a live picture, or of a new one proposed in this submission. A photo only; chosen by an admin, never read from a brochure.",
   ],
   [
     "property.listing_status",
@@ -540,6 +732,146 @@ const initialPropertySchemaFields = [
     "specification_text",
     "$.construction_amenities.vrv_ac_provided.value",
     "Evidence-backed display text.",
+  ],
+  [
+    "property.specifications.windows",
+    "Windows",
+    "specification_text",
+    "$.construction_amenities.windows.value",
+    "Window material (frame/glass make), distinct from window_glazing's glazing spec.",
+  ],
+  [
+    "property.specifications.doors",
+    "Doors",
+    "specification_text",
+    "$.construction_amenities.doors.value",
+    "Evidence-backed display text.",
+  ],
+  [
+    "property.specifications.toilet_flooring_dado",
+    "Toilet flooring & dado",
+    "specification_text",
+    "$.construction_amenities.toilet_flooring_dado.value",
+    "Evidence-backed display text.",
+  ],
+  [
+    "property.specifications.wall_finishing",
+    "Wall finishing",
+    "specification_text",
+    "$.construction_amenities.wall_finishing.value",
+    "Evidence-backed display text.",
+  ],
+  [
+    "property.specifications.kitchen_finishes",
+    "Kitchen finishes",
+    "specification_text",
+    "$.construction_amenities.kitchen_finishes.value",
+    "Evidence-backed display text.",
+  ],
+  [
+    "property.specifications.material_tolerances",
+    "Material tolerances",
+    "specification_text",
+    "$.construction_amenities.material_tolerances.value",
+    "Evidence-backed display text.",
+  ],
+  [
+    "property.specifications.electricals",
+    "Electricals",
+    "specification_text",
+    "$.construction_amenities.electricals.value",
+    "Evidence-backed display text.",
+  ],
+  [
+    "property.specifications.power_backup",
+    "Power backup",
+    "specification_text",
+    "$.construction_amenities.power_backup.value",
+    "Evidence-backed display text.",
+  ],
+  [
+    "property.specifications.waterproofing",
+    "Waterproofing",
+    "specification_text",
+    "$.construction_amenities.waterproofing.value",
+    "Evidence-backed display text.",
+  ],
+  [
+    "property.specifications.drainage",
+    "Drainage",
+    "specification_text",
+    "$.construction_amenities.drainage.value",
+    "Evidence-backed display text.",
+  ],
+  [
+    "property.specifications.damp_proofing",
+    "Damp proofing",
+    "specification_text",
+    "$.construction_amenities.damp_proofing.value",
+    "Evidence-backed display text.",
+  ],
+  [
+    "property.specifications.safety_features",
+    "Safety features",
+    "specification_text",
+    "$.construction_amenities.safety_features.value",
+    "Evidence-backed display text.",
+  ],
+  [
+    "property.specifications.special_features",
+    "Special features",
+    "specification_text",
+    "$.construction_amenities.special_features.value",
+    "Evidence-backed display text.",
+  ],
+  [
+    "property.specifications.courtyard_area",
+    "Courtyard area",
+    "specification_text",
+    "$.construction_amenities.courtyard_area.value",
+    "Preserves reviewed display text without silent unit conversion.",
+  ],
+  [
+    "property.specifications.vastu_compliance",
+    "Vastu compliance",
+    "specification_text",
+    "$.construction_amenities.vastu_compliance.value",
+    "Whether and by whom Vastu compliance is certified, exactly as printed.",
+  ],
+  [
+    "property.specifications.plot_no",
+    "Plot number",
+    "specification_text",
+    "$.construction_amenities.plot_no.value",
+    "Evidence-backed display text.",
+  ],
+  [
+    "property.specifications.nearby_connectivity",
+    "Nearby connectivity",
+    "specification_text",
+    "$.construction_amenities.nearby_connectivity.value",
+    "Named landmarks/transit and their stated travel time, exactly as printed (e.g. a metro station or airport). Never a claim this project invents.",
+  ],
+  [
+    "property.specifications.nearby_hospitals",
+    "Nearby hospitals",
+    "specification_text",
+    "$.construction_amenities.nearby_hospitals.value",
+    "Named hospitals and their stated travel time, exactly as printed.",
+  ],
+  [
+    "property.specifications.nearby_schools",
+    "Nearby schools & institutions",
+    "specification_text",
+    "$.construction_amenities.nearby_schools.value",
+    "Named schools/institutions and their stated travel time, exactly as printed.",
+  ],
+  [
+    "property.specifications.amenities_full_list",
+    "Amenities as stated by developer",
+    "specification_text",
+    "$.construction_amenities.amenities_full_list.value",
+    "Every amenity the brochure names, exactly as printed, including ones with no catalog match. Dossier-only: never a comparison row (unlike property.amenities, which is catalog-matched and does compare).",
   ],
 ] as const;
 
@@ -655,29 +987,63 @@ async function seed() {
           dataType,
           jsonbPath,
           schemaVersion: [
-            "developer.profile_narrative",
-            "property.total_floors",
-            "property.plot_area_sqft",
-            "unit_variants",
+            "property.rera_snapshot",
+            "property.latitude",
+            "property.longitude",
           ].includes(fieldKey)
-            ? "v5"
-            : fieldKey === "property.legal_entity_id"
-              ? "v6"
-              : [
-                    "property.amenities_removed",
-                    "unit_variants_removed",
-                    "property.listing_status",
-                  ].includes(fieldKey)
-                ? "v8"
+            ? "v17"
+            : fieldKey === "property.google_maps_url"
+              ? "v15"
+              : fieldKey === "property.main_photo"
+                ? "v14"
                 : [
-                      "property.media_removed",
-                      "property.pincode",
-                      "property.launch_date",
-                      "property.rera_project_land_area_sqft",
+                      "developer.profile_narrative",
+                      "property.total_floors",
+                      "property.plot_area_sqft",
+                      "unit_variants",
                     ].includes(fieldKey)
-                  ? "v9"
-                  : "v1",
-          isActive: true,
+                  ? "v5"
+                  : fieldKey === "property.legal_entity_id"
+                    ? "v6"
+                    : [
+                          "property.amenities_removed",
+                          "unit_variants_removed",
+                          "property.listing_status",
+                        ].includes(fieldKey)
+                      ? "v8"
+                      : [
+                            "property.media_removed",
+                            "property.pincode",
+                            "property.launch_date",
+                            "property.rera_project_land_area_sqft",
+                          ].includes(fieldKey)
+                        ? "v9"
+                        : [
+                              "property.specifications.windows",
+                              "property.specifications.doors",
+                              "property.specifications.toilet_flooring_dado",
+                              "property.specifications.wall_finishing",
+                              "property.specifications.kitchen_finishes",
+                              "property.specifications.material_tolerances",
+                              "property.specifications.electricals",
+                              "property.specifications.power_backup",
+                              "property.specifications.waterproofing",
+                              "property.specifications.drainage",
+                              "property.specifications.damp_proofing",
+                              "property.specifications.safety_features",
+                              "property.specifications.special_features",
+                              "property.specifications.courtyard_area",
+                              "property.specifications.vastu_compliance",
+                              "property.specifications.plot_no",
+                              "property.specifications.nearby_connectivity",
+                              "property.specifications.nearby_hospitals",
+                              "property.specifications.nearby_schools",
+                              "property.specifications.amenities_full_list",
+                            ].includes(fieldKey)
+                          ? "v12"
+                          : "v1",
+          // Retired fields stay in the table, switched off (schema v18).
+          isActive: !RETIRED_FIELD_KEYS.has(fieldKey),
           description,
         }),
       ),

@@ -31,7 +31,7 @@ export default async function EnquiriesPage() {
         description={
           inbox.length === 0
             ? "No buyer has asked about a property yet."
-            : `${open} open of ${inbox.length}. Buyers reach you here after verifying their number; contact them, then mark the enquiry.`
+            : `${open} open of ${inbox.length}. Buyers reach you here first, after verifying their number. Contact them, then forward the enquiry to the developer or close it yourself.`
         }
       />
       {inbox.length === 0 ? null : (
@@ -72,8 +72,21 @@ export default async function EnquiriesPage() {
                     : `${enquiry.buyerEmail} · `}
                   {dateTime.format(new Date(enquiry.createdAt))}
                 </p>
+                {enquiry.status === "forwarded" && enquiry.forwardedAt ? (
+                  <p
+                    data-slot="enquiry-forwarded"
+                    className="text-muted-foreground text-xs"
+                  >
+                    Forwarded to {enquiry.developerName} on{" "}
+                    {dateTime.format(new Date(enquiry.forwardedAt))}.
+                  </p>
+                ) : null}
               </div>
-              <EnquiryStatus id={enquiry.id} status={enquiry.status} />
+              <EnquiryStatus
+                id={enquiry.id}
+                status={enquiry.status}
+                developerName={enquiry.developerName}
+              />
             </li>
           ))}
         </ul>

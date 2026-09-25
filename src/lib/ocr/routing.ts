@@ -1,3 +1,5 @@
+import type { SingleFacilityPage } from "./single-facility";
+
 const V1_ROUTING_SCOPE_KINDS = [
   "property_details",
   "amenities",
@@ -55,6 +57,13 @@ export interface OcrRoutingManifest {
   version: OcrRoutingManifestVersion;
   pageCount: number;
   scopes: OcrRoutingScope[];
+  /**
+   * Single-facility amenity pages whose caption matched the catalog exactly
+   * (`src/lib/ocr/single-facility.ts`). Each such page sits in the ignored scope,
+   * so no paid read touches it, and becomes an unconfirmed amenity suggestion
+   * when the extraction is saved.
+   */
+  singleFacilities?: SingleFacilityPage[];
 }
 
 export class OcrContractError extends Error {
@@ -201,6 +210,51 @@ const parseScope = (
   };
 };
 
+const parseSingleFacilities = (
+  value: unknown,
+  pageCount: number,
+  ignoredPages: ReadonlySet<number>,
+): SingleFacilityPage[] => {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) {
+    throw new OcrContractError("singleFacilities must be an array");
+  }
+  const seen = new Set<number>();
+  return value.map((entry, index) => {
+    const path = `singleFacilities[${index}]`;
+    if (!isRecord(entry))
+      throw new OcrContractError(`${path} must be an object`);
+    const pageNumber = readPositiveInteger(
+      entry.pageNumber,
+      `${path}.pageNumber`,
+    );
+    if (pageNumber > pageCount) {
+      throw new OcrContractError(
+        `${path}.pageNumber must not exceed the document page count`,
+      );
+    }
+    if (seen.has(pageNumber)) {
+      throw new OcrContractError(`${path} repeats page ${pageNumber}`);
+    }
+    seen.add(pageNumber);
+    // A page that is offered as a suggestion is not read by extraction.
+    if (!ignoredPages.has(pageNumber)) {
+      throw new OcrContractError(
+        `${path}: page ${pageNumber} must be in the ignored scope, not extracted`,
+      );
+    }
+    return {
+      pageNumber,
+      caption: readNonEmptyString(entry.caption, `${path}.caption`),
+      amenityKey: readNonEmptyString(entry.amenityKey, `${path}.amenityKey`),
+      amenityLabel: readNonEmptyString(
+        entry.amenityLabel,
+        `${path}.amenityLabel`,
+      ),
+    };
+  });
+};
+
 export const parseOcrRoutingManifest = (
   input: unknown,
   expectedPageCount?: number,
@@ -302,7 +356,14 @@ export const parseOcrRoutingManifest = (
     }
   }
 
-  return { version, pageCount, scopes };
+  const singleFacilities = parseSingleFacilities(
+    input.singleFacilities,
+    pageCount,
+    ignoredPages,
+  );
+  return singleFacilities.length === 0
+    ? { version, pageCount, scopes }
+    : { version, pageCount, scopes, singleFacilities };
 };
 
 export const findRoutingScope = (

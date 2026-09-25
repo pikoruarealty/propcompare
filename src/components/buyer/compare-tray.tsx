@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { X } from "lucide-react";
 import { compareAddress, useCompareSelection } from "@/lib/compare/selection";
+import { trackEvent } from "@/lib/analytics/track";
 
 /**
  * The comparison tray: docked at the bottom of every buyer page once something is
@@ -45,7 +46,16 @@ export function CompareTray() {
                 <span className="truncate text-sm">{item.name}</span>
                 <button
                   type="button"
-                  onClick={() => remove(item.slug)}
+                  onClick={() => {
+                    remove(item.slug);
+                    trackEvent("comparison_removed", {
+                      slug: item.slug,
+                      slugs: items
+                        .map((other) => other.slug)
+                        .filter((other) => other !== item.slug),
+                      detail: { where: "tray" },
+                    });
+                  }}
                   aria-label={`Remove ${item.name} from the tray`}
                   className="text-muted-foreground hover:text-foreground focus-visible:ring-ring inline-flex size-7 shrink-0 items-center justify-center rounded focus-visible:ring-2 focus-visible:outline-none"
                 >

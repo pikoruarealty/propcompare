@@ -12,6 +12,37 @@ const filled = (over: Partial<VariantForm> = {}): VariantForm => ({
   ...over,
 });
 
+describe("a unit type's own amenities in the form", () => {
+  it("carries a recorded list through the form unchanged", () => {
+    const value = [
+      {
+        variantName: "Penthouse",
+        amenities: [
+          { key: "jacuzzi", status: "available" as const },
+          { key: "sauna", status: "explicitly_not_offered" as const },
+        ],
+      },
+    ];
+    expect(formToVariants(variantsToForm(value))).toEqual({ ok: true, value });
+  });
+
+  it("writes no list for a unit type that never had one, so the live ones stay", () => {
+    const [form] = variantsToForm([{ variantName: "2 BHK" }]);
+    expect(form.amenities).toBeNull();
+    expect(formToVariants([form])).toEqual({
+      ok: true,
+      value: [{ variantName: "2 BHK" }],
+    });
+  });
+
+  it("writes an empty list when the last one is taken off: none is the answer", () => {
+    expect(formToVariants([filled({ amenities: [] })])).toEqual({
+      ok: true,
+      value: [{ variantName: "3 BHK - A", amenities: [] }],
+    });
+  });
+});
+
 describe("formToVariants", () => {
   it("builds the canonical value, dropping everything left blank", () => {
     const result = formToVariants([

@@ -13,6 +13,10 @@ import {
   humaniseCategory,
   readRoomDimensions,
   dossierFactCount,
+  splitAmenitiesFullList,
+  splitLandmarks,
+  splitListValue,
+  splitNearbyFacts,
 } from "./dossier";
 import { richDossierFixture, sparseDossierFixture } from "./fixtures";
 import { findForbiddenKeys } from "./no-price";
@@ -129,6 +133,45 @@ describe("humaniseCategory", () => {
   });
 });
 
+describe("splitAmenitiesFullList", () => {
+  it("pulls amenities_full_list out of the generic specifications list", () => {
+    const flooring = {
+      key: "flooring",
+      label: "Flooring",
+      category: "Finish quality",
+      valueText: "Vitrified tiles",
+      status: "available" as const,
+    };
+    const fullList = {
+      key: "amenities_full_list",
+      label: "Amenities as stated by developer",
+      category: "Amenities as stated by developer",
+      valueText: "Clubhouse, SKYPLEX, jogging track",
+      status: "available" as const,
+    };
+
+    const result = splitAmenitiesFullList([flooring, fullList]);
+
+    expect(result.amenitiesFullList).toEqual(fullList);
+    expect(result.specifications).toEqual([flooring]);
+  });
+
+  it("returns null when the field has never been extracted", () => {
+    const flooring = {
+      key: "flooring",
+      label: "Flooring",
+      category: "Finish quality",
+      valueText: "Vitrified tiles",
+      status: "available" as const,
+    };
+
+    const result = splitAmenitiesFullList([flooring]);
+
+    expect(result.amenitiesFullList).toBeNull();
+    expect(result.specifications).toEqual([flooring]);
+  });
+});
+
 describe("readRoomDimensions", () => {
   it("reads a well-formed room list", () => {
     const rooms = readRoomDimensions({
@@ -197,7 +240,7 @@ describe("formatRoomDimension", () => {
   it("uses a multiplication sign, not a letter, and the sides' own area when nothing was printed", () => {
     expect(
       formatRoomDimension({ name: "Living", lengthFt: 16.5, widthFt: 12 }),
-    ).toBe("16.5 × 12 ft, 198 sq ft (calculated from the sides)");
+    ).toBe("16.5 × 12 ft, 198 sq ft (calculated)");
   });
 
   it("prefers a room's own printed area over one calculated from its sides", () => {
@@ -360,9 +403,70 @@ describe("formatRoomDimension", () => {
   it("shows at most two decimals of a stored side", () => {
     expect(
       formatRoomDimension({ name: "Bedroom", lengthFt: 16.4167, widthFt: 12 }),
-    ).toBe("16.42 × 12 ft, 197 sq ft (calculated from the sides)");
+    ).toBe("16.42 × 12 ft, 197 sq ft (calculated)");
     expect(
       formatRoomDimension({ name: "Living", lengthFt: 16.5, widthFt: 12 }),
-    ).toBe("16.5 × 12 ft, 198 sq ft (calculated from the sides)");
+    ).toBe("16.5 × 12 ft, 198 sq ft (calculated)");
+  });
+});
+
+describe("splitNearbyFacts", () => {
+  const spec = (key: string, valueText: string | null) => ({
+    key,
+    label: key,
+    category: "Location & legal",
+    valueText,
+    status:
+      valueText === null ? ("not_stated" as const) : ("available" as const),
+  });
+
+  it("takes what is near the project out of the specifications, one landmark each", () => {
+    const { nearby, specifications } = splitNearbyFacts([
+      spec("flooring", "Vitrified tiles"),
+      spec(
+        "nearby_connectivity",
+        "Thaltej Metro Station 1.1 Km; Airport 16.2 Km",
+      ),
+      spec("nearby_hospitals", "Apex Heart Institute 650 Mtr"),
+      spec("nearby_schools", null),
+      spec("plot_no", " 14 "),
+    ]);
+    expect(nearby).toEqual({
+      connectivity: ["Thaltej Metro Station 1.1 Km", "Airport 16.2 Km"],
+      hospitals: ["Apex Heart Institute 650 Mtr"],
+      schools: [],
+      plotNumber: "14",
+    });
+    expect(specifications.map((item) => item.key)).toEqual(["flooring"]);
+  });
+
+  it("splits on semicolons and lines, drops blanks, and rewords nothing", () => {
+    expect(splitLandmarks("A 1 Km;\n B 2 Km ;; ")).toEqual([
+      "A 1 Km",
+      "B 2 Km",
+    ]);
+    expect(splitLandmarks(null)).toEqual([]);
+  });
+});
+
+describe("splitListValue", () => {
+  it("splits a printed run of items on semicolons and line breaks, rewording nothing", () => {
+    expect(
+      splitListValue(
+        "Garbage chute; Rainwater harvesting ;  High speed elevators;",
+      ),
+    ).toEqual([
+      "Garbage chute",
+      "Rainwater harvesting",
+      "High speed elevators",
+    ]);
+    expect(splitListValue("A\nB")).toEqual(["A", "B"]);
+  });
+
+  it("returns null for a value that is not a list", () => {
+    expect(splitListValue("Vastu Compliant")).toBeNull();
+    expect(splitListValue("Tiles, 800x800mm; ")).toBeNull();
+    expect(splitListValue(null)).toBeNull();
+    expect(splitListValue("")).toBeNull();
   });
 });

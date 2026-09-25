@@ -30,11 +30,15 @@ export const addBrochurePageImage = async (
   },
   input: {
     submissionId: string;
-    uploadedBy: string;
+    /** Null when the system, not a person, is adding it (`autoMapFloorPlanImages`). */
+    uploadedBy: string | null;
     pageNumber: number;
     mediaType: "photo" | "floor_plan";
     unitVariantName?: string;
     caption?: string;
+    /** Private and unreviewed instead of approved: for a page chosen by a rule,
+     * not by a person, so a person still has to look at it. */
+    asCandidate?: boolean;
   },
 ): Promise<{ id: string }> => {
   const { database, storage } = deps;
@@ -147,8 +151,9 @@ export const addBrochurePageImage = async (
           displayOrder: (last?.displayOrder ?? -1) + 1,
           // Choosing a brochure page as a picture is the admin's own decision:
           // approved and public by default, with its credit, and rejectable.
-          isPublic: true,
-          reviewStatus: "confirmed",
+          // A page chosen by a rule (`asCandidate`) waits for that decision.
+          isPublic: !input.asCandidate,
+          reviewStatus: input.asCandidate ? "needs_review" : "confirmed",
         })
         .returning({ id: propertySubmissionMedia.id });
       return media;

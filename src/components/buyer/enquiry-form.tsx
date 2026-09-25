@@ -4,6 +4,8 @@ import * as React from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { authClient } from "@/lib/auth-client";
+import { trackEvent } from "@/lib/analytics/track";
+import { currentCompareSlugs } from "@/lib/compare/selection";
 
 const MAX_MESSAGE = 1000;
 
@@ -71,6 +73,7 @@ export function EnquiryForm({
           "Verify your mobile number first. Sign out and sign in again with the code we text you.",
         );
       }
+      if (unlock.ok) trackEvent("dossier_unlocked", { slug });
       const response = await fetch("/api/v1/enquiries", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -81,6 +84,9 @@ export function EnquiryForm({
         }),
       });
       if (!response.ok) throw new Error("The enquiry could not be sent.");
+      // The choice signal (`DECISIONS.md` 2026-09-25): which properties were
+      // being compared when the buyer asked about this one.
+      trackEvent("enquiry_submitted", { slug, slugs: currentCompareSlugs() });
       setState("sent");
     } catch (failure) {
       setState("idle");

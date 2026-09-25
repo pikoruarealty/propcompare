@@ -1,7 +1,21 @@
-import { and, asc, desc, eq, inArray, sql, type SQL } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  inArray,
+  ne,
+  sql,
+  type SQL,
+} from "drizzle-orm";
 import { isListed, mediaIsLive, variantIsLive } from "./visibility";
+import { splitNearbyFacts } from "./dossier";
+import { areaToSqft } from "@/lib/units/measurements";
+import { reraSnapshotProblem, type ReraSnapshot } from "@/lib/rera/snapshot";
 import { reraSourcedFacts, type CheckedRecord } from "./rera-source";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
+import { specificationIsActive } from "@/lib/specifications/active";
 import {
   amenityCatalog,
   bhkTypes,
@@ -16,6 +30,7 @@ import {
   reraFetchJobs,
   specificationCatalog,
   unitAreas,
+  unitVariantAmenities,
   unitVariants,
 } from "@/db/schema/catalog";
 import type {
@@ -433,20 +448,20 @@ export const getPublishedPropertyBySlug = async (
       latitude: properties.latitude,
       longitude: properties.longitude,
       pincode: properties.pincode,
+      mapUrl: properties.mapUrl,
       possessionStatus: properties.possessionStatus,
       possessionDate: properties.possessionDate,
       launchDate: properties.launchDate,
       reraRegistered: properties.reraRegistered,
       reraRegistrationNumber: properties.reraRegistrationNumber,
-      reraLastVerifiedAt: properties.reraLastVerifiedAt,
       reraProjectLandAreaSqft: properties.reraProjectLandAreaSqft,
-      reraCarpetAreaRangeMinSqft: properties.reraCarpetAreaRangeMinSqft,
-      reraCarpetAreaRangeMaxSqft: properties.reraCarpetAreaRangeMaxSqft,
       reraConstructionProgressPercent:
         properties.reraConstructionProgressPercent,
+      reraSnapshot: properties.reraSnapshot,
       totalTowers: properties.totalTowers,
       totalFloors: properties.totalFloors,
       totalUnits: properties.totalUnits,
+      plotAreaSqft: properties.plotAreaSqft,
       propertyTypeKey: propertyTypes.key,
       propertyTypeLabel: propertyTypes.label,
       developerId: developers.id,
@@ -467,6 +482,7 @@ export const getPublishedPropertyBySlug = async (
       id: unitVariants.id,
       variantName: unitVariants.variantName,
       totalUnitsOfVariant: unitVariants.totalUnitsOfVariant,
+      unitsPerFloor: unitVariants.unitsPerFloor,
       dimensions: unitVariants.dimensions,
       bhkKey: bhkTypes.key,
       bhkLabel: bhkTypes.label,
@@ -480,6 +496,26 @@ export const getPublishedPropertyBySlug = async (
     .orderBy(asc(unitVariants.createdAt), asc(unitVariants.variantName));
 
   const regulatorCheck = await latestRegulatorCheck(db, row.id);
+  // A stored object that is not a snapshot of the current shape is not shown.
+  const facts =
+    row.reraSnapshot !== null && reraSnapshotProblem(row.reraSnapshot) === null
+      ? (row.reraSnapshot as ReraSnapshot)
+      : null;
+  /** Square metres to two-decimal square feet, the one conversion from the
+   * regulator's unit. */
+  const rangeSqft = (sqm: number | undefined): string | null =>
+    sqm === undefined ? null : areaToSqft(sqm, "sqm").toFixed(2);
+
+  const [completedProjects] = await db
+    .select({ value: count() })
+    .from(properties)
+    .where(
+      and(
+        eq(properties.developerId, row.developerId),
+        isListed,
+        eq(properties.possessionStatus, "ready_to_move"),
+      ),
+    );
 
   const variantIds = variantRows.map((variant) => variant.id);
   const areaRows =
@@ -494,6 +530,30 @@ export const getPublishedPropertyBySlug = async (
           .from(unitAreas)
           .where(inArray(unitAreas.unitVariantId, variantIds))
           .orderBy(asc(unitAreas.basis));
+
+  const unitAmenityRows =
+    variantIds.length === 0
+      ? []
+      : await db
+          .select({
+            unitVariantId: unitVariantAmenities.unitVariantId,
+            key: amenityCatalog.key,
+            label: amenityCatalog.label,
+            category: amenityCatalog.category,
+            status: unitVariantAmenities.status,
+          })
+          .from(unitVariantAmenities)
+          .innerJoin(
+            amenityCatalog,
+            eq(amenityCatalog.id, unitVariantAmenities.amenityCatalogId),
+          )
+          .where(
+            and(
+              inArray(unitVariantAmenities.unitVariantId, variantIds),
+              ne(unitVariantAmenities.status, "not_stated"),
+            ),
+          )
+          .orderBy(asc(amenityCatalog.category), asc(amenityCatalog.key));
 
   const areasByVariant = new Map<string, DossierUnitVariant["areas"]>();
   for (const area of areaRows) {
@@ -541,7 +601,9 @@ export const getPublishedPropertyBySlug = async (
         propertySpecifications.specificationCatalogId,
       ),
     )
-    .where(eq(propertySpecifications.propertyId, row.id))
+    .where(
+      and(eq(propertySpecifications.propertyId, row.id), specificationIsActive),
+    )
     .orderBy(asc(specificationCatalog.category), asc(specificationCatalog.key));
 
   const mediaRows = await db
@@ -570,8 +632,17 @@ export const getPublishedPropertyBySlug = async (
         ? { key: variant.layoutKey, label: variant.layoutLabel }
         : null,
     totalUnitsOfVariant: variant.totalUnitsOfVariant ?? null,
+    unitsPerFloor: variant.unitsPerFloor ?? null,
     dimensions: (variant.dimensions as UnitVariantDimensions | null) ?? null,
     areas: areasByVariant.get(variant.id) ?? [],
+    amenities: unitAmenityRows
+      .filter((amenity) => amenity.unitVariantId === variant.id)
+      .map(({ key, label, category, status }) => ({
+        key,
+        label,
+        category,
+        status,
+      })),
   }));
 
   const amenities: DossierAmenity[] = amenityRows.map((amenity) => ({
@@ -581,7 +652,7 @@ export const getPublishedPropertyBySlug = async (
     status: amenity.status,
   }));
 
-  const specifications: DossierSpecification[] = specificationRows.map(
+  const allSpecifications: DossierSpecification[] = specificationRows.map(
     (specification) => ({
       key: specification.key,
       label: specification.label,
@@ -590,6 +661,9 @@ export const getPublishedPropertyBySlug = async (
       status: specification.status,
     }),
   );
+  // What is near the project is shown with the location, not among the
+  // specifications (`DECISIONS.md` 2026-09-24).
+  const { nearby, specifications } = splitNearbyFacts(allSpecifications);
 
   const media: DossierMedia[] = mediaRows.map((mediaRow) => ({
     id: mediaRow.id,
@@ -613,6 +687,7 @@ export const getPublishedPropertyBySlug = async (
       description: row.developerDescription ?? null,
       logoGcsPath: row.developerLogoGcsPath ?? null,
       website: row.developerWebsite ?? null,
+      completedProjectsCount: completedProjects?.value ?? 0,
     },
     location: {
       city: row.city,
@@ -620,6 +695,8 @@ export const getPublishedPropertyBySlug = async (
       latitude: row.latitude ?? null,
       longitude: row.longitude ?? null,
       pincode: row.pincode ?? null,
+      mapUrl: row.mapUrl ?? null,
+      nearby,
     },
     possession: {
       status: row.possessionStatus ?? null,
@@ -629,10 +706,12 @@ export const getPublishedPropertyBySlug = async (
     rera: {
       registered: row.reraRegistered,
       registrationNumber: row.reraRegistrationNumber ?? null,
-      lastVerifiedAt: toIsoString(row.reraLastVerifiedAt),
       projectLandAreaSqft: row.reraProjectLandAreaSqft ?? null,
-      carpetAreaRangeMinSqft: row.reraCarpetAreaRangeMinSqft ?? null,
-      carpetAreaRangeMaxSqft: row.reraCarpetAreaRangeMaxSqft ?? null,
+      // The regulator's own "carpet area of units (range)" from the stored
+      // snapshot, converted once here (the columns that used to hold it were
+      // dropped in schema v18: nothing ever wrote them).
+      carpetAreaRangeMinSqft: rangeSqft(facts?.carpetAreaRangeSqm?.min),
+      carpetAreaRangeMaxSqft: rangeSqft(facts?.carpetAreaRangeSqm?.max),
       constructionProgressPercent: row.reraConstructionProgressPercent ?? null,
       lastCheckedAt: toIsoString(regulatorCheck.checkedAt),
       sourcedFacts: reraSourcedFacts(regulatorCheck.record, {
@@ -642,10 +721,12 @@ export const getPublishedPropertyBySlug = async (
         possessionDate: row.possessionDate ?? null,
         totalUnits: row.totalUnits ?? null,
       }),
+      facts,
     },
     totalTowers: row.totalTowers ?? null,
     totalFloors: row.totalFloors ?? null,
     totalUnits: row.totalUnits ?? null,
+    plotAreaSqft: row.plotAreaSqft ?? null,
     unitVariants: unitVariantList,
     amenities,
     specifications,

@@ -1,6 +1,6 @@
 # Tasklist: fixes from the owner's comparison review
 
-**Status:** in progress, written before the code.
+**Status:** done 2026-09-22 (reconciled 2026-09-25: every checklist box is ticked, and `docs/roadmap.md` records all seven findings fixed or resolved). Written before the code.
 **Owner:** Bhavarth
 **References:** `AGENTS.md`, `docs/design/comparison.v1.md`, `docs/schema/schema.v9.md`, `PROGRESS.md` (2026-09-21 late night entry, "Comparison review findings and approvals"), `DECISIONS.md`
 

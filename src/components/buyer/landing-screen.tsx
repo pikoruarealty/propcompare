@@ -6,6 +6,7 @@ import {
   formatPossessionDate,
   propertyDossierHref,
 } from "@/lib/properties/browse";
+import { INTAKE_PATH } from "@/lib/properties/intake";
 import type { PropertySummary } from "@/lib/properties/types";
 import { CompareToggle } from "./compare-toggle";
 import { FactValue } from "./fact-value";
@@ -35,11 +36,15 @@ import { Accent, BodyText, DisplayHeading, Eyebrow } from "./typography";
  * It must not say they come from "developer submissions" (they are extracted
  * from brochures, and an admin reviews them).
  *
- * The two destinations come from `BUYER_NAV` rather than being written again
- * here, so the header and the landing page cannot drift apart.
+ * The browse destination comes from `BUYER_NAV` rather than being written
+ * again here, so the header and the landing page cannot drift apart. Intake
+ * is not a `BUYER_NAV` entry (owner direction, `DECISIONS.md` 2026-09-22: it
+ * is the front door, not a nav link) — its path is `INTAKE_PATH`, and it is
+ * the hero's primary call to action rather than one of a pair of equal
+ * buttons.
  */
 
-const [BROWSE_NAV, INTAKE_NAV] = BUYER_NAV;
+const [BROWSE_NAV] = BUYER_NAV;
 
 /** How a decision gets made here, in three steps. Set as a list, not as cards. */
 const HOW_YOU_DECIDE = [
@@ -115,15 +120,15 @@ export function LandingScreen({ recent }: LandingScreenProps) {
 
             <div className="flex flex-wrap gap-3 pt-2">
               <Button asChild size="xl">
-                <Link href={BROWSE_NAV.href}>Choose homes to compare</Link>
+                <Link href={INTAKE_PATH}>Tell us what you’re looking for</Link>
               </Button>
               <Button asChild variant="outline" size="xl">
-                <Link href={INTAKE_NAV.href}>{INTAKE_NAV.label}</Link>
+                <Link href={BROWSE_NAV.href}>Browse everything instead</Link>
               </Button>
             </div>
             <p className="text-muted-foreground text-sm">
-              No sign-in to compare. Intake is optional, and you can browse
-              without it.
+              A few questions, then matched properties you can open or add to a
+              comparison straight away.
             </p>
           </div>
 

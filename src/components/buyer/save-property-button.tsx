@@ -4,6 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { authClient } from "@/lib/auth-client";
 import { cn } from "@/lib/utils";
+import { trackEvent } from "@/lib/analytics/track";
 
 const SAVED_URL = "/api/v1/saved-properties";
 const BUTTON_CLASS =
@@ -80,6 +81,7 @@ export function SavePropertyButton({
       if (!response.ok && response.status !== 404) {
         throw new Error("failed");
       }
+      if (!saved) trackEvent("property_saved", { slug });
       setSaved(!saved);
     } catch {
       setError("Could not update your saved list. Try again.");

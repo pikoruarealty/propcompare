@@ -89,6 +89,25 @@ export const listComparisons = async (
 };
 
 /**
+ * `DELETE /api/v1/comparisons/{id}` — `false` means the caller has no such
+ * comparison (unknown id, or someone else's: the two are indistinguishable on
+ * purpose). Its items go with it (`ON DELETE CASCADE`).
+ */
+export const deleteComparison = async (
+  db: AppDb,
+  userId: string,
+  comparisonId: string,
+): Promise<boolean> => {
+  const deleted = await db
+    .delete(comparisons)
+    .where(
+      and(eq(comparisons.id, comparisonId), eq(comparisons.userId, userId)),
+    )
+    .returning({ id: comparisons.id });
+  return deleted.length > 0;
+};
+
+/**
  * `POST /api/v1/comparisons` — creates one comparison with its full ordered
  * item list in a single transaction. `displayOrder` is assigned from array
  * position; every `propertyId` must be published and every `unitVariantId`,

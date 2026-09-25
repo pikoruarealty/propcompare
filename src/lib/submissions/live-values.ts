@@ -1,5 +1,6 @@
-import { and, asc, eq, isNull } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
+import { specificationIsActive } from "@/lib/specifications/active";
 import {
   amenityCatalog,
   bhkTypes,
@@ -11,6 +12,7 @@ import {
   propertyTypes,
   specificationCatalog,
   unitAreas,
+  unitVariantAmenities,
   unitVariants,
 } from "@/db/schema/catalog";
 
@@ -21,7 +23,7 @@ import {
  * table.
  *
  * Simple fields, the amenity set, each specification, the unit types (with their
- * areas and room dimensions) and the developer's name and narrative are covered.
+ * areas, room dimensions and own amenities) and the developer's name and narrative are covered.
  * A field with no published value is absent, never `null`. Amenities the property
  * does not list as available are absent from the set, so "not stated" and "not
  * offered" both read as not in it.
@@ -45,6 +47,13 @@ export const loadLiveValues = async (
       reraNumber: properties.reraRegistrationNumber,
       progress: properties.reraConstructionProgressPercent,
       legalEntityId: properties.legalEntityId,
+      mapUrl: properties.mapUrl,
+      pincode: properties.pincode,
+      launchDate: properties.launchDate,
+      landAreaSqft: properties.reraProjectLandAreaSqft,
+      latitude: properties.latitude,
+      longitude: properties.longitude,
+      reraSnapshot: properties.reraSnapshot,
     })
     .from(properties)
     .innerJoin(propertyTypes, eq(propertyTypes.id, properties.propertyTypeId))
@@ -67,6 +76,16 @@ export const loadLiveValues = async (
     "property.rera_construction_progress_percent":
       row.progress === null ? null : Number(row.progress),
     "property.legal_entity_id": row.legalEntityId,
+    "property.google_maps_url": row.mapUrl,
+    // These were published but never read back, so a RERA check saw them as not
+    // held and would have proposed them again every quarter.
+    "property.pincode": row.pincode,
+    "property.launch_date": row.launchDate,
+    "property.rera_project_land_area_sqft":
+      row.landAreaSqft === null ? null : Number(row.landAreaSqft),
+    "property.latitude": row.latitude === null ? null : Number(row.latitude),
+    "property.longitude": row.longitude === null ? null : Number(row.longitude),
+    "property.rera_snapshot": row.reraSnapshot,
   };
   const live: Record<string, unknown> = Object.fromEntries(
     Object.entries(values).filter(([, value]) => value !== null),
@@ -122,6 +141,7 @@ export const loadLiveValues = async (
       and(
         eq(propertySpecifications.propertyId, propertyId),
         eq(propertySpecifications.status, "available"),
+        specificationIsActive,
       ),
     );
   for (const row of specifications) {
@@ -161,6 +181,31 @@ export const loadLiveValues = async (
       .from(unitAreas)
       .innerJoin(unitVariants, eq(unitVariants.id, unitAreas.unitVariantId))
       .where(eq(unitVariants.propertyId, propertyId));
+    const amenityRows = await database
+      .select({
+        unitVariantId: unitVariantAmenities.unitVariantId,
+        key: amenityCatalog.key,
+        status: unitVariantAmenities.status,
+      })
+      .from(unitVariantAmenities)
+      .innerJoin(
+        amenityCatalog,
+        eq(amenityCatalog.id, unitVariantAmenities.amenityCatalogId),
+      )
+      .innerJoin(
+        unitVariants,
+        eq(unitVariants.id, unitVariantAmenities.unitVariantId),
+      )
+      .where(
+        and(
+          eq(unitVariants.propertyId, propertyId),
+          inArray(unitVariantAmenities.status, [
+            "available",
+            "explicitly_not_offered",
+          ]),
+        ),
+      )
+      .orderBy(asc(amenityCatalog.key));
     live["unit_variants"] = variants.map((variant) => ({
       variantName: variant.variantName,
       ...(variant.bhkTypeKey ? { bhkTypeKey: variant.bhkTypeKey } : {}),
@@ -174,6 +219,15 @@ export const loadLiveValues = async (
         ? { unitsPerFloor: variant.unitsPerFloor }
         : {}),
       ...(variant.dimensions ? { dimensions: variant.dimensions } : {}),
+      // Only when the unit type has any: an edit that starts from what is live
+      // then carries them instead of dropping them.
+      ...(amenityRows.some((row) => row.unitVariantId === variant.id)
+        ? {
+            amenities: amenityRows
+              .filter((row) => row.unitVariantId === variant.id)
+              .map((row) => ({ key: row.key, status: row.status })),
+          }
+        : {}),
       areas: areas
         .filter((area) => area.unitVariantId === variant.id)
         .map((area) => ({

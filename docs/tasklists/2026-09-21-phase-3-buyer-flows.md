@@ -8,7 +8,7 @@
 
 - No schema change. No price, score, rank or winner anywhere.
 - Not the developer portal, and nothing developer-facing.
-- Not the intake cookie, "report a problem" or "claim this listing", or comparison analytics: each needs a decision or a schema change (see below).
+- Not the intake cookie, "report a problem", or comparison analytics: each needs a decision or a schema change (see below).
 
 ## Checklist
 
@@ -44,7 +44,7 @@
 ## Not built, and why
 
 - **Pre-login intake cookie.** Its tasklist says to ask before implementing: which sign-in route the claim hooks into, what happens to an unclaimed cookie, whether the buyer ever sees the row again. It also stores the stated budget range server-side, which reopens the price-leak decision of 2026-09-07 and interacts with the privacy policy that is not yet written. Needs the owner's answers.
-- **Claim this listing / report a problem.** "Report" needs somewhere to store reports (a schema change, and `AGENTS.md` says to surface those), and "claim" belongs to the developer portal, which is on hold. Proposed: a `listing_reports` table (schema v10). "Last checked" already shows as the GujRERA source lines.
+- **Report a problem.** "Report" needs somewhere to store reports (a schema change, and `AGENTS.md` says to surface those). Proposed: a `listing_reports` table (schema v10). "Last checked" already shows as the GujRERA source lines.
 - **Comparison analytics (slice 4).** Needs an events table (schema change) and a privacy position on what a comparison records; deferred with the privacy policy.
 - **Phone-gated content.** The unlock is recorded on enquiry, but no content is restricted behind it yet because the catalog holds nothing that needs restricting (no price, no documents). If restricted documents are added later, the gate already exists.
 

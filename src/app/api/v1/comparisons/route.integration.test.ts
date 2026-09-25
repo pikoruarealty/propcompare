@@ -20,6 +20,7 @@ import { findForbiddenKeys } from "@/lib/properties/no-price";
 import type { ApiErrorBody } from "@/lib/properties/http";
 import { signUpTestBuyer } from "@/lib/buyer/test-support";
 import { GET, POST } from "./route";
+import { DELETE } from "./[id]/route";
 
 const submitterUserId = `comparisons-submitter-${randomUUID()}`;
 let developerId: string;
@@ -253,5 +254,58 @@ describe("GET /api/v1/comparisons", () => {
     );
     const otherBody = await otherResponse.json();
     expect(otherBody.data).toEqual([]);
+  });
+});
+
+describe("DELETE /api/v1/comparisons/{id}", () => {
+  const remove = (id: string, cookie?: string) =>
+    DELETE(
+      new NextRequest(`http://localhost/api/v1/comparisons/${id}`, {
+        method: "DELETE",
+        headers: cookie ? { cookie } : {},
+      }),
+      { params: Promise.resolve({ id }) },
+    );
+  const listIds = async (cookie: string): Promise<string[]> => {
+    const body = await (
+      await GET(
+        new NextRequest("http://localhost/api/v1/comparisons", {
+          headers: { cookie },
+        }),
+      )
+    ).json();
+    return body.data.map((c: { id: string }) => c.id);
+  };
+
+  it("401s with no session", async () => {
+    expect((await remove(randomUUID())).status).toBe(401);
+  });
+
+  it("404s on an unknown or malformed id", async () => {
+    expect((await remove(randomUUID(), buyerCookie)).status).toBe(404);
+    expect((await remove("not-a-uuid", buyerCookie)).status).toBe(404);
+  });
+
+  it("removes the caller's own comparison, and only that one", async () => {
+    const saved = await (
+      await POST(request(buyerCookie, { items: [{ propertyId: propertyAId }] }))
+    ).json();
+    expect(await listIds(buyerCookie)).toContain(saved.id);
+
+    const response = await remove(saved.id, buyerCookie);
+    expect(response.status).toBe(204);
+
+    const remaining = await listIds(buyerCookie);
+    expect(remaining).not.toContain(saved.id);
+    expect(remaining.length).toBeGreaterThan(0);
+  });
+
+  it("404s on another buyer's comparison and leaves it in place", async () => {
+    const saved = await (
+      await POST(request(buyerCookie, { items: [{ propertyId: propertyBId }] }))
+    ).json();
+
+    expect((await remove(saved.id, otherBuyerCookie)).status).toBe(404);
+    expect(await listIds(buyerCookie)).toContain(saved.id);
   });
 });

@@ -1,5 +1,7 @@
+import { AMENITIES_FIELD_KEY, routerEvidenceSnippet } from "./single-facility";
 import { mkdir, rename, writeFile, readFile } from "node:fs/promises";
 import { readMeasurement } from "@/lib/units/measurements";
+import { withKeysFromName } from "@/lib/units/type-from-name";
 import path from "node:path";
 import { PDFDocument } from "pdf-lib";
 import {
@@ -53,6 +55,9 @@ export interface OcrUnitVariantCandidate {
   scopeKey: string;
   /** Present only when a v2 floor-plans scope discovered the identity itself. */
   variantName?: string;
+  /** Only when the plan's own heading printed the configuration, and only ever
+   * one of the BHK catalog's keys. */
+  bhkTypeKey?: string;
   details: OcrUnitVariantDetailsCandidate;
   confidence?: number;
   evidence: OcrEvidenceCandidate[];
@@ -79,6 +84,19 @@ export interface OcrProviderExtractionResult {
   providerRequestIds: string[];
   usage?: OcrScopeUsage[];
   checkpointPath?: string;
+  /**
+   * The manifest `extraction.unitVariants[].scopeKey` actually resolves
+   * against — the confirmed manifest with each `floor_plans` scope expanded
+   * into the synthetic `unit_variant` scopes floor-plan unit discovery
+   * produced (see `docs/tasklists/2026-09-23-floor-plan-unit-discovery.md`).
+   * A caller resolving a unit variant's scope (persistence, in particular)
+   * must use this, not the confirmed manifest on its own — the confirmed
+   * manifest's own single `floor_plans` scope key never appears on a
+   * returned unit variant. Optional so a hand-built fake result in a test
+   * that predates this still type-checks; callers fall back to the
+   * confirmed manifest in that case.
+   */
+  effectiveManifest?: OcrRoutingManifest;
 }
 
 export interface OcrScopeUsage {
@@ -117,7 +135,7 @@ export interface SubmissionFieldCandidate {
   evidence: SubmissionEvidenceCandidate[];
 }
 
-const deduplicateSubmissionEvidence = (
+export const deduplicateSubmissionEvidence = (
   evidence: SubmissionEvidenceCandidate[],
 ): SubmissionEvidenceCandidate[] => {
   const unique = new Map<string, SubmissionEvidenceCandidate>();
@@ -218,6 +236,15 @@ const parseEvidence = (
   };
 };
 
+/**
+ * Citations are validated one at a time, and a bad one loses only itself.
+ * A model reading a 15-page excerpt has to map each page back to its original
+ * brochure number, and it sometimes miscounts one of them; refusing the whole
+ * list for that cost a real run all 14 of its correctly-read amenities
+ * (2026-09-23, Godrej Altus flipchart) because 1 of 12 citations named a page
+ * outside the scope. Evidence stays mandatory — a value whose citations are
+ * *all* unusable still fails, because then nothing supports it.
+ */
 const parseEvidenceList = (
   value: unknown,
   path: string,
@@ -227,9 +254,23 @@ const parseEvidenceList = (
   if (!Array.isArray(value) || value.length === 0) {
     throw new OcrContractError(`${path} must contain at least one citation`);
   }
-  return value.map((item, index) =>
-    parseEvidence(item, `${path}[${index}]`, manifest, requiredScopeKey),
-  );
+  const kept: OcrEvidenceCandidate[] = [];
+  for (const [index, item] of value.entries()) {
+    try {
+      kept.push(
+        parseEvidence(item, `${path}[${index}]`, manifest, requiredScopeKey),
+      );
+    } catch (error) {
+      if (!(error instanceof OcrContractError)) throw error;
+      console.warn(`[ocr] left out one citation: ${error.message}`);
+    }
+  }
+  if (kept.length === 0) {
+    throw new OcrContractError(
+      `${path} has no citation inside the named scope`,
+    );
+  }
+  return kept;
 };
 
 const validateFieldValue = (
@@ -435,20 +476,68 @@ const convertProviderDetails = (raw: unknown, path: string): unknown => {
     return undefined;
   };
 
+  /**
+   * A plan that prints each room as one string — `12'-7" X 12'-0"` — instead of
+   * a separate length and width. Models reach for their own key for this
+   * (`dimension`, `size`) rather than splitting it themselves, and a brochure
+   * that prints the pair twice in two unit systems makes that near-certain:
+   * the 2026-09-23 Godrej Altus flipchart lost all 269 of its rooms this way.
+   * Each half still goes through `readMeasurement`, so an unaccompanied number
+   * is refused exactly as before — this splits the string, it never assumes a
+   * unit for it.
+   */
+  const splitDimensionPair = (
+    value: unknown,
+    legendLength: unknown,
+    where: string,
+  ): { length?: number; width?: number } => {
+    if (typeof value !== "string") return {};
+    const halves = value.split(/\s*[xX×]\s*/).filter((part) => part.trim());
+    if (halves.length !== 2) return {};
+    const length = readMeasurement(halves[0], "length", legendLength);
+    const width = readMeasurement(halves[1], "length", legendLength);
+    if (!length.ok || !width.ok) {
+      const reason = !length.ok
+        ? length.reason
+        : !width.ok
+          ? width.reason
+          : "unreadable";
+      console.warn(`[ocr] left out ${where}: ${reason}`);
+      return {};
+    }
+    return { length: length.value, width: width.value };
+  };
+
   const convertRoom = (room: unknown, where: string): unknown => {
     if (!isRecord(room)) return room;
     const converted: Record<string, unknown> = {};
     if (room.name !== undefined) converted.name = room.name;
     const legendLength = dimensionLegend.length;
     const legendArea = dimensionLegend.area;
-    const length = measure(
+    let length = measure(
       room.length,
       "length",
       legendLength,
       `${where}.length`,
     );
-    const width = measure(room.width, "length", legendLength, `${where}.width`);
+    let width = measure(room.width, "length", legendLength, `${where}.width`);
     const area = measure(room.area, "area", legendArea, `${where}.area`);
+    if (length === undefined && width === undefined) {
+      // Tried in order: a pair printed with its own unit beats one relying on
+      // the plan's legend, so `12'-7" X 12'-0"` wins over a bare `4.16 X 3.66`.
+      for (const key of ["dimension", "dimensions", "size"] as const) {
+        const pair = splitDimensionPair(
+          room[key],
+          legendLength,
+          `${where}.${key}`,
+        );
+        if (pair.length !== undefined || pair.width !== undefined) {
+          length = pair.length;
+          width = pair.width;
+          break;
+        }
+      }
+    }
     if (length !== undefined) converted.lengthFt = length;
     if (width !== undefined) converted.widthFt = width;
     if (area !== undefined) converted.areaSqft = area;
@@ -547,8 +636,14 @@ const parseVariantDetails = (
       if (!Array.isArray(value.areas)) {
         throw new OcrContractError(`${path}.areas must be an array`);
       }
-      const bases = new Set<string>();
-      result.areas = value.areas.map((area, index) => {
+      // A basis printed twice is normally the same area in two unit systems
+      // ("142.93 sq. mt." and "1538 sq. ft."), already converted to sq ft
+      // above — so the repeat is agreement, not a contradiction, and dropping
+      // the whole list for it cost a real run every area it had, carpet
+      // included (2026-09-23, Godrej Altus flipchart). Two readings that
+      // genuinely disagree are still refused: that needs a person.
+      const byBasis = new Map<string, number>();
+      value.areas.forEach((area, index) => {
         const areaPath = `${path}.areas[${index}]`;
         if (!isRecord(area)) {
           throw new OcrContractError(`${areaPath} must be an object`);
@@ -559,15 +654,25 @@ const parseVariantDetails = (
           throw new OcrContractError(`${areaPath}.basis is not supported`);
         }
         const basis = area.basis as "carpet" | "super_built_up" | "built_up";
-        if (bases.has(basis)) {
-          throw new OcrContractError(`${path}.areas contains duplicate bases`);
+        const areaSqft = readPositiveNumber(
+          area.areaSqft,
+          `${areaPath}.areaSqft`,
+        );
+        const seen = byBasis.get(basis);
+        if (seen === undefined) {
+          byBasis.set(basis, areaSqft);
+          return;
         }
-        bases.add(basis);
-        return {
-          basis,
-          areaSqft: readPositiveNumber(area.areaSqft, `${areaPath}.areaSqft`),
-        };
+        if (Math.abs(seen - areaSqft) / seen > 0.01) {
+          throw new OcrContractError(
+            `${path}.areas gives two different ${basis} areas (${seen} and ${areaSqft} sq ft)`,
+          );
+        }
       });
+      result.areas = [...byBasis.entries()].map(([basis, areaSqft]) => ({
+        basis: basis as "carpet" | "super_built_up" | "built_up",
+        areaSqft,
+      }));
     });
   }
   if (value.dimensions !== undefined && value.dimensions !== null) {
@@ -740,6 +845,14 @@ export const validateNewPipelineExtraction = (
 const canonicalVariantValue = (
   scope: OcrUnitVariantScope | OcrRoutingManifest["scopes"][number],
   candidate: OcrUnitVariantCandidate,
+) =>
+  // A key the model left out is read from the words the unit type's own name
+  // prints ("4 BHK Duplex"), never from the drawing.
+  withKeysFromName(assembledVariantValue(scope, candidate));
+
+const assembledVariantValue = (
+  scope: OcrUnitVariantScope | OcrRoutingManifest["scopes"][number],
+  candidate: OcrUnitVariantCandidate,
 ) => {
   if (scope.kind === "unit_variant") {
     return {
@@ -754,14 +867,20 @@ const canonicalVariantValue = (
     };
   }
   if (scope.kind === "floor_plans" && candidate.variantName !== undefined) {
-    return { variantName: candidate.variantName, ...candidate.details };
+    return {
+      variantName: candidate.variantName,
+      ...(candidate.bhkTypeKey === undefined
+        ? {}
+        : { bhkTypeKey: candidate.bhkTypeKey }),
+      ...candidate.details,
+    };
   }
   throw new OcrContractError(
     `unit variant candidate cannot be assembled for scope ${scope.scopeKey}`,
   );
 };
 
-export const buildSubmissionFieldCandidates = (
+const candidatesFromExtraction = (
   input: NewPipelineExtraction,
   manifest: OcrRoutingManifest,
 ): SubmissionFieldCandidate[] => {
@@ -771,15 +890,40 @@ export const buildSubmissionFieldCandidates = (
     );
   }
   const extraction = input;
-  const result: SubmissionFieldCandidate[] = extraction.fields.map((field) => ({
-    ...field,
-    evidence: deduplicateSubmissionEvidence(
-      field.evidence.map((evidence) => ({
-        ...evidence,
-        valuePath: "$",
-      })),
-    ),
-  }));
+  /*
+   * One field key, one candidate. Several scopes are offered the same keys
+   * (a specification fact can be printed on a project page as well as the
+   * spec sheet), so the same key can come back twice. The more confident
+   * reading wins and both readings' evidence is kept, so a reviewer sees
+   * every page the fact was found on. Ties keep the first, which preserves
+   * scope order.
+   */
+  const byFieldKey = new Map<string, SubmissionFieldCandidate>();
+  for (const field of extraction.fields) {
+    const candidate: SubmissionFieldCandidate = {
+      ...field,
+      evidence: deduplicateSubmissionEvidence(
+        field.evidence.map((evidence) => ({ ...evidence, valuePath: "$" })),
+      ),
+    };
+    const existing = byFieldKey.get(field.fieldKey);
+    if (existing === undefined) {
+      byFieldKey.set(field.fieldKey, candidate);
+      continue;
+    }
+    const winner =
+      (candidate.confidence ?? 0) > (existing.confidence ?? 0)
+        ? candidate
+        : existing;
+    byFieldKey.set(field.fieldKey, {
+      ...winner,
+      evidence: deduplicateSubmissionEvidence([
+        ...existing.evidence,
+        ...candidate.evidence,
+      ]),
+    });
+  }
+  const result: SubmissionFieldCandidate[] = [...byFieldKey.values()];
 
   if (extraction.unitVariants.length === 0) {
     return result;
@@ -822,10 +966,76 @@ export const buildSubmissionFieldCandidates = (
   return result;
 };
 
+/**
+ * The amenities a single-facility page's caption matched in the catalog
+ * (`OcrRoutingManifest.singleFacilities`), added to the amenities candidate as
+ * unconfirmed suggestions: the same field, still `needs_review`, with evidence
+ * that says plainly the router named them and no extraction read them. They are
+ * added to what the extraction found, or make the candidate on their own when the
+ * amenities read was skipped altogether.
+ */
+const withRouterAmenities = (
+  candidates: SubmissionFieldCandidate[],
+  manifest: OcrRoutingManifest,
+): SubmissionFieldCandidate[] => {
+  const pages = manifest.singleFacilities ?? [];
+  if (pages.length === 0) return candidates;
+  const evidence = pages.map((page) => ({
+    // The ignored scope: the page was kept out of every read.
+    scopeKey: "ignored",
+    pageNumber: page.pageNumber,
+    valuePath: "$",
+    sourceSnippet: routerEvidenceSnippet(page),
+  }));
+  const suggested = pages.map((page) => page.amenityKey);
+  const existing = candidates.find(
+    (candidate) => candidate.fieldKey === AMENITIES_FIELD_KEY,
+  );
+  if (existing === undefined) {
+    return [
+      ...candidates,
+      {
+        fieldKey: AMENITIES_FIELD_KEY,
+        value: [...new Set(suggested)],
+        evidence,
+      },
+    ];
+  }
+  const read = Array.isArray(existing.value)
+    ? existing.value.filter((key): key is string => typeof key === "string")
+    : [];
+  return candidates.map((candidate) =>
+    candidate === existing
+      ? {
+          ...candidate,
+          value: [...new Set([...read, ...suggested])],
+          evidence: deduplicateSubmissionEvidence([
+            ...candidate.evidence,
+            ...evidence,
+          ]),
+        }
+      : candidate,
+  );
+};
+
+export const buildSubmissionFieldCandidates = (
+  input: NewPipelineExtraction,
+  manifest: OcrRoutingManifest,
+): SubmissionFieldCandidate[] =>
+  withRouterAmenities(candidatesFromExtraction(input, manifest), manifest);
+
 const DEFAULT_OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 const DEFAULT_OPENROUTER_MODEL = "anthropic/claude-sonnet-5";
-const DEFAULT_MAX_COMPLETION_TOKENS = 32_000;
-const DEFAULT_MAX_REASONING_TOKENS = 2_048;
+/**
+ * Sonnet 5's own ceiling is 128,000 (OpenRouter `max_completion_tokens`); this
+ * is headroom, not a budget — an unemitted token costs nothing, so the only
+ * thing a low cap buys is a failed run. The previous 32,000 was the direct
+ * cause of every `output_length` failure this pipeline has ever had: with
+ * reasoning silently uncapped (see `reasoning` in `callModel`), hidden
+ * thinking filled all 32,000 before any JSON was written. See DECISIONS.md
+ * 2026-09-23 (reasoning-billing entry).
+ */
+const DEFAULT_MAX_COMPLETION_TOKENS = 64_000;
 const DEFAULT_REQUEST_TIMEOUT_MS = 8 * 60 * 1_000;
 
 export type OcrAdapterFailureCode =
@@ -872,7 +1082,6 @@ export interface OpenRouterOcrAdapterOptions {
   model?: string;
   endpoint?: string;
   maxCompletionTokens?: number;
-  maxReasoningTokens?: number;
   requestTimeoutMs?: number;
   fetch?: typeof fetch;
   retryDelayMs?: number;
@@ -951,16 +1160,40 @@ const fieldsForScope = (
       field.fieldKey.startsWith("property.specifications."),
     );
   }
+  /*
+   * A project-details page carries specification facts too, and the partition
+   * used to hide them: Anamika High Point printed "Vastu Compliant" and its
+   * nearby hospitals/schools/malls with distances on project pages, so the
+   * model was never offered `property.specifications.vastu_compliance`,
+   * `nearby_hospitals`, `nearby_schools` or `nearby_connectivity` (schema v12)
+   * for those pages. It read every one of them correctly and dropped them all
+   * into unmappedRawEvidence, which nothing persists. The specification keys
+   * are cheap to offer here (they are keys in a prompt, not extra pages), and
+   * a key returned by two scopes is merged by `buildSubmissionFieldCandidates`.
+   */
   if (scope.kind === "property_details") {
     return activeFields.filter(
       (field) =>
         field.fieldKey !== "unit_variants" &&
-        field.fieldKey !== "property.amenities" &&
-        !field.fieldKey.startsWith("property.specifications."),
+        field.fieldKey !== "property.amenities",
     );
   }
   return [];
 };
+
+/**
+ * Lost twice already — do not drop this a third time. Fixed once on
+ * 2026-09-02 (Kimana Towers "rule 10": mirrored units and repeated
+ * floor-range plans transcribed as separate ~30-room variants burned the
+ * completion budget and roughly doubled cost) but that fix lived only in a
+ * one-off eval script, never the production prompt; the 2026-09-20 and
+ * 2026-09-23 rewrites of this prompt both independently reintroduced the
+ * bug (2026-09-23's discovery prompt went further and told the model to
+ * enumerate mirrored units as separate entries). See DECISIONS.md
+ * 2026-09-02 and 2026-09-23.
+ */
+const MIRRORED_UNIT_MERGE_RULE =
+  "Two or more units are the SAME variant, not separate ones, when their layouts are identical or mirrored (a flat and its mirror image, or a floor plate repeated unchanged across a labelled floor range): collapse them into one variant record naming every unit/floor number it covers. Only a layout that differs in at least one room, dimension, or amenity from its neighbor is a distinct variant.";
 
 const createScopePrompt = (
   scope: OcrRoutingManifest["scopes"][number],
@@ -969,7 +1202,7 @@ const createScopePrompt = (
   const sourcePages = scope.pages.map((page) => page.pageNumber);
   const scalarFields = fieldsForScope(scope, activeFields);
   const variantDetails =
-    'totalUnitsOfVariant (positive integer), unitsPerFloor (positive integer), areas [{basis: carpet|super_built_up|built_up, area: the number exactly as printed, unit: the unit printed with it or null}], and dimensions {lengthUnit: the unit the plan states for its lengths or null, areaUnit: the unit stated for room areas or null, rooms: [room], foyer: one room object or null (never a list; put extra foyers in rooms), balconies: [room]}; each room has name and any explicitly printed length, width, or area, exactly as printed (a number, or text such as "4.36 m" or "12\'-6\\"")';
+    'totalUnitsOfVariant (positive integer), unitsPerFloor (positive integer), areas [{basis: carpet|super_built_up|built_up, area: the number exactly as printed, unit: the unit printed with it or null}], and dimensions {lengthUnit: the unit the plan states for its lengths or null, areaUnit: the unit stated for room areas or null, rooms: [room], foyer: one room object or null (never a list; put extra foyers in rooms), balconies: [room]}; each room has ONLY these keys: name, and any explicitly printed length, width, or area, exactly as printed (a number, or text such as "4.36 m" or "12\'-6\\""). Never invent another key such as "dimension" or "size" for a measurement. When a plan prints one room as a single pair ("12\'-7\\" X 12\'-0\\""), split it: the first value is length, the second is width. When the SAME room is printed twice in two unit systems (feet-inches and metres side by side), return it ONCE, using whichever of the two carries its own printed unit — do not return the room twice and do not merge the two into one string';
   const variantOutput =
     scope.kind === "floor_plans"
       ? `"unitVariants": [{"variantName": string, "details": object, "confidence": number, "evidence": [{"pageNumber": number, "sourceSnippet": string}]}]`
@@ -978,7 +1211,7 @@ const createScopePrompt = (
     scope.kind === "unit_variant"
       ? `Extract exactly one unit variant for \"${scope.variant.variantName}\". Put its values in unitVariant.details using only: ${variantDetails}. Combine all excerpt pages into this one variant; never emit a second variant.`
       : scope.kind === "floor_plans"
-        ? `Discover every distinct unit variant explicitly shown across these floor-plan pages. Return one unitVariants entry per distinct variant, merging pages that show levels of the same duplex or penthouse. Each variantName must be a concise, evidence-backed name printed in the brochure; do not invent BHK or layout catalog keys. Put each variant's values in details using only: ${variantDetails}. Return an empty unitVariants array when these pages do not explicitly show a unit variant.`
+        ? `Discover every distinct unit variant explicitly shown across these floor-plan pages. Return one unitVariants entry per distinct variant, merging pages that show levels of the same duplex or penthouse. ${MIRRORED_UNIT_MERGE_RULE} Each variantName must be a concise, evidence-backed name printed in the brochure and, when it covers more than one unit or floor number, must say so (for example "Block B - Units 301 & 302 (3rd Floor)" or "Flat Type 02 - Typical Floor (3rd-20th)"); when the plan's own heading states the configuration, keep it in the name too (for example "Block B & E - 4 BHK Classy Residences - Units 201"). Set bhkTypeKey ONLY when the plan's own printed heading states the configuration ("4 BHK Classy Residences" gives 4bhk, "5 BHLK Lifestyle Living" gives the 5-bedroom key), choosing the exact key from the allowed values given for unit_variants; omit bhkTypeKey entirely when no configuration is printed — never infer one by counting bedrooms on the drawing. Never set layoutTypeKey. Put each variant's values in details using only: ${variantDetails}. Return an empty unitVariants array when these pages do not explicitly show a unit variant.`
         : "This is not a unit-discovery scope. Return unitVariant as null.";
 
   return `You extract evidence-backed real-estate brochure facts into a reviewed submission. Return one complete JSON object only, with no markdown or commentary.
@@ -992,7 +1225,9 @@ Output shape:
 
 Rules:
 - UNITS ARE EXACT. Copy every measurement exactly as printed and NEVER convert, round, or assume a unit. Give the unit exactly as printed: with the number when it is printed there ("4.36 m", "1,250 sq ft"), or once as lengthUnit / areaUnit / unit when the plan states it for everything (a scale note or legend such as "all dimensions in mm"). If no unit is printed anywhere for a measurement, set its unit to null and still copy the number: it will be held for a person to check, not guessed. Never treat a number as feet or square feet unless feet are printed. For any field whose key ends in _sqft, return value exactly as printed plus a unit key (for example {"fieldKey": "property.plot_area_sqft", "value": 1200, "unit": "sq yd", ...}); do not convert it yourself.
-- Extract only facts explicitly printed on these pages. Never infer, count, summarize marketing copy, or fabricate missing values.
+- Extract only facts explicitly printed on these pages. Never infer, summarize marketing copy, or fabricate missing values. Transcribing a printed list or grid item by item is NOT inferring and is required (see exhaustiveness below); what is forbidden is counting things up to invent a total the brochure never prints.
+- BE EXHAUSTIVE on any field whose value is a list. When a page prints a grid, legend, icon set or list (an amenities icon grid, a specification table, a legend of numbered facilities), work through it item by item, in reading order, and return EVERY entry that matches an allowed value — not a representative sample and not only the well-known ones. A grid of 30+ amenity icons must yield every one of those icons that maps to an allowed value. Silently omitting a printed item that has a matching allowed value is an error, not a judgement call.
+- A storey or floor count is NEVER a tower or block count. Marketing copy such as "31-Storey Iconic Towers" states 31 FLOORS and says nothing at all about how many towers exist; a tower count comes from its own printed evidence ("5 Blocks", "Towers A to E", a block legend). Read property.total_floors and property.total_towers each from their own evidence, and omit either one that is not separately printed rather than reusing the other's number.
 - Never return a price, currency amount, rate per square foot, or commercial term anywhere, including unmappedRawEvidence.
 - The only active scalar fields for this scope are: ${JSON.stringify(scalarFields)}. Use their exact fieldKey and dataType-compatible value. Omit missing fields.
 - If a useful non-price fact has no active field key, put it in unmappedRawEvidence instead of inventing a destination or silently dropping it.
@@ -1202,14 +1437,28 @@ const parseScopeResponse = (
       scope.scopeKey,
     );
     if (!activeKeys.has(fieldKey)) {
-      unmapped.push(
-        parseUnmappedCandidate(
-          { ...candidate, evidence },
-          unmapped.length,
-          scope.scopeKey,
-          manifest,
-        ),
-      );
+      try {
+        unmapped.push(
+          parseUnmappedCandidate(
+            { ...candidate, evidence },
+            unmapped.length,
+            scope.scopeKey,
+            manifest,
+          ),
+        );
+      } catch (error) {
+        if (
+          !(error instanceof OcrContractError) &&
+          !(error instanceof OcrAdapterError)
+        ) {
+          throw error;
+        }
+        // Advisory data (no active field key), not the contract this run is
+        // paid to fill: one bad citation loses that one note, never the
+        // whole already-paid-for run. Same tolerance `fields` already gets
+        // below — unmappedRawEvidence has no reason to be the fatal path.
+        console.warn(`[ocr] left out unmapped ${fieldKey}: ${error.message}`);
+      }
       continue;
     }
     if (
@@ -1278,15 +1527,22 @@ const parseScopeResponse = (
   }
 
   if (Array.isArray(response.unmappedRawEvidence)) {
-    for (const candidate of response.unmappedRawEvidence) {
-      unmapped.push(
-        parseUnmappedCandidate(
-          candidate,
-          unmapped.length,
-          scope.scopeKey,
-          manifest,
-        ),
-      );
+    for (const [index, candidate] of response.unmappedRawEvidence.entries()) {
+      try {
+        unmapped.push(
+          parseUnmappedCandidate(candidate, index, scope.scopeKey, manifest),
+        );
+      } catch (error) {
+        if (
+          !(error instanceof OcrContractError) &&
+          !(error instanceof OcrAdapterError)
+        ) {
+          throw error;
+        }
+        console.warn(
+          `[ocr] left out unmappedRawEvidence[${index}]: ${error.message}`,
+        );
+      }
     }
   } else if (response.unmappedRawEvidence !== undefined) {
     throw new OcrAdapterError(
@@ -1333,14 +1589,37 @@ const parseScopeResponse = (
           `${path} must be an object`,
         );
       }
-      if (
-        candidate.bhkTypeKey !== undefined ||
-        candidate.layoutTypeKey !== undefined
-      ) {
+      /*
+       * A layout key is never printed on a plan, so it stays forbidden. A BHK
+       * key often IS printed as the plan's own heading ("4 BHK Classy
+       * Residences"), and refusing it meant a brochure that states the
+       * configuration outright still reached review with it blank. It is
+       * accepted only when it is one of the catalog's own keys, supplied as
+       * this field's allowed values — an invented key still fails the run
+       * rather than reaching the publish transaction as an unknown key.
+       */
+      if (candidate.layoutTypeKey !== undefined) {
         throw new OcrAdapterError(
           "invalid_response",
-          `${path} must not assign BHK or layout catalog keys`,
+          `${path} must not assign a layout catalog key`,
         );
+      }
+      let bhkTypeKey: string | undefined;
+      if (candidate.bhkTypeKey !== undefined) {
+        const allowed =
+          activeFields.find((field) => field.fieldKey === "unit_variants")
+            ?.allowedValues ?? [];
+        const proposed = readNonEmptyString(
+          candidate.bhkTypeKey,
+          `${path}.bhkTypeKey`,
+        );
+        if (!allowed.includes(proposed)) {
+          throw new OcrAdapterError(
+            "invalid_response",
+            `${path}.bhkTypeKey is not a catalog key: ${proposed}`,
+          );
+        }
+        bhkTypeKey = proposed;
       }
       const variantName = readNonEmptyString(
         candidate.variantName,
@@ -1361,6 +1640,7 @@ const parseScopeResponse = (
       return {
         scopeKey: scope.scopeKey,
         variantName,
+        ...(bhkTypeKey === undefined ? {} : { bhkTypeKey }),
         // The model's raw reading is converted here, once, and then validated.
         details: parseVariantDetails(
           convertProviderDetails(candidate.details, `${path}.details`),
@@ -1444,14 +1724,6 @@ export const createOpenRouterOcrAdapter = (
     ),
     "OPENROUTER_OCR_MAX_COMPLETION_TOKENS",
   );
-  const maxReasoningTokens = readConfiguredInteger(
-    options.maxReasoningTokens,
-    Number(
-      process.env.OPENROUTER_OCR_MAX_REASONING_TOKENS ??
-        DEFAULT_MAX_REASONING_TOKENS,
-    ),
-    "OPENROUTER_OCR_MAX_REASONING_TOKENS",
-  );
   const requestTimeoutMs = readConfiguredInteger(
     options.requestTimeoutMs,
     Number(
@@ -1471,15 +1743,31 @@ export const createOpenRouterOcrAdapter = (
             ".local/ocr-checkpoints",
         );
 
-  const callScope = async (
-    scope: OcrRoutingManifest["scopes"][number],
+  /**
+   * The one place a PDF and a prompt become an OpenRouter request, so the
+   * retry/timeout handling and the native-PDF request shape exist in one
+   * place rather than two copies that could drift.
+   */
+  const callModel = async (
     pdfBytes: Uint8Array,
-    activeFields: ActiveOcrField[],
+    filenameHint: string,
+    promptText: string,
+    maxTokensOverride?: number,
   ): Promise<OpenRouterStreamResult> => {
     const body = JSON.stringify({
       model,
-      max_tokens: maxCompletionTokens,
-      reasoning: { max_tokens: maxReasoningTokens, exclude: true },
+      max_tokens: maxTokensOverride ?? maxCompletionTokens,
+      /**
+       * `enabled: false`, never `exclude: true`. `exclude` only hides the
+       * reasoning from the response — it is still generated and still billed
+       * at the output rate. Paired with a `max_tokens` budget (which maps to
+       * Anthropic's `budget_tokens`, a parameter **removed on Sonnet 5**, so
+       * the cap was silently ignored), that bought unlimited invisible
+       * thinking: 55% of this pipeline's entire spend to date, and every
+       * `output_length` failure. Extraction is transcription against an
+       * explicit contract; it does not need chain-of-thought.
+       */
+      reasoning: { enabled: false },
       messages: [
         {
           role: "user",
@@ -1487,11 +1775,11 @@ export const createOpenRouterOcrAdapter = (
             {
               type: "file",
               file: {
-                filename: `${scope.scopeKey}.pdf`,
+                filename: `${filenameHint}.pdf`,
                 file_data: `data:application/pdf;base64,${Buffer.from(pdfBytes).toString("base64")}`,
               },
             },
-            { type: "text", text: createScopePrompt(scope, activeFields) },
+            { type: "text", text: promptText },
           ],
         },
       ],
@@ -1551,6 +1839,13 @@ export const createOpenRouterOcrAdapter = (
     }
     throw new OcrAdapterError("provider_error", "OpenRouter retry exhausted");
   };
+
+  const callScope = (
+    scope: OcrRoutingManifest["scopes"][number],
+    pdfBytes: Uint8Array,
+    activeFields: ActiveOcrField[],
+  ): Promise<OpenRouterStreamResult> =>
+    callModel(pdfBytes, scope.scopeKey, createScopePrompt(scope, activeFields));
 
   return {
     providerKey: `openrouter:${model}`,
@@ -1630,8 +1925,22 @@ export const createOpenRouterOcrAdapter = (
         });
       };
 
+      // `expandedScopes` and `effectiveManifest` share this one array by
+      // reference: scopes are appended below in document order, so evidence
+      // validation for a scope processed now can always find itself and
+      // everything before it. The manifest the adapter runs is the confirmed
+      // one, unchanged — persistence resolves a unit variant's scopeKey
+      // against this same object (see `ingestion.ts`), which is what keeps a
+      // discovered variant from silently vanishing at persistence time.
+      const expandedScopes: OcrRoutingManifest["scopes"] = [];
+      const effectiveManifest: OcrRoutingManifest = {
+        ...request.manifest,
+        scopes: expandedScopes,
+      };
+
       try {
         for (const scope of request.manifest.scopes) {
+          expandedScopes.push(scope);
           if (scope.kind === "ignore") continue;
           const pageNumbers = scope.pages.map((page) => page.pageNumber);
           const earlier = earlierResponses.get(scope.scopeKey);
@@ -1645,7 +1954,7 @@ export const createOpenRouterOcrAdapter = (
               const reused = parseScopeResponse(
                 earlier.response,
                 scope,
-                request.manifest,
+                effectiveManifest,
                 request.activeFields,
               );
               scopeCheckpoints.push(earlier);
@@ -1719,7 +2028,7 @@ export const createOpenRouterOcrAdapter = (
           const scopeResult = parseScopeResponse(
             parsed,
             scope,
-            request.manifest,
+            effectiveManifest,
             request.activeFields,
           );
           fields.push(...scopeResult.fields);
@@ -1742,7 +2051,7 @@ export const createOpenRouterOcrAdapter = (
             fields,
             unitVariants,
           },
-          request.manifest,
+          effectiveManifest,
           request.activeFields,
           request.pipelineVersion,
           request.fieldSchemaVersion,
@@ -1758,6 +2067,7 @@ export const createOpenRouterOcrAdapter = (
         unmappedRawEvidence,
         providerRequestIds,
         usage,
+        effectiveManifest,
         ...(checkpointPath === undefined ? {} : { checkpointPath }),
       };
       await saveCheckpoint("extracted", result);

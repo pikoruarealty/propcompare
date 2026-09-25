@@ -4,6 +4,7 @@ import { MapPin } from "lucide-react";
 import { db } from "@/db";
 import { AdminPageHeader, AdminShell } from "@/components/admin/admin-shell";
 import { StatusPill } from "@/components/admin/status-pill";
+import { SubmissionRowActions } from "@/components/admin/submission-row-actions";
 import { Button } from "@/components/ui/button";
 import { requirePortalRole } from "@/lib/accounts/session";
 import { listFailingReraChecks } from "@/lib/rera/health";
@@ -42,13 +43,21 @@ const FILTERS: { key: SubmissionStatus | "all"; label: string }[] = [
 export default async function SubmissionQueuePage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string | string[] }>;
+  searchParams: Promise<{
+    status?: string | string[];
+    view?: string | string[];
+  }>;
 }) {
   const session = await requirePortalRole("admin", "/admin/submissions");
-  const { status: rawStatus } = await searchParams;
+  const { status: rawStatus, view: rawView } = await searchParams;
   const candidate = Array.isArray(rawStatus) ? rawStatus[0] : rawStatus;
-  const status = isSubmissionStatus(candidate) ? candidate : undefined;
-  const submissions = await listSubmissionQueue(db, { status });
+  const archived =
+    (Array.isArray(rawView) ? rawView[0] : rawView) === "archived";
+  // The archived view lists every archived submission whatever its status.
+  const status =
+    !archived && isSubmissionStatus(candidate) ? candidate : undefined;
+  const isOwner = session.role.permissionLevel === "owner";
+  const submissions = await listSubmissionQueue(db, { status, archived });
   const failingChecks = await listFailingReraChecks(db);
 
   return (
@@ -105,7 +114,7 @@ export default async function SubmissionQueuePage({
 
       <nav aria-label="Filter by status" className="mb-6 flex flex-wrap gap-2">
         {FILTERS.map(({ key, label }) => {
-          const active = (status ?? "all") === key;
+          const active = !archived && (status ?? "all") === key;
           return (
             <Link
               key={key}
@@ -126,17 +135,35 @@ export default async function SubmissionQueuePage({
             </Link>
           );
         })}
+        <Link
+          href="/admin/submissions?view=archived"
+          aria-current={archived ? "true" : undefined}
+          className={cn(
+            "ml-auto rounded-full border px-3 py-1 text-sm transition-colors",
+            archived
+              ? "border-primary bg-primary text-primary-foreground"
+              : "border-border bg-card text-muted-foreground hover:text-foreground",
+          )}
+        >
+          Archived
+        </Link>
       </nav>
 
       {submissions.length === 0 ? (
         <div className="border-border bg-card rounded-lg border p-10 text-center">
           <p className="font-display text-2xl">
-            {status ? "Nothing with that status" : "No submissions yet"}
+            {archived
+              ? "Nothing archived"
+              : status
+                ? "Nothing with that status"
+                : "No submissions yet"}
           </p>
           <p className="text-muted-foreground mx-auto mt-2 max-w-prose text-sm">
-            {status
-              ? "Try another filter, or clear it to see everything."
-              : "Submissions appear here once a brochure is uploaded or a property is entered by hand."}
+            {archived
+              ? "A published submission you archive is kept here, and can be restored."
+              : status
+                ? "Try another filter, or clear it to see everything."
+                : "Submissions appear here once a brochure is uploaded or a property is entered by hand."}
           </p>
         </div>
       ) : (
@@ -235,16 +262,28 @@ export default async function SubmissionQueuePage({
                     ) : null}
                   </td>
                   <td className="px-6 py-5 text-right">
-                    <Button
-                      asChild
-                      variant="outline"
-                      size="sm"
-                      className="h-8 px-3"
-                    >
-                      <Link href={`/admin/submissions/${submission.id}`}>
-                        Open
-                      </Link>
-                    </Button>
+                    <div className="flex items-center justify-end gap-1">
+                      {isOwner ? (
+                        <SubmissionRowActions
+                          submissionId={submission.id}
+                          propertyName={
+                            submission.propertyName ?? "this submission"
+                          }
+                          published={submission.status === "published"}
+                          archived={archived}
+                        />
+                      ) : null}
+                      <Button
+                        asChild
+                        variant="outline"
+                        size="sm"
+                        className="h-8 px-3"
+                      >
+                        <Link href={`/admin/submissions/${submission.id}`}>
+                          Open
+                        </Link>
+                      </Button>
+                    </div>
                   </td>
                 </tr>
               ))}

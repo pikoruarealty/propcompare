@@ -1,8 +1,10 @@
 import "dotenv/config";
 import { randomUUID } from "node:crypto";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, like } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { db } from "@/db";
+import { serviceDb } from "@/db/service";
+import { reraPriceRanges } from "@/db/schema/private";
 import { users } from "@/db/schema/auth";
 import {
   developerLegalEntities,
@@ -21,6 +23,7 @@ import {
   detailResponse,
   formOneResponse,
   inventoryResponse,
+  latestFilingRoutes,
   kimanaSearchHit,
   POISON,
   progressResponse,
@@ -28,8 +31,10 @@ import {
   searchResponse,
   summaryResponse,
 } from "./gujrera.fixtures";
+import { readReraPriceRange } from "@/lib/pricing/ranges";
 import { createRegulatorRegistry } from "./registry";
 import {
+  addPromoterAsLegalEntity,
   applyReraValues,
   fetchReraForSubmission,
   getReraState,
@@ -43,6 +48,7 @@ let developerId: string;
 let entityId: string;
 const submissionIds: string[] = [];
 const propertyIds: string[] = [];
+const extraDeveloperIds: string[] = [];
 
 /** GujRERA stand-in answering with the saved Kimana shapes. */
 const stubRegistry = (overrides: Record<string, unknown> = {}) => {
@@ -56,6 +62,7 @@ const stubRegistry = (overrides: Record<string, unknown> = {}) => {
     "/formthree/public/get-fromthree-a-details-byid/417562": inventoryResponse,
     "/quarter/public/getprojectqtrs/17929": quartersResponse,
     "/formone/public/getfrom-one-byformone-id/278008": formOneResponse,
+    ...latestFilingRoutes,
     ...overrides,
   };
   return createRegulatorRegistry([
@@ -153,6 +160,10 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  // The price range each check keeps in the private schema (test numbers only).
+  await serviceDb
+    .delete(reraPriceRanges)
+    .where(like(reraPriceRanges.registrationNumber, "PR/GJ/TEST/%"));
   await db.delete(reraFetchJobs).where(eq(reraFetchJobs.requestedBy, userId));
   if (submissionIds.length > 0) {
     await db
@@ -166,6 +177,11 @@ afterAll(async () => {
     await db.delete(properties).where(inArray(properties.id, propertyIds));
   }
   await db.delete(developers).where(eq(developers.id, developerId));
+  if (extraDeveloperIds.length > 0) {
+    await db
+      .delete(developers)
+      .where(inArray(developers.id, extraDeveloperIds));
+  }
   await db.delete(users).where(eq(users.id, userId));
 });
 
@@ -189,6 +205,12 @@ describe("fetching a RERA record for a submission", () => {
       "not_held", // construction progress
       "rera_silent", // pincode: the saved Kimana fixture states none
       "not_held", // RERA project land area
+      "not_held", // floors (22 in the latest filing)
+      "not_held", // towers (the blocks name A and B)
+      "not_held", // latitude (centre of RERA's boundary)
+      "not_held", // longitude
+      "not_held", // map link
+      "not_held", // RERA project facts
       "not_held", // possession status (derived)
       "rera_silent", // amenities: Kimana declares no pool
       "not_held", // promoter
@@ -214,6 +236,29 @@ describe("fetching a RERA record for a submission", () => {
     expect(stored).not.toContain(String(POISON));
     expect(stored).not.toMatch(/mincost|maxcost|estimatedCost|unitConsider/i);
     expect(stored).not.toMatch(/poison@|promoterEmail/i);
+  });
+
+  it("keeps the project's stated price range in the private schema and nowhere public", async () => {
+    const submissionId = await newDraft();
+
+    const result = await fetchReraForSubmission(db, {
+      submissionId,
+      registrationNumber: TEST_NUMBER,
+      requestedBy: userId,
+      registry: stubRegistry(),
+    });
+
+    // The fixture's search hit states POISON as both ends of the range.
+    expect(await readReraPriceRange(serviceDb, TEST_NUMBER)).toMatchObject({
+      minInr: String(POISON),
+      maxInr: String(POISON),
+    });
+    const [job] = await db
+      .select()
+      .from(reraFetchJobs)
+      .where(eq(reraFetchJobs.id, result.jobId));
+    expect(JSON.stringify(job)).not.toContain(String(POISON));
+    expect(JSON.stringify(result.record)).not.toContain(String(POISON));
   });
 
   it("proposes the developer's matching legal entity", async () => {
@@ -376,6 +421,12 @@ describe("using RERA's values", () => {
       "property.total_units",
       "property.rera_construction_progress_percent",
       "property.rera_project_land_area_sqft",
+      "property.total_floors",
+      "property.total_towers",
+      "property.latitude",
+      "property.longitude",
+      "property.google_maps_url",
+      "property.rera_snapshot",
       "property.possession_status",
       "property.legal_entity_id",
     ]);
@@ -384,17 +435,31 @@ describe("using RERA's values", () => {
     expect(fields["property.possession_date"].value).toBe("2027-04-30");
     expect(fields["property.total_units"].value).toBe(76);
     expect(fields["property.rera_construction_progress_percent"].value).toBe(
-      67.71875,
+      93.72324444444445,
     );
     expect(fields["property.legal_entity_id"].value).toBe(entityId);
-    // Derived from RERA's declared progress (67.7%, under 100).
+    // Derived from RERA's declared progress (93.7%, under 100).
     expect(fields["property.possession_status"].value).toBe(
       "under_construction",
     );
     expect(fields["property.rera_registration_number"].value).toBe(TEST_NUMBER);
-    for (const field of Object.values(fields)) {
-      expect(field.reviewStatus).toBe("confirmed");
+    // Everything RERA states is confirmed by taking it, except the pin and map
+    // link: a place someone should look at on the map before it is published.
+    const needsALook = [
+      "property.latitude",
+      "property.longitude",
+      "property.google_maps_url",
+    ];
+    for (const [key, field] of Object.entries(fields)) {
+      expect(field.reviewStatus).toBe(
+        needsALook.includes(key) ? "needs_review" : "confirmed",
+      );
     }
+    expect(fields["property.latitude"].value).toBeCloseTo(23.02727, 4);
+    // A search by the project's name leads; the boundary's pin is RERA's own value.
+    expect(fields["property.google_maps_url"].value).toMatch(
+      /^https:\/\/www\.google\.com\/maps\/search\/\?api=1&query=/,
+    );
   });
 
   it("shows a later edit as different from RERA, without blocking it", async () => {
@@ -585,5 +650,101 @@ describe("an edit of an already-published property", () => {
       .where(eq(properties.id, propertyId));
     expect(live.name).toMatch(/^RERA Test Tower/);
     expect(live.reraNumber).toBeNull();
+  });
+});
+
+describe("adding RERA's promoter as a legal entity", () => {
+  /** A developer with no recorded legal entity, and a draft that has fetched. */
+  const draftWithoutEntity = async (fetch = true) => {
+    const [developer] = await db
+      .insert(developers)
+      .values({ name: `No Entity Developer ${randomUUID()}` })
+      .returning({ id: developers.id });
+    extraDeveloperIds.push(developer.id);
+    const { submissionId } = await createManualSubmission(db, {
+      developerId: developer.id,
+      submittedBy: userId,
+    });
+    submissionIds.push(submissionId);
+    if (fetch) {
+      await fetchReraForSubmission(db, {
+        submissionId,
+        registrationNumber: TEST_NUMBER,
+        requestedBy: userId,
+        registry: stubRegistry(),
+      });
+    }
+    return { developerId: developer.id, submissionId };
+  };
+
+  it("records the promoter as RERA prints it, typed from RERA's wording, and the comparison then proposes it", async () => {
+    const { developerId: owner, submissionId } = await draftWithoutEntity();
+    const before = (await getReraState(db, submissionId)).comparison.find(
+      (item) => item.fieldKey === "property.legal_entity_id",
+    );
+    expect(before).toMatchObject({ proposedValue: null, status: "not_held" });
+    expect(before?.note).toMatch(/none of this developer/i);
+
+    const added = await addPromoterAsLegalEntity(db, { submissionId });
+
+    expect(added.legalName).toBe("SUN VN DEVELOPERS LLP");
+    const [row] = await db
+      .select()
+      .from(developerLegalEntities)
+      .where(eq(developerLegalEntities.id, added.id));
+    expect(row).toMatchObject({
+      developerId: owner,
+      legalName: "SUN VN DEVELOPERS LLP",
+      entityType: "llp",
+      reraPromoterRegistrationNumber: null,
+    });
+    const after = (await getReraState(db, submissionId)).comparison.find(
+      (item) => item.fieldKey === "property.legal_entity_id",
+    );
+    expect(after).toMatchObject({
+      proposedValue: added.id,
+      status: "not_held",
+    });
+  });
+
+  it("does not add a second entity when one already matches, ignoring case and punctuation", async () => {
+    const { submissionId } = await draftWithoutEntity();
+    await addPromoterAsLegalEntity(db, { submissionId });
+
+    await expect(
+      addPromoterAsLegalEntity(db, { submissionId }),
+    ).rejects.toMatchObject({ code: "entity_exists" });
+  });
+
+  it("asks for a fetch first, and refuses once the submission is no longer editable", async () => {
+    const { submissionId } = await draftWithoutEntity(false);
+    await expect(
+      addPromoterAsLegalEntity(db, { submissionId }),
+    ).rejects.toMatchObject({ code: "job_not_found" });
+
+    await db
+      .update(propertySubmissions)
+      .set({ status: "rejected" })
+      .where(eq(propertySubmissions.id, submissionId));
+    await expect(
+      addPromoterAsLegalEntity(db, { submissionId }),
+    ).rejects.toMatchObject({ code: "invalid_state" });
+  });
+
+  it("says so when RERA names no promoter", async () => {
+    const { submissionId } = await draftWithoutEntity();
+    const [job] = await db
+      .select({ payload: reraFetchJobs.fetchedPayload })
+      .from(reraFetchJobs)
+      .where(eq(reraFetchJobs.submissionId, submissionId));
+    const record = (job.payload as { record: object }).record;
+    await db
+      .update(reraFetchJobs)
+      .set({ fetchedPayload: { record: { ...record, promoterName: null } } })
+      .where(eq(reraFetchJobs.submissionId, submissionId));
+
+    await expect(
+      addPromoterAsLegalEntity(db, { submissionId }),
+    ).rejects.toMatchObject({ code: "no_promoter" });
   });
 });

@@ -5,7 +5,7 @@ import {
   propertySubmissionMedia,
   propertySubmissions,
 } from "@/db/schema/catalog";
-import { isEditOnlyField } from "./edit-only-fields";
+import { isManagedElsewhere } from "./edit-only-fields";
 import { publishSubmission, type PublishSubmissionResult } from "./publisher";
 import { transitionSubmission } from "./reconciliation";
 import type { SubmissionAction } from "./transitions";
@@ -46,7 +46,8 @@ export const countPending = async (
       ),
     );
   return {
-    fields: fields.filter((field) => !isEditOnlyField(field.fieldKey)).length,
+    fields: fields.filter((field) => !isManagedElsewhere(field.fieldKey))
+      .length,
     pictures: pictures?.count ?? 0,
   };
 };

@@ -1,8 +1,10 @@
 import "dotenv/config";
 import { randomUUID } from "node:crypto";
-import { and, eq, inArray, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull, like } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { db } from "@/db";
+import { serviceDb } from "@/db/service";
+import { reraPriceRanges } from "@/db/schema/private";
 import { users } from "@/db/schema/auth";
 import {
   developerLegalEntities,
@@ -18,12 +20,14 @@ import {
 import { createEditSubmission } from "@/lib/submissions/edit-property";
 import { loadLiveValues } from "@/lib/submissions/live-values";
 import { publishSubmission } from "@/lib/submissions/publisher";
+import { reviewSubmissionField } from "@/lib/submissions/reconciliation";
 import { createGujreraAdapter } from "./gujrera";
 import {
   detailResponse,
   flatListResponse,
   formOneResponse,
   inventoryResponse,
+  latestFilingRoutes,
   kimanaSearchHit,
   progressResponse,
   quartersResponse,
@@ -55,6 +59,7 @@ const stubRegistry = (number: string) => {
     "/formthree/public/get-fromthree-a-details-byid/417562": inventoryResponse,
     "/quarter/public/getprojectqtrs/17929": quartersResponse,
     "/formone/public/getfrom-one-byformone-id/278008": formOneResponse,
+    ...latestFilingRoutes,
     "/formthree/public/get-inv-details-for-view": flatListResponse,
   };
   return createRegulatorRegistry([
@@ -170,6 +175,10 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  // The price range each check keeps in the private schema (test numbers only).
+  await serviceDb
+    .delete(reraPriceRanges)
+    .where(like(reraPriceRanges.registrationNumber, "PR/GJ/TEST/%"));
   if (propertyIds.length > 0) {
     await db
       .delete(reraFetchJobs)
@@ -233,6 +242,18 @@ describe("RERA carpet area on a published property", () => {
       jobId: fetched.jobId,
     });
     expect(applied).toContain("unit_variants");
+    // The proposed pin and map link wait for someone to look at the map.
+    for (const fieldKey of [
+      "property.latitude",
+      "property.longitude",
+      "property.google_maps_url",
+    ]) {
+      await reviewSubmissionField(db, {
+        submissionId,
+        fieldKey,
+        reviewStatus: "confirmed",
+      });
+    }
 
     // The publish path is the only thing that changes the live listing.
     expect((await areasByVariant(propertyId))["Block B - 3rd Floor"]).toEqual({

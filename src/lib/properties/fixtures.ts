@@ -89,6 +89,7 @@ export const richDossierFixture: PropertyDossier = {
     description: "Ahmedabad-based developer active since 1998.",
     logoGcsPath: "developers/sabarmati-estates/logo.png",
     website: "https://example.invalid/sabarmati-estates",
+    completedProjectsCount: 3,
   },
   location: {
     city: "Ahmedabad",
@@ -96,6 +97,14 @@ export const richDossierFixture: PropertyDossier = {
     latitude: "23.036900",
     longitude: "72.529700",
     pincode: "380015",
+    mapUrl:
+      "https://www.google.com/maps/place/Riverfront+Heights/@23.0369,72.5297,17z",
+    nearby: {
+      connectivity: ["Vastrapur Metro Station 1.1 Km", "Airport 16.2 Km"],
+      hospitals: ["Apex Heart Institute 650 Mtr"],
+      schools: ["Nirma Vidyavihar 1.4 Km", "Udgam School 1.6 Km"],
+      plotNumber: null,
+    },
   },
   possession: {
     status: "under_construction",
@@ -105,17 +114,18 @@ export const richDossierFixture: PropertyDossier = {
   rera: {
     registered: true,
     registrationNumber: "PR/GJ/AHMEDABAD/AHMEDABAD CITY/AUDA/RAA12345/010124",
-    lastVerifiedAt: "2026-08-20T09:15:00.000Z",
     projectLandAreaSqft: "48000.00",
     carpetAreaRangeMinSqft: "985.00",
     carpetAreaRangeMaxSqft: "1640.00",
     constructionProgressPercent: "42.50",
     lastCheckedAt: "2026-09-20T06:00:00.000Z",
     sourcedFacts: ["registration_number", "construction_progress"],
+    facts: null,
   },
   totalTowers: 2,
   totalFloors: 14,
   totalUnits: 184,
+  plotAreaSqft: "130680.00",
   unitVariants: [
     {
       id: "cccccccc-1111-4111-8111-cccccccccccc",
@@ -123,6 +133,7 @@ export const richDossierFixture: PropertyDossier = {
       bhkType: { key: "2bhk", label: "2 BHK" },
       layoutType: { key: "corner", label: "Corner" },
       totalUnitsOfVariant: 96,
+      unitsPerFloor: 4,
       dimensions: {
         rooms: [
           { name: "Living", lengthFt: 16.5, widthFt: 12, areaSqft: 200 },
@@ -135,6 +146,20 @@ export const richDossierFixture: PropertyDossier = {
         { basis: "built_up", areaSqft: "1180.00" },
         { basis: "super_built_up", areaSqft: "1425.00" },
       ],
+      amenities: [
+        {
+          key: "jacuzzi",
+          label: "Jacuzzi",
+          category: "Wellness",
+          status: "available",
+        },
+        {
+          key: "sauna",
+          label: "Sauna",
+          category: "Wellness",
+          status: "explicitly_not_offered",
+        },
+      ],
     },
     {
       id: "dddddddd-1111-4111-8111-dddddddddddd",
@@ -142,10 +167,12 @@ export const richDossierFixture: PropertyDossier = {
       bhkType: { key: "3bhk", label: "3 BHK" },
       layoutType: null,
       totalUnitsOfVariant: 88,
+      unitsPerFloor: 4,
       dimensions: null,
       // Only carpet area was published. The other bases must render as
       // unstated, never derived from this one.
       areas: [{ basis: "carpet", areaSqft: "1310.00" }],
+      amenities: [],
     },
   ],
   amenities: [
@@ -224,6 +251,7 @@ export const sparseDossierFixture: PropertyDossier = {
     description: null,
     logoGcsPath: null,
     website: null,
+    completedProjectsCount: 0,
   },
   location: {
     city: "Ahmedabad",
@@ -231,6 +259,8 @@ export const sparseDossierFixture: PropertyDossier = {
     latitude: null,
     longitude: null,
     pincode: null,
+    mapUrl: null,
+    nearby: { connectivity: [], hospitals: [], schools: [], plotNumber: null },
   },
   possession: {
     status: null,
@@ -240,17 +270,18 @@ export const sparseDossierFixture: PropertyDossier = {
   rera: {
     registered: false,
     registrationNumber: null,
-    lastVerifiedAt: null,
     projectLandAreaSqft: null,
     carpetAreaRangeMinSqft: null,
     carpetAreaRangeMaxSqft: null,
     constructionProgressPercent: null,
     lastCheckedAt: null,
     sourcedFacts: [],
+    facts: null,
   },
   totalTowers: null,
   totalFloors: null,
   totalUnits: null,
+  plotAreaSqft: null,
   unitVariants: [
     {
       id: "cccccccc-2222-4222-8222-cccccccccccc",
@@ -258,8 +289,10 @@ export const sparseDossierFixture: PropertyDossier = {
       bhkType: { key: "2bhk", label: "2 BHK" },
       layoutType: null,
       totalUnitsOfVariant: null,
+      unitsPerFloor: null,
       dimensions: null,
       areas: [{ basis: "carpet", areaSqft: "870.00" }],
+      amenities: [],
     },
   ],
   amenities: [

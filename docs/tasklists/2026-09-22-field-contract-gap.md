@@ -1,6 +1,6 @@
 # Tasklist: close the field-contract gap (pincode, launch date, RERA land area, RERA registered)
 
-**Status:** in progress, written before the code (this file follows the code slightly since the gap and its fix were both found and approved in the same session; see `PROGRESS.md`).
+**Status:** done 2026-09-22 (reconciled 2026-09-25: every checklist box is ticked). Written before the code, though this file follows the code slightly since the gap and its fix were both found and approved in the same session; see `PROGRESS.md`.
 **Owner:** Bhavarth (approved via AskUserQuestion, 2026-09-22, after being surfaced per `AGENTS.md`: this changes publish logic)
 **References:** `AGENTS.md`, `docs/tasklists/2026-09-22-comparison-review-fixes.md` (where the gap was found), `docs/schema/schema.v9.md`, `DECISIONS.md`
 

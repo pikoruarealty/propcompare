@@ -80,6 +80,19 @@ export interface DossierDeveloper {
   description: string | null;
   logoGcsPath: string | null;
   website: string | null;
+  /** Count of this developer's own published properties at `ready_to_move`,
+   * computed at read time — never stored, so it always reflects live data. */
+  completedProjectsCount: number;
+}
+
+/** What is near the project, as printed: one entry per landmark, with its
+ * distance or travel time as stated. Read from the v12 location specifications,
+ * and never shown among the specifications (`DECISIONS.md` 2026-09-24). */
+export interface DossierNearby {
+  connectivity: string[];
+  hospitals: string[];
+  schools: string[];
+  plotNumber: string | null;
 }
 
 export interface DossierLocation {
@@ -88,6 +101,9 @@ export interface DossierLocation {
   latitude: string | null;
   longitude: string | null;
   pincode: string | null;
+  /** The Google Maps link an admin set (schema v15). */
+  mapUrl: string | null;
+  nearby: DossierNearby;
 }
 
 export interface DossierPossession {
@@ -96,13 +112,12 @@ export interface DossierPossession {
   launchDate: string | null;
 }
 
+import type { ReraSnapshot } from "@/lib/rera/snapshot";
 import type { ReraSourcedFact } from "./rera-source";
 
 export interface DossierRera {
   registered: boolean;
   registrationNumber: string | null;
-  /** ISO-8601. */
-  lastVerifiedAt: string | null;
   projectLandAreaSqft: string | null;
   carpetAreaRangeMinSqft: string | null;
   carpetAreaRangeMaxSqft: string | null;
@@ -114,6 +129,11 @@ export interface DossierRera {
    * published. Only these may carry a "Source: GujRERA" line; a value that came
    * from a brochure or that differs from RERA's is not listed. */
   sourcedFacts: ReraSourcedFact[];
+  /** What the regulator states about the project beyond the fields above (schema
+   * v17), each figure with the quarter or date it is as on; null until a RERA check
+   * has been published. Every value in it is the regulator's, so it is credited to
+   * the regulator as a whole. */
+  facts: ReraSnapshot | null;
 }
 
 export interface UnitArea {
@@ -134,9 +154,16 @@ export interface DossierUnitVariant {
   bhkType: LookupRef | null;
   layoutType: LookupRef | null;
   totalUnitsOfVariant: number | null;
+  unitsPerFloor: number | null;
   dimensions: UnitVariantDimensions | null;
   /** May be missing bases; an absent basis is never inferred from another. */
   areas: UnitArea[];
+  /**
+   * What belongs to this unit type alone (a private terrace, a plunge pool), apart
+   * from the project's amenities. Only what has been stated is here (available or
+   * explicitly not offered); an amenity with no entry is not stated.
+   */
+  amenities: DossierAmenity[];
 }
 
 /**
@@ -170,6 +197,23 @@ export interface DossierMedia {
   attribution: string | null;
 }
 
+/**
+ * Present only on a dossier handed to a signed-out visitor (`lockDossier`,
+ * `DECISIONS.md` 2026-09-24). The configurations, amenities, floor plans and most
+ * photos are withheld on the server; this says what was withheld, so the page can
+ * draw a locked placeholder instead of a misleading "not stated". A signed-in
+ * visitor gets no `lock` and the full record.
+ */
+export interface DossierLock {
+  /** Photos beyond the preview that a signed-in visitor sees. */
+  hiddenPhotos: number;
+  hiddenFloorPlans: number;
+  /** The catalog's amenity names (the vocabulary, not this property's answers). */
+  amenityCatalog: { label: string; category: string }[];
+  /** The catalog's specification names, likewise. */
+  specificationCatalog: { label: string; category: string }[];
+}
+
 /** The response of `GET /api/v1/properties/{slug}`. */
 export interface PropertyDossier {
   id: string;
@@ -184,10 +228,13 @@ export interface PropertyDossier {
   totalTowers: number | null;
   totalFloors: number | null;
   totalUnits: number | null;
+  plotAreaSqft: string | null;
   unitVariants: DossierUnitVariant[];
   amenities: DossierAmenity[];
   specifications: DossierSpecification[];
   media: DossierMedia[];
+  /** Set only when detail was withheld from a signed-out visitor. */
+  lock?: DossierLock;
 }
 
 export type PropertySort = "newest" | "name";

@@ -15,6 +15,7 @@ type ConfirmedCategory = ReadAs | "ignore";
 export interface ConfirmedPageChoice {
   pageNumber: number;
   category: ConfirmedCategory;
+  label?: string;
 }
 
 const READ_AS: { value: ReadAs; label: string }[] = [
@@ -66,6 +67,18 @@ export function PageReview({
         (suggestions ?? []).map((suggestion) => [suggestion.page, suggestion]),
       ),
     [suggestions],
+  );
+  // Falls back to the label a previous confirm already persisted, so a
+  // caption survives past the original session even after `suggestions`
+  // (this job's ephemeral router hints) is gone.
+  const confirmedCaptionByPage = React.useMemo(
+    () =>
+      new Map(
+        (confirmedChoices ?? [])
+          .filter((choice) => choice.label !== undefined)
+          .map((choice) => [choice.pageNumber, choice.label as string]),
+      ),
+    [confirmedChoices],
   );
   const [selected, setSelected] = React.useState<ReadonlySet<number>>(
     () =>
@@ -135,9 +148,13 @@ export function PageReview({
   const pageChoices = () =>
     Array.from({ length: pageCount }, (_, index) => {
       const pageNumber = index + 1;
+      const caption =
+        byPage.get(pageNumber)?.caption ??
+        confirmedCaptionByPage.get(pageNumber);
       return {
         pageNumber,
         category: selected.has(pageNumber) ? readAs.get(pageNumber) : "ignore",
+        ...(caption ? { caption } : {}),
       };
     });
 
@@ -412,6 +429,7 @@ export function PageReview({
           <PageMeta
             page={page}
             suggestion={byPage.get(page)}
+            confirmedCaption={confirmedCaptionByPage.get(page)}
             included={selected.has(page)}
             value={readAs.get(page)}
             locked={!editable}
@@ -434,6 +452,7 @@ export function PageReview({
               <PageMeta
                 page={page}
                 suggestion={byPage.get(page)}
+                confirmedCaption={confirmedCaptionByPage.get(page)}
                 included={selected.has(page)}
                 value={readAs.get(page)}
                 submissionId={submissionId}
@@ -451,6 +470,7 @@ export function PageReview({
 function PageMeta({
   page,
   suggestion,
+  confirmedCaption,
   included,
   value,
   locked = false,
@@ -460,6 +480,8 @@ function PageMeta({
 }: {
   page: number;
   suggestion: PageSuggestion | undefined;
+  /** A caption a previous confirm already persisted, used once `suggestion` is gone. */
+  confirmedCaption?: string;
   included: boolean;
   value: ReadAs | undefined;
   locked?: boolean;
@@ -467,6 +489,7 @@ function PageMeta({
   onChange: (value: ReadAs) => void;
   inline?: boolean;
 }) {
+  const caption = suggestion?.caption ?? confirmedCaption;
   const unclassified = suggestion !== undefined && suggestion.confidence === 0;
   const unsure =
     suggestion !== undefined &&
@@ -498,8 +521,10 @@ function PageMeta({
           ))}
         </select>
       </div>
-      {suggestion?.caption ? (
-        <p className="text-muted-foreground text-xs">{suggestion.caption}</p>
+      {caption ? (
+        <p data-slot="page-caption" className="text-muted-foreground text-xs">
+          {caption}
+        </p>
       ) : null}
       {unclassified ? (
         <p className="text-primary text-xs">Not classified — please check</p>
@@ -525,6 +550,7 @@ function PageMeta({
           page={page}
           suggestion={suggestion}
           suggestedType={value}
+          defaultCaption={caption}
         />
       ) : null}
     </div>

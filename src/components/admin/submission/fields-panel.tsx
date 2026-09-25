@@ -9,11 +9,33 @@ import {
 import type { ReraComparisonItem } from "@/lib/rera/mapping";
 import type { SubmissionDetail } from "@/lib/submissions/queue";
 import { cn } from "@/lib/utils";
-import { isEditOnlyField } from "@/lib/submissions/edit-only-fields";
+import {
+  ROUTER_EVIDENCE_PREFIX,
+  isRouterEvidence,
+} from "@/lib/ocr/single-facility";
+import { mapEmbedUrl } from "@/lib/properties/map-url";
+import {
+  isManagedElsewhere,
+  MAP_URL_FIELD_KEY,
+} from "@/lib/submissions/edit-only-fields";
 import { ConfirmAction } from "./confirm-action";
 import { InlineField } from "./inline-field";
+import { ExpandableImage } from "./expandable-image";
 import { FieldValue } from "./field-value";
 import { displayReraValue } from "./rera-panel";
+
+/** The map link a submission would publish: its own candidate unless rejected,
+ * else what is live. */
+const mapUrlOf = (submission: SubmissionDetail): string | null => {
+  const candidate = submission.fields.find(
+    (field) =>
+      field.fieldKey === MAP_URL_FIELD_KEY && field.reviewStatus !== "rejected",
+  );
+  const value = candidate
+    ? candidate.value
+    : submission.live[MAP_URL_FIELD_KEY];
+  return typeof value === "string" && value.trim() !== "" ? value : null;
+};
 
 /** What an edit of a live property can and cannot do with a whole-set field. */
 const EDIT_NOTES: Record<string, string> = {
@@ -29,6 +51,41 @@ const REMOVAL_FIELD: Record<string, string> = {
   unit_variants: "unit_variants_removed",
 };
 
+/**
+ * Wraps `InlineField`, keyed by content so a value that arrives from
+ * elsewhere (a RERA fetch, another reviewer) starts the input afresh — except
+ * for the one save this same editor instance just made, which should not
+ * remount a field editor with rich internal state (`UnitVariantsEditor`'s
+ * selected tab) right when the person who saved it would expect to stay
+ * where they were. The `key` bump and the "was this my own save" check both
+ * happen in an effect/event handler, never during render, per the rules of
+ * refs: this is state React is allowed to see change, not a value mutated
+ * mid-render.
+ */
+function StableField(props: React.ComponentProps<typeof InlineField>) {
+  const { initial, onSave } = props;
+  const contentKey = JSON.stringify(initial ?? null);
+  const [key, setKey] = React.useState(contentKey);
+  const selfSavedRef = React.useRef<string | null>(null);
+
+  React.useEffect(() => {
+    if (selfSavedRef.current === contentKey) {
+      selfSavedRef.current = null;
+      return;
+    }
+    setKey(contentKey);
+  }, [contentKey]);
+
+  const handleSave = async (fieldKey: string, value: unknown) => {
+    selfSavedRef.current = JSON.stringify(value);
+    const message = await onSave(fieldKey, value);
+    if (message) selfSavedRef.current = null;
+    return message;
+  };
+
+  return <InlineField {...props} key={key} onSave={handleSave} />;
+}
+
 const STATUS_TONE: Record<string, string> = {
   needs_review: "bg-accent text-accent-foreground",
   auto_accepted: "bg-accent text-accent-foreground",
@@ -43,6 +100,93 @@ const STATUS_TONE: Record<string, string> = {
  * The prompt to confirm every value still waiting for review, once they have been
  * checked against the brochure. Shown above the fields (or above their tabs).
  */
+/**
+ * An amenity the page router named from a single-facility page, which no extraction
+ * read. Shown with the page's own image so confirming it is a check against the
+ * source, not against text (`DECISIONS.md` 2026-09-24): a reviewer looking at the
+ * photograph notices a mislabel, or a second amenity in the fine print.
+ */
+function RouterSuggestion({
+  submissionId,
+  pageNumber,
+  snippet,
+}: {
+  submissionId: string;
+  pageNumber: number;
+  snippet: string;
+}) {
+  const src = `/api/v1/admin/submissions/${submissionId}/brochure-page/${pageNumber}`;
+  return (
+    <div
+      data-slot="router-suggestion"
+      className="border-border bg-muted mt-2 flex flex-col gap-2 rounded-md border p-3 sm:flex-row"
+    >
+      <div className="w-full shrink-0 sm:w-40">
+        <ExpandableImage
+          src={src}
+          alt={`Brochure page ${pageNumber}`}
+          title={`Brochure page ${pageNumber}`}
+          className="border-border w-full rounded-md border"
+        />
+      </div>
+      <p className="text-muted-foreground text-xs">
+        {snippet.replace(ROUTER_EVIDENCE_PREFIX, "Router-detected: ")} No
+        extraction read this page, so check the picture before confirming.
+      </p>
+    </div>
+  );
+}
+
+/**
+ * The map a link draws, beside the link, so an admin or the developer confirms a
+ * place by looking at it and not by reading a URL. RERA proposes the centre of the
+ * project's boundary (or a search from its name) and the proposal waits for review
+ * until someone has looked (`DECISIONS.md` 2026-09-24).
+ */
+function MapPreview({
+  url,
+  waiting,
+}: {
+  url: string | null;
+  waiting: boolean;
+}) {
+  const embed = mapEmbedUrl(url);
+  if (url === null) {
+    return (
+      <p
+        data-slot="map-preview-empty"
+        className="text-muted-foreground mt-3 text-sm"
+      >
+        No map link yet. Paste a Google Maps link above and the map it draws
+        appears here.
+      </p>
+    );
+  }
+  return (
+    <div data-slot="map-preview" className="mt-4 flex flex-col gap-2">
+      <p className="text-muted-foreground max-w-prose text-sm">
+        {waiting
+          ? "RERA proposed this place. Look at the map: is it the project? Then confirm the link above, or paste a better one."
+          : "The map this link draws, as buyers will see it."}
+      </p>
+      {embed ? (
+        <iframe
+          src={embed}
+          title="Map preview of the link above"
+          loading="lazy"
+          referrerPolicy="no-referrer-when-downgrade"
+          className="border-border aspect-[16/9] w-full rounded-lg border"
+        />
+      ) : (
+        <p className="text-muted-foreground text-sm">
+          This link opens in Google Maps but cannot be drawn here, so check it
+          by opening it.
+        </p>
+      )}
+    </div>
+  );
+}
+
 export function ConfirmAllBar({
   waiting,
   pending,
@@ -117,7 +261,7 @@ export function FieldsPanel({
     .map(({ group, rows }) => ({
       group,
       // Removal lists and listing status are shown as notes and buttons, not rows.
-      rows: rows.filter(({ field }) => !isEditOnlyField(field.fieldKey)),
+      rows: rows.filter(({ field }) => !isManagedElsewhere(field.fieldKey)),
     }))
     .filter(
       ({ group, rows }) =>
@@ -280,12 +424,9 @@ export function FieldsPanel({
                     </div>
                   </div>
 
-                  <div className="mt-3 min-w-0">
+                  <div className="mt-3 min-w-0 [overflow-wrap:anywhere]">
                     {editable ? (
-                      <InlineField
-                        // A value that arrives from elsewhere (a RERA fetch, a
-                        // review) starts the input afresh.
-                        key={JSON.stringify(candidate?.value ?? live ?? null)}
+                      <StableField
                         field={field}
                         initial={candidate?.value ?? live}
                         lookups={submission.lookups}
@@ -316,7 +457,7 @@ export function FieldsPanel({
                     field.fieldKey !== "property.legal_entity_id" ? (
                       <p
                         data-slot="live-value"
-                        className="text-muted-foreground mt-2 text-xs"
+                        className="text-muted-foreground mt-2 text-xs [overflow-wrap:anywhere]"
                       >
                         Currently published:{" "}
                         {displayReraValue(field.fieldKey, live)}
@@ -358,15 +499,24 @@ export function FieldsPanel({
                         confidence
                       </p>
                     ) : null}
-                    {candidate?.evidence.map((e) => (
-                      <p
-                        key={`${e.sourcePage}-${e.sourceSnippet}`}
-                        className="text-muted-foreground mt-1 text-xs"
-                      >
-                        Brochure page {e.sourcePage}
-                        {e.sourceSnippet ? ` — “${e.sourceSnippet}”` : ""}
-                      </p>
-                    ))}
+                    {candidate?.evidence.map((e) =>
+                      isRouterEvidence(e.sourceSnippet) ? (
+                        <RouterSuggestion
+                          key={`${e.sourcePage}-${e.sourceSnippet}`}
+                          submissionId={submission.id}
+                          pageNumber={e.sourcePage}
+                          snippet={e.sourceSnippet ?? ""}
+                        />
+                      ) : (
+                        <p
+                          key={`${e.sourcePage}-${e.sourceSnippet}`}
+                          className="text-muted-foreground mt-1 text-xs"
+                        >
+                          Brochure page {e.sourcePage}
+                          {e.sourceSnippet ? ` — “${e.sourceSnippet}”` : ""}
+                        </p>
+                      ),
+                    )}
                     {editable &&
                     submission.propertyId &&
                     EDIT_NOTES[field.fieldKey] ? (
@@ -382,6 +532,19 @@ export function FieldsPanel({
               );
             })}
           </ul>
+          {group.key === "location" ? (
+            <MapPreview
+              url={mapUrlOf(submission)}
+              waiting={
+                reviewable &&
+                submission.fields.some(
+                  (field) =>
+                    field.fieldKey === MAP_URL_FIELD_KEY &&
+                    field.reviewStatus === "needs_review",
+                )
+              }
+            />
+          ) : null}
         </section>
       ))}
     </div>

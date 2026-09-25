@@ -9,6 +9,8 @@ export interface ConfirmedChoice {
     | "specifications"
     | "floor_plan"
     | "ignore";
+  /** The caption carried into this page's `OcrRoutedPage.label` at confirm time, if any. */
+  label?: string;
 }
 
 /**
@@ -35,6 +37,16 @@ export const readConfirmedChoices = (
     );
     const claimed = new Set<number>();
     const choices: ConfirmedChoice[] = [];
+    // A page offered as an amenity suggestion sits in the ignored scope so extraction
+    // does not read it, but it was chosen as an amenities page with its caption.
+    for (const page of parsed.singleFacilities ?? []) {
+      claimed.add(page.pageNumber);
+      choices.push({
+        pageNumber: page.pageNumber,
+        category: "amenities",
+        label: page.caption,
+      });
+    }
     for (const scope of order) {
       const category: ConfirmedChoice["category"] =
         scope.kind === "property_details"
@@ -45,7 +57,11 @@ export const readConfirmedChoices = (
       for (const page of scope.pages) {
         if (claimed.has(page.pageNumber)) continue;
         claimed.add(page.pageNumber);
-        choices.push({ pageNumber: page.pageNumber, category });
+        choices.push({
+          pageNumber: page.pageNumber,
+          category,
+          ...(page.label === undefined ? {} : { label: page.label }),
+        });
       }
     }
     return choices.sort((a, b) => a.pageNumber - b.pageNumber);

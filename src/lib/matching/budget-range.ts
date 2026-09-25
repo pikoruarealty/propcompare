@@ -19,6 +19,13 @@ import { unitPriceHistory } from "@/db/schema/private";
  * ±20% tolerance at their edges (2026-09-01 DECISIONS.md entry), so this
  * queries `private.unit_price_history` directly instead.
  *
+ * A property with no current price on any of its unit types has no unit-level
+ * answer, so it falls back to the price range its regulator states for the whole
+ * project (`private.rera_price_ranges`, `DECISIONS.md` 2026-09-24): every live unit
+ * type of it matches when that range overlaps the buyer's band. As soon as any unit
+ * type of a property has an admin-entered price the range no longer applies to it,
+ * and an unpriced unit type of such a property does not match at all.
+ *
  * The result carries identifiers only. Nothing here may return a price, a
  * price-per-square-foot, or a derived bound — there is no field to leak
  * because none is selected.
@@ -134,5 +141,40 @@ export const matchPropertiesByBudgetRange = async (
       ),
     );
 
+  // The regulator's project range, for each unit type nobody has typed a price for.
+  // A stated max bounds the band from above; "no upper limit" leaves it open.
+  const upperOverlap =
+    "maxInr" in params
+      ? sql`and r.min_inr <= (${params.maxInr}::numeric * 1.20)`
+      : sql``;
+  const fallback = await db.execute<{
+    propertyId: string;
+    unitVariantId: string;
+  }>(sql`
+    select distinct p.id as "propertyId", uv.id as "unitVariantId"
+    from private.rera_price_ranges r
+    join public.properties p
+      on upper(regexp_replace(trim(p.rera_registration_number), '[[:space:]]+', ' ', 'g'))
+        = r.registration_number
+    join public.unit_variants uv
+      on uv.property_id = p.id and uv.removed_at is null
+    where r.max_inr >= (${params.minInr}::numeric * 0.80)
+      ${upperOverlap}
+      -- Per unit type (owner direction, 2026-09-25): a typed price always wins, and
+      -- a unit type nobody has priced falls back to the regulator's project range.
+      and not exists (
+        select 1
+        from private.unit_price_history ph
+        where ph.unit_variant_id = uv.id and ph.effective_to is null
+      )
+  `);
+
+  const seen = new Set(
+    rows.map((row) => `${row.propertyId}:${row.unitVariantId}`),
+  );
+  for (const row of fallback) {
+    const key = `${row.propertyId}:${row.unitVariantId}`;
+    if (!seen.has(key)) rows.push(row);
+  }
   return rows;
 };

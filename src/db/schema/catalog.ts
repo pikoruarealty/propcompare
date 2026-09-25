@@ -118,6 +118,9 @@ export const enquiryStatus = pgEnum("enquiry_status", [
   "new",
   "contacted",
   "closed",
+  // An admin sent it on to the developer (schema v19). Enquiries reach the admin
+  // first; forwarding is the admin's choice, and so is closing it themselves.
+  "forwarded",
 ]);
 
 export const propertyTypes = pgTable(
@@ -302,14 +305,13 @@ export const properties = pgTable(
     ),
     reraRegistrationNumber: text("rera_registration_number"),
     reraRegistered: boolean("rera_registered").default(false).notNull(),
-    reraLastVerifiedAt: timestamp("rera_last_verified_at", {
-      withTimezone: true,
-    }),
     city: text("city").notNull(),
     locality: text("locality").notNull(),
     latitude: numeric("latitude"),
     longitude: numeric("longitude"),
     pincode: text("pincode"),
+    /** The Google Maps link an admin sets for the project (schema v15). */
+    mapUrl: text("map_url"),
     totalTowers: integer("total_towers"),
     totalFloors: integer("total_floors"),
     totalUnits: integer("total_units"),
@@ -318,11 +320,15 @@ export const properties = pgTable(
     possessionDate: date("possession_date"),
     launchDate: date("launch_date"),
     reraProjectLandAreaSqft: numeric("rera_project_land_area_sqft"),
-    reraCarpetAreaRangeMinSqft: numeric("rera_carpet_area_range_min_sqft"),
-    reraCarpetAreaRangeMaxSqft: numeric("rera_carpet_area_range_max_sqft"),
     reraConstructionProgressPercent: numeric(
       "rera_construction_progress_percent",
     ),
+    /** The regulator's latest project facts that no other source states (open and
+     * covered area, units available as on a date, lifts, filing record, the team,
+     * per-carpet-area availability), as one versioned object (schema v17). Money
+     * and contact details never enter it. Written only by the publish transaction
+     * from `property.rera_snapshot`. */
+    reraSnapshot: jsonb("rera_snapshot"),
     description: text("description"),
     /** Buyers see only `listed` properties. `unlisted` is reversible and hidden;
      * `deleted` is a soft delete (also hidden, restorable by an owner). Changed
@@ -411,6 +417,33 @@ export const propertyAmenities = pgTable(
   ],
 );
 
+/**
+ * A unit type's own amenities — distinct from `propertyAmenities`, which
+ * describes the whole property. A penthouse's private pool belongs here, not
+ * on the property (which would wrongly say every unit has one). Schema v11,
+ * `docs/schema/schema.v11.md`; owner-approved 2026-09-22, `DECISIONS.md`.
+ */
+export const unitVariantAmenities = pgTable(
+  "unit_variant_amenities",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    unitVariantId: uuid("unit_variant_id")
+      .notNull()
+      .references(() => unitVariants.id, { onDelete: "cascade" }),
+    amenityCatalogId: uuid("amenity_catalog_id")
+      .notNull()
+      .references(() => amenityCatalog.id),
+    status: catalogItemStatus("status").notNull(),
+    ...timestamps(),
+  },
+  (table) => [
+    uniqueIndex("unit_variant_amenities_variant_catalog_unique").on(
+      table.unitVariantId,
+      table.amenityCatalogId,
+    ),
+  ],
+);
+
 export const propertySpecifications = pgTable(
   "property_specifications",
   {
@@ -460,6 +493,11 @@ export const propertyMedia = pgTable(
       table.propertyId,
       table.displayOrder,
     ),
+    // At most one main photo per property (schema v14). The publisher clears the
+    // previous one in the same transaction it sets the next.
+    uniqueIndex("property_media_one_primary_idx")
+      .on(table.propertyId)
+      .where(sql`${table.isPrimary} and ${table.removedAt} is null`),
   ],
 );
 
@@ -510,6 +548,10 @@ export const propertySubmissions = pgTable(
     submittedAt: timestamp("submitted_at", { withTimezone: true }),
     reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
     publishedAt: timestamp("published_at", { withTimezone: true }),
+    /** Set when an owner clears a published submission out of the admin queue
+     * (schema v13). Only ever set on a published one: anything never published is
+     * deleted outright. The record and its live listing are untouched. */
+    archivedAt: timestamp("archived_at", { withTimezone: true }),
     ...timestamps(),
   },
   (table) => [
@@ -776,7 +818,10 @@ export const buyerIntakeSessions = pgTable(
     desiredBhkTypeId: uuid("desired_bhk_type_id").references(() => bhkTypes.id),
     budgetMinInr: numeric("budget_min_inr"),
     budgetMaxInr: numeric("budget_max_inr"),
-    city: text("city").notNull(),
+    // Nullable (schema v10): the intake city question is optional ("No
+    // preference"), and a buyer can state a range or configuration without
+    // ever answering it. See docs/schema/schema.v10.md.
+    city: text("city"),
     ...timestamps(),
   },
   (table) => [index("buyer_intake_sessions_user_id_idx").on(table.userId)],
@@ -850,6 +895,8 @@ export const enquiries = pgTable(
     }),
     status: enquiryStatus("status").default("new").notNull(),
     message: text("message"),
+    /** When an admin last forwarded it to the developer (schema v19). */
+    forwardedAt: timestamp("forwarded_at", { withTimezone: true }),
     ...timestamps(),
   },
   (table) => [index("enquiries_property_id_idx").on(table.propertyId)],
@@ -914,6 +961,7 @@ export const liveCatalogTables = [
   unitVariants,
   unitAreas,
   propertyAmenities,
+  unitVariantAmenities,
   propertySpecifications,
   propertyMedia,
 ] as const;

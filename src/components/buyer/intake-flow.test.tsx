@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   EMPTY_FILTER_OPTIONS,
   type FilterOptions,
@@ -13,6 +13,20 @@ import {
 } from "@/lib/properties/intake";
 import { propertyListFixture } from "@/lib/properties/fixtures";
 import type { PropertyListResult } from "@/lib/properties/types";
+import { setPendingIntakeClaim } from "@/lib/properties/pending-intake-claim";
+
+const { useSession, push } = vi.hoisted(() => ({
+  useSession: vi.fn(),
+  push: vi.fn(),
+}));
+
+vi.mock("@/lib/auth-client", () => ({
+  authClient: { useSession },
+}));
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push }),
+}));
+
 import { IntakeFlow } from "./intake-flow";
 
 /**
@@ -65,6 +79,11 @@ const briefValue = (label: string): string => {
     .closest('[data-slot="brief-row"]') as HTMLElement;
   return row.querySelector("dd")?.textContent ?? "";
 };
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  useSession.mockReturnValue({ data: null, isPending: false });
+});
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -522,5 +541,133 @@ describe("IntakeFlow — an empty catalog", () => {
     // The flow still runs: an empty catalog is not a broken flow.
     await next(user);
     expect(screen.getByText(/No cities are published yet/)).toBeVisible();
+  });
+});
+
+describe("IntakeFlow — signing in to keep a pre-login search", () => {
+  it("offers no such thing until the buyer has stated anything", async () => {
+    const user = renderFlow();
+    await advanceToSummary(user);
+    expect(
+      screen.queryByRole("button", { name: /Sign in to keep this search/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("offers no such thing to a buyer who is already signed in", async () => {
+    useSession.mockReturnValue({
+      data: { user: { name: "Riya Shah" } },
+      isPending: false,
+    });
+    const user = renderFlow();
+    await user.click(priorityBox(PRIORITY_OPTIONS[0].label));
+    await advanceToSummary(user);
+    expect(
+      screen.queryByRole("button", { name: /Sign in to keep this search/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("sets the handoff cookie with the current answers, then sends the buyer to sign in", async () => {
+    const fetchSpy = vi.fn<
+      (url: string, init: RequestInit) => Promise<Response>
+    >(async () => new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const user = renderFlow();
+    await next(user); // priorities -> configuration
+    await user.click(screen.getByRole("radio", { name: "2 BHK" }));
+    await next(user); // configuration -> city
+    await next(user); // city -> range
+    await next(user); // range -> summary
+
+    await user.click(
+      screen.getByRole("button", { name: /Sign in to keep this search/ }),
+    );
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchSpy.mock.calls[0];
+    expect(url).toBe("/api/v1/buyer/intake-handoff");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({
+      priorities: [],
+      bhk: "2bhk",
+      city: null,
+      statedRange: null,
+    });
+    expect(push).toHaveBeenCalledWith("/login?next=%2Fintake");
+  });
+
+  it("still sends the buyer to sign in even when the cookie could not be set", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => Promise.reject(new Error("network down"))),
+    );
+    const user = renderFlow();
+    await user.click(priorityBox(PRIORITY_OPTIONS[0].label));
+    await advanceToSummary(user);
+
+    await user.click(
+      screen.getByRole("button", { name: /Sign in to keep this search/ }),
+    );
+    expect(push).toHaveBeenCalledWith("/login?next=%2Fintake");
+  });
+});
+
+describe("IntakeFlow — reapplying a claimed pre-login search", () => {
+  it("does nothing when there is no claim to consume", () => {
+    renderFlow();
+    expect(screen.getByText("Step 1 of 4")).toBeVisible();
+    expect(screen.queryByText(/Welcome back/)).not.toBeInTheDocument();
+  });
+
+  it("jumps straight to the brief with the claimed answers, editable, and runs the match", async () => {
+    setPendingIntakeClaim({
+      priorities: ["family_space"],
+      bhk: "2bhk",
+      city: "Ahmedabad",
+      statedRange: { fromLakh: 50, toLakh: 150 },
+    });
+    const fetchSpy = vi.fn<
+      (url: string, init: RequestInit) => Promise<Response>
+    >(async () => Response.json(propertyListFixture));
+    vi.stubGlobal("fetch", fetchSpy);
+
+    render(<IntakeFlow options={options} />);
+
+    expect(await screen.findByText(/Welcome back/)).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Your brief" })).toBeVisible();
+    expect(briefValue("Priorities")).toBe("Room for a family");
+    expect(briefValue("City")).toBe("Ahmedabad");
+
+    // Reapplied, not locked in: the answers are ordinary editable state.
+    expect(
+      await screen.findByRole("heading", { name: "What matches your brief" }),
+    ).toBeVisible();
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(fetchSpy.mock.calls[0][1].body as string)).toEqual({
+      minInr: 5_000_000,
+      maxInr: 15_000_000,
+      city: "Ahmedabad",
+      bhk: "2bhk",
+      page: 1,
+      pageSize: 20,
+    });
+  });
+
+  it("clears the welcome-back note the moment the buyer changes an answer", async () => {
+    setPendingIntakeClaim({
+      priorities: [],
+      bhk: null,
+      city: "Ahmedabad",
+      statedRange: null,
+    });
+    const user = renderFlow();
+    expect(await screen.findByText(/Welcome back/)).toBeVisible();
+
+    // Summary -> range -> city, to reach the question this claim answered.
+    await user.click(screen.getByRole("button", { name: "Back" }));
+    await user.click(screen.getByRole("button", { name: "Back" }));
+    await user.click(screen.getByRole("radio", { name: "Surat" }));
+
+    expect(screen.queryByText(/Welcome back/)).not.toBeInTheDocument();
   });
 });

@@ -3,6 +3,7 @@
 import { Check, Plus } from "lucide-react";
 import { MAX_COMPARED } from "@/lib/compare/model";
 import { useCompareSelection } from "@/lib/compare/selection";
+import { trackEvent } from "@/lib/analytics/track";
 import { cn } from "@/lib/utils";
 
 /**
@@ -22,7 +23,7 @@ export function CompareToggle({
   mediaId: string | null;
   className?: string;
 }) {
-  const { has, add, remove, full } = useCompareSelection();
+  const { has, add, remove, full, items } = useCompareSelection();
   const selected = has(slug);
   const blocked = full && !selected;
 
@@ -42,7 +43,20 @@ export function CompareToggle({
           ? `You can compare up to ${MAX_COMPARED} properties. Remove one first.`
           : undefined
       }
-      onClick={() => (selected ? remove(slug) : add({ slug, name, mediaId }))}
+      onClick={() => {
+        const others = items.map((item) => item.slug).filter((s) => s !== slug);
+        if (selected) {
+          remove(slug);
+          trackEvent("comparison_removed", {
+            slug,
+            slugs: others,
+            detail: { where: "tray" },
+          });
+        } else {
+          add({ slug, name, mediaId });
+          trackEvent("comparison_started", { slug, slugs: [...others, slug] });
+        }
+      }}
       className={cn(
         "border-border inline-flex h-9 items-center gap-1.5 rounded-md border px-3 text-sm font-medium transition-colors",
         "focus-visible:ring-ring focus-visible:ring-2 focus-visible:outline-none",

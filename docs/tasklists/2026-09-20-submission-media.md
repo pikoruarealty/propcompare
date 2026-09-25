@@ -1,6 +1,6 @@
 # Tasklist — submission media approval and publish path
 
-**Status:** in progress
+**Status:** done (reconciled 2026-09-25: every checklist box is ticked).
 **Owner:** Bhavarth
 **Branch:** `task/phase-2a-completion`
 **Parent:** `docs/tasklists/2026-09-18-phase-2a-completion.md`, step 5; `docs/tasklists/2026-09-19-admin-portal.md`, slices 4–5

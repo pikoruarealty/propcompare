@@ -360,10 +360,13 @@ describe("the versioned OCR routing contract", () => {
     expect(variants?.value).toEqual([
       {
         variantName: "2 BHK - Type A",
+        // Read from the words the name prints, not from the drawing.
+        bhkTypeKey: "2bhk",
         areas: [{ basis: "carpet", areaSqft: 875 }],
       },
       {
         variantName: "3 BHK - Type B",
+        bhkTypeKey: "3bhk",
         areas: [{ basis: "carpet", areaSqft: 1240 }],
       },
     ]);
@@ -582,10 +585,13 @@ describe("the OpenRouter OCR provider adapter", () => {
     ).toEqual([
       {
         variantName: "2 BHK - Type A",
+        // Read from the words the name prints, not from the drawing.
+        bhkTypeKey: "2bhk",
         areas: [{ basis: "carpet", areaSqft: 875 }],
       },
       {
         variantName: "3 BHK - Type B",
+        bhkTypeKey: "3bhk",
         areas: [{ basis: "carpet", areaSqft: 1240 }],
       },
     ]);

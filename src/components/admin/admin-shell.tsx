@@ -1,5 +1,6 @@
 import Link from "next/link";
 import {
+  BarChart3,
   ClipboardList,
   LogOut,
   MessageSquare,
@@ -37,6 +38,12 @@ export const ADMIN_NAV = [
     href: "/admin/enquiries",
     label: "Enquiries",
     icon: MessageSquare,
+  },
+  {
+    key: "analytics",
+    href: "/admin/analytics",
+    label: "Analytics",
+    icon: BarChart3,
   },
   {
     key: "usage",

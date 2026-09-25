@@ -164,6 +164,7 @@ describe("dossier fixtures match the dossier contract", () => {
     "totalTowers",
     "totalFloors",
     "totalUnits",
+    "plotAreaSqft",
     "unitVariants",
     "amenities",
     "specifications",
@@ -198,7 +199,7 @@ describe("dossier fixtures match the dossier contract", () => {
     expect(sparseDossierFixture.media).toEqual([]);
     expect(sparseDossierFixture.rera.registered).toBe(false);
     expect(sparseDossierFixture.rera.registrationNumber).toBeNull();
-    expect(sparseDossierFixture.rera.lastVerifiedAt).toBeNull();
+    expect(sparseDossierFixture.rera.lastCheckedAt).toBeNull();
     expect(sparseDossierFixture.location.latitude).toBeNull();
     expect(sparseDossierFixture.possession.status).toBeNull();
     expect(sparseDossierFixture.totalUnits).toBeNull();
@@ -250,7 +251,7 @@ describe("dossier fixtures match the dossier contract", () => {
   });
 
   it("timestamps are ISO-8601 strings, not Date objects", () => {
-    expect(richDossierFixture.rera.lastVerifiedAt).toMatch(
+    expect(richDossierFixture.rera.lastCheckedAt).toMatch(
       /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/,
     );
   });

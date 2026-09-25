@@ -1,3 +1,4 @@
+import { syncReraPriceRange } from "@/lib/pricing/ranges";
 import { and, desc, eq, inArray, isNotNull, lt, ne } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import {
@@ -23,6 +24,7 @@ import {
   loadAmenityLabels,
   loadEntities,
 } from "./submission-fetch";
+import { snapshotFingerprint } from "./snapshot";
 import { RegulatorError, type RegulatorRecord } from "./types";
 
 /**
@@ -94,9 +96,12 @@ export const showsFilingFor = (
 export const isDue = (jobs: PastJob[], now: Date): boolean => {
   const quarter = latestClosedQuarter(now);
   const lastSucceeded = jobs.find((job) => job.status === "succeeded");
-  // Settled: the last good record already shows a filing for the closed quarter.
+  // Settled: the last good record already shows a filing for the closed quarter,
+  // and is one that read everything we now read (a record from before the second
+  // pass has no `details`, so it is checked once more to fill them).
   if (
     lastSucceeded &&
+    lastSucceeded.record?.details !== undefined &&
     showsFilingFor(lastSucceeded.record, quarter.periodEnd)
   ) {
     return false;
@@ -251,9 +256,11 @@ export type RefreshOutcome =
   | { outcome: "edit_open"; jobId: string; submissionId: string }
   | { outcome: "already_declined"; jobId: string };
 
-/** What a proposal would write, in a form two proposals can be compared by. */
+/** What a proposal would write, in a form two proposals can be compared by. Key
+ * order inside a value does not count: Postgres stores jsonb with its own key
+ * order, so an object read back is never spelled as it was written. */
 const fingerprint = (entries: { fieldKey: string; value: unknown }[]): string =>
-  JSON.stringify(
+  snapshotFingerprint(
     [...entries]
       .sort((a, b) => a.fieldKey.localeCompare(b.fieldKey))
       .map((entry) => [entry.fieldKey, entry.value]),
@@ -355,6 +362,12 @@ export const runClaimedRefresh = async (
       })),
     })
     .where(eq(reraFetchJobs.id, claim.jobId));
+  // The project's stated price range goes to the private schema, never into the
+  // record above; best effort, so it cannot fail the check.
+  await syncReraPriceRange({
+    adapter,
+    registrationNumber: claim.registrationNumber,
+  });
 
   const items = writableItems(comparison);
   if (items.length === 0) return { outcome: "unchanged", jobId: claim.jobId };

@@ -1,4 +1,8 @@
-import { and, eq, inArray, isNull, sql } from "drizzle-orm";
+import {
+  applyPricesAfterPublish,
+  type ApplyPricesResult,
+} from "@/lib/pricing/apply";
+import { and, eq, inArray, isNull, notInArray, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   amenityCatalog,
@@ -17,6 +21,7 @@ import {
   propertyTypes,
   specificationCatalog,
   unitAreas,
+  unitVariantAmenities,
   unitVariants,
 } from "@/db/schema/catalog";
 import { legalEntityBelongsToDeveloper } from "@/lib/developers/legal-entities";
@@ -37,6 +42,7 @@ type PropertyInsert = typeof properties.$inferInsert;
 type UnitVariantInsert = typeof unitVariants.$inferInsert;
 type UnitAreaInsert = typeof unitAreas.$inferInsert;
 type PropertyAmenityInsert = typeof propertyAmenities.$inferInsert;
+type UnitVariantAmenityInsert = typeof unitVariantAmenities.$inferInsert;
 type PropertySpecificationInsert = typeof propertySpecifications.$inferInsert;
 type PropertyMediaInsert = typeof propertyMedia.$inferInsert;
 
@@ -63,6 +69,10 @@ export interface PublishSubmissionResult {
   propertyId: string;
   revisionId: string;
   isNewProperty: boolean;
+  /** Set when unit-type prices an admin typed were applied after the commit, or could
+   * not be (`failed`); absent when there were none. Never affects whether the
+   * property published. */
+  prices?: ApplyPricesResult & { failed: boolean };
 }
 
 const SPEC_FIELD_PREFIX = "property.specifications.";
@@ -160,7 +170,7 @@ const assertLegalEntityBelongs = async (
 
 /**
  * The one write path into the live catalog tables (`properties`, `developers`,
- * `unit_variants`, `unit_areas`, `property_amenities`,
+ * `unit_variants`, `unit_areas`, `property_amenities`, `unit_variant_amenities`,
  * `property_specifications`, `property_media`) — see AGENTS.md. It applies exactly one
  * approved submission's reviewed field values and writes a matching
  * `property_revisions` snapshot, all inside one transaction.
@@ -177,7 +187,19 @@ export const publishSubmission = async (
   params: PublishSubmissionParams,
 ): Promise<PublishSubmissionResult> => {
   try {
-    return await runPublish(params);
+    const published = await runPublish(params);
+    // The publish transaction runs on the app role, which cannot touch the private
+    // schema, so admin-typed prices are applied in a second step on the service
+    // role once it has committed (`DECISIONS.md` 2026-09-24, "price data").
+    const prices = await applyPricesAfterPublish({
+      submissionId: params.submissionId,
+      propertyId: published.propertyId,
+    });
+    const anything =
+      prices.failed ||
+      prices.applied.length + prices.unchanged.length + prices.unknown.length >
+        0;
+    return anything ? { ...published, prices } : published;
   } catch (error) {
     if (error instanceof DryRunRollback) {
       return {
@@ -223,14 +245,6 @@ const runPublish = async (
       .where(eq(propertySubmissionMedia.submissionId, submission.id))
       .for("update");
 
-    const pendingReview = submissionFields.find(
-      (field) => field.reviewStatus === "needs_review",
-    );
-    if (pendingReview) {
-      throw new SubmissionPublishError(
-        `field ${pendingReview.fieldKey} is still needs_review and blocks publication`,
-      );
-    }
     const pendingMediaReview = submissionMedia.find(
       (media) => media.reviewStatus === "needs_review",
     );
@@ -248,6 +262,19 @@ const runPublish = async (
       .from(propertySchemaFields)
       .where(eq(propertySchemaFields.isActive, true));
     const activeFieldKeys = new Set(activeFields.map((f) => f.fieldKey));
+
+    // A value on a retired field is ignored below, so it is not asked of a
+    // reviewer either: a candidate nothing will publish must not block the rest.
+    const pendingReview = submissionFields.find(
+      (field) =>
+        field.reviewStatus === "needs_review" &&
+        activeFieldKeys.has(field.fieldKey),
+    );
+    if (pendingReview) {
+      throw new SubmissionPublishError(
+        `field ${pendingReview.fieldKey} is still needs_review and blocks publication`,
+      );
+    }
 
     const rawPayload: Record<string, unknown> = {};
     for (const field of submissionFields) {
@@ -286,6 +313,7 @@ const runPublish = async (
     const possessionDate = getStringField("property.possession_date");
     const launchDate = getStringField("property.launch_date");
     const pincode = getStringField("property.pincode");
+    const mapUrl = getStringField("property.google_maps_url");
     const totalTowers = getNumberField("property.total_towers");
     const totalFloors = getNumberField("property.total_floors");
     const totalUnits = getNumberField("property.total_units");
@@ -293,6 +321,9 @@ const runPublish = async (
     const reraProjectLandArea = getNumberField(
       "property.rera_project_land_area_sqft",
     );
+    const latitude = getNumberField("property.latitude");
+    const longitude = getNumberField("property.longitude");
+    const reraSnapshot = payload["property.rera_snapshot"];
     const developerProfileNarrative = getStringField(
       "developer.profile_narrative",
     );
@@ -373,6 +404,7 @@ const runPublish = async (
           possessionDate,
           launchDate,
           pincode,
+          mapUrl,
           totalTowers,
           totalFloors,
           totalUnits,
@@ -385,6 +417,9 @@ const runPublish = async (
             reraProjectLandArea === undefined
               ? undefined
               : String(reraProjectLandArea),
+          latitude: latitude === undefined ? undefined : String(latitude),
+          longitude: longitude === undefined ? undefined : String(longitude),
+          reraSnapshot: reraSnapshot === undefined ? undefined : reraSnapshot,
         })
         .returning({ id: properties.id });
       propertyId = inserted.id;
@@ -409,6 +444,7 @@ const runPublish = async (
       }
       if (launchDate !== undefined) updateColumns.launchDate = launchDate;
       if (pincode !== undefined) updateColumns.pincode = pincode;
+      if (mapUrl !== undefined) updateColumns.mapUrl = mapUrl;
       if (totalTowers !== undefined) updateColumns.totalTowers = totalTowers;
       if (totalFloors !== undefined) updateColumns.totalFloors = totalFloors;
       if (totalUnits !== undefined) updateColumns.totalUnits = totalUnits;
@@ -416,6 +452,9 @@ const runPublish = async (
       if (reraProjectLandArea !== undefined) {
         updateColumns.reraProjectLandAreaSqft = String(reraProjectLandArea);
       }
+      if (latitude !== undefined) updateColumns.latitude = String(latitude);
+      if (longitude !== undefined) updateColumns.longitude = String(longitude);
+      if (reraSnapshot !== undefined) updateColumns.reraSnapshot = reraSnapshot;
       if (listingStatusValue !== undefined) {
         updateColumns.listingStatus = listingStatusValue;
         updateColumns.listingStatusChangedAt = new Date();
@@ -564,6 +603,48 @@ const runPublish = async (
               });
           }
         }
+
+        // A unit type's own amenities (schema v11). The list a submission carries is
+        // the whole set for this unit type: what it names is written, anything else
+        // goes back to not stated. A unit type that carries no list is left alone.
+        if (variant.amenities) {
+          const idByKey = new Map(
+            lookups.amenityCatalogRows.map((row) => [row.key, row.id]),
+          );
+          const rows: UnitVariantAmenityInsert[] = variant.amenities.map(
+            (entry) => ({
+              unitVariantId: variantRow.id,
+              amenityCatalogId: requireLookup(
+                idByKey.get(entry.key),
+                `unknown amenity key: ${entry.key}`,
+              ),
+              status: entry.status,
+            }),
+          );
+          const keptIds = rows.map((row) => row.amenityCatalogId);
+          await tx
+            .delete(unitVariantAmenities)
+            .where(
+              and(
+                eq(unitVariantAmenities.unitVariantId, variantRow.id),
+                keptIds.length > 0
+                  ? notInArray(unitVariantAmenities.amenityCatalogId, keptIds)
+                  : undefined,
+              ),
+            );
+          if (rows.length > 0) {
+            await tx
+              .insert(unitVariantAmenities)
+              .values(rows)
+              .onConflictDoUpdate({
+                target: [
+                  unitVariantAmenities.unitVariantId,
+                  unitVariantAmenities.amenityCatalogId,
+                ],
+                set: { status: sql`excluded.status` },
+              });
+          }
+        }
       }
     }
 
@@ -620,6 +701,72 @@ const runPublish = async (
       }
     }
 
+    // The project's main photo (schema v14): the one picture that stands for it on
+    // cards, comparison columns and the dossier. Exactly one per property, and it
+    // must be a photo that is live after this publish: either a new picture this
+    // submission approves, or a live picture this edit does not remove. Choosing
+    // one replaces the previous main photo in the same transaction.
+    const mainPhotoId = getStringField("property.main_photo");
+    let mainCandidateId: string | undefined;
+    if (mainPhotoId !== undefined) {
+      const candidate = submissionMedia.find(
+        (media) => media.id === mainPhotoId,
+      );
+      let mainLiveId: string | undefined;
+      if (candidate) {
+        if (
+          candidate.mediaType !== "photo" ||
+          candidate.reviewStatus !== "confirmed" ||
+          !candidate.isPublic
+        ) {
+          throw new SubmissionPublishError(
+            "the main photo must be an approved, public photo; choose another or approve this one",
+          );
+        }
+        mainCandidateId = candidate.id;
+      } else {
+        const [live] = await tx
+          .select({
+            id: propertyMedia.id,
+            mediaType: propertyMedia.mediaType,
+            removedAt: propertyMedia.removedAt,
+          })
+          .from(propertyMedia)
+          .where(
+            and(
+              eq(propertyMedia.id, mainPhotoId),
+              eq(propertyMedia.propertyId, propertyId),
+            ),
+          );
+        if (
+          !live ||
+          live.removedAt !== null ||
+          live.mediaType !== "photo" ||
+          removedMediaIds.includes(mainPhotoId)
+        ) {
+          throw new SubmissionPublishError(
+            "the main photo is not a live photo of this property",
+          );
+        }
+        mainLiveId = live.id;
+      }
+      await tx
+        .update(propertyMedia)
+        .set({ isPrimary: false })
+        .where(
+          and(
+            eq(propertyMedia.propertyId, propertyId),
+            eq(propertyMedia.isPrimary, true),
+          ),
+        );
+      if (mainLiveId !== undefined) {
+        await tx
+          .update(propertyMedia)
+          .set({ isPrimary: true })
+          .where(eq(propertyMedia.id, mainLiveId));
+      }
+    }
+
     const publicConfirmedMedia = submissionMedia.filter(
       (media) => media.reviewStatus === "confirmed" && media.isPublic,
     );
@@ -663,6 +810,7 @@ const runPublish = async (
             attribution: media.attribution,
             sourceKind: media.sourceKind,
             displayOrder: media.displayOrder,
+            isPrimary: media.id === mainCandidateId,
           };
         },
       );

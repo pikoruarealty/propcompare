@@ -2,6 +2,7 @@ import {
   POSSESSION_STATUS_LABEL,
   formatPossessionDate,
 } from "@/lib/properties/browse";
+import { identityPicture } from "@/lib/properties/identity-picture";
 import {
   AREA_BASIS_LABEL,
   AREA_BASIS_ORDER,
@@ -12,6 +13,7 @@ import {
   formatSqft,
   readRoomDimensions,
   shortUnitTypeName,
+  splitListValue,
 } from "@/lib/properties/dossier";
 import type {
   CatalogItemStatus,
@@ -20,6 +22,19 @@ import type {
   PropertyDossier,
 } from "@/lib/properties/types";
 import type { ReraSourcedFact } from "@/lib/properties/rera-source";
+import {
+  landAreaOf,
+  landAreaText,
+  unitsPerAcre,
+} from "@/lib/properties/density";
+import {
+  typicalUnitsPerFloor,
+  unitsPerFloorOf,
+  unitsPerFloorText,
+} from "@/lib/properties/floor-density";
+import { blockNamedIn, groupSqft } from "@/lib/rera/carpet-area";
+import type { ReraSnapshot } from "@/lib/rera/snapshot";
+import { areaToSqft } from "@/lib/units/measurements";
 
 /**
  * The comparison of two or three published properties, as data (specification:
@@ -72,15 +87,21 @@ export interface CompareRow {
   label: string;
   cells: CompareCell[];
   status: RowStatus;
+  /** The catalog category this row belongs to (amenities and specifications), so the
+   * screen can head each run of rows. A label of the vocabulary, not a fact about a
+   * property, so a locked model keeps it. */
+  category?: string;
 }
 
 export type GroupKey =
   | "timeline"
   | "unit_type"
   | "rooms"
+  | "unit_amenities"
   | "project"
   | "amenities"
   | "specifications"
+  | "location"
   | "trust";
 
 export interface CompareGroup {
@@ -97,6 +118,12 @@ export interface VariantOption {
 }
 
 export interface FloorPlanRef {
+  id: string;
+  caption: string | null;
+  attribution: string | null;
+}
+
+export interface PhotoRef {
   id: string;
   caption: string | null;
   attribution: string | null;
@@ -120,6 +147,8 @@ export interface CompareColumn {
   variants: VariantOption[];
   /** The floor plans published for the unit type this column compares. */
   floorPlans: FloorPlanRef[];
+  /** Every published photo of the project, in listing order, for the photo strip. */
+  photos: PhotoRef[];
   /** How the unit type was chosen. */
   variantChosenBy: "requested" | "bhk" | "area" | "first" | "none";
 }
@@ -332,7 +361,7 @@ const finishRow = (
   key: string,
   label: string,
   cells: CompareCell[],
-  options: { numeric?: boolean } = {},
+  options: { numeric?: boolean; category?: string } = {},
 ): CompareRow => {
   const stated = cells.filter((cell) => cell.state === "value");
   let status: RowStatus;
@@ -365,7 +394,13 @@ const finishRow = (
         : cell,
     );
   }
-  return { key, label, cells: sized, status };
+  return {
+    key,
+    label,
+    cells: sized,
+    status,
+    ...(options.category === undefined ? {} : { category: options.category }),
+  };
 };
 
 const AMENITY_STATE = (status: CatalogItemStatus): CompareCell =>
@@ -418,6 +453,150 @@ const monthsBetween = (earlier: string, later: string): number => {
 const progressText = (value: string | null): string | null => {
   const number = value === null ? NaN : Number(value);
   return Number.isFinite(number) ? `${Math.round(number * 10) / 10}%` : null;
+};
+
+/* ------------------------------------------------------------------ */
+/* Measures worked out from stated inputs                              */
+/* ------------------------------------------------------------------ */
+
+/*
+ * Each of these is arithmetic over facts already held, never a guess: if any input
+ * is missing the cell says "not stated", not a smaller or wrong number, and a
+ * result that could not be real (an efficiency over 100%) is not shown either. No
+ * price, and nothing here ranks a property.
+ */
+
+const positiveNumber = (value: string | number | null): number | null => {
+  const number = value === null ? NaN : Number(value);
+  return Number.isFinite(number) && number > 0 ? number : null;
+};
+
+const oneDecimal = (value: number): string =>
+  String(Math.round(value * 10) / 10);
+
+/** Carpet as a share of super built-up area, only when both are stated and the
+ * result is possible (carpet is inside super built-up, never larger). */
+const efficiencyPercent = (
+  variant: DossierUnitVariant | null,
+): number | null => {
+  if (variant === null) return null;
+  const areas = areasByBasis(variant.areas);
+  const carpet = positiveNumber(areas.carpet);
+  const superBuiltUp = positiveNumber(areas.super_built_up);
+  if (carpet === null || superBuiltUp === null || carpet > superBuiltUp) {
+    return null;
+  }
+  return (carpet / superBuiltUp) * 100;
+};
+
+/** Every balcony and terrace room's own area, summed (a room's printed area, or its
+ * two sides multiplied; `formatRoomDimension` labels the difference), as a share of
+ * the unit type's stated carpet area. Owner decision 2026-09-24: carpet, not super
+ * built-up. Not stated when there is no balcony room or no carpet area. */
+const balconyPercent = (variant: DossierUnitVariant | null): number | null => {
+  if (variant === null) return null;
+  const carpet = positiveNumber(areasByBasis(variant.areas).carpet);
+  const rooms = readRoomDimensions(variant.dimensions);
+  if (carpet === null || rooms === null) return null;
+  const balconies = rooms.filter((room) => roomKind(room.name) === "balcony");
+  if (balconies.length === 0) return null;
+  const area = balconies.reduce(
+    (total, room) => total + (room.areaSqft ?? room.lengthFt * room.widthFt),
+    0,
+  );
+  return area > 0 ? (area / carpet) * 100 : null;
+};
+
+/* ------------------------------------------------------------------ */
+/* What the regulator states (schema v17 snapshot)                     */
+/* ------------------------------------------------------------------ */
+
+/*
+ * Every figure here is the regulator's, with the quarter or date it is as on, so
+ * each cell is credited to it. A figure the record does not state is "not stated",
+ * never zero, and the arithmetic (share of the site, units per lift) is done only
+ * when every input is stated.
+ */
+
+const sqmText = (sqm: number): string =>
+  `${formatSqft(String(Math.round(areaToSqft(sqm, "sqm"))))} sq ft`;
+
+/** Open area as a share of the whole site: open plus covered, else the layout land. */
+const openAreaShare = (facts: ReraSnapshot): number | null => {
+  if (facts.openAreaSqm === null) return null;
+  const whole =
+    facts.coveredAreaSqm !== null
+      ? facts.openAreaSqm + facts.coveredAreaSqm
+      : facts.layoutLandAreaSqm;
+  return whole !== null && whole > 0 ? (facts.openAreaSqm / whole) * 100 : null;
+};
+
+/** Lifts across the blocks, only when every block states its own. */
+const liftsTotal = (facts: ReraSnapshot): number | null => {
+  const blocks = facts.filing.blocks;
+  if (blocks.length === 0 || blocks.some((block) => block.lifts === null)) {
+    return null;
+  }
+  return blocks.reduce((sum, block) => sum + (block.lifts as number), 0);
+};
+
+/** The most floors any block states: a block can hold several towers, so this is
+ * the regulator's count and is labelled as such. */
+const floorsMostStated = (facts: ReraSnapshot): number | null => {
+  const floors = facts.filing.blocks
+    .map((block) => block.floors)
+    .filter((value): value is number => value !== null);
+  return floors.length === 0 ? null : Math.max(...floors);
+};
+
+/** The regulator's carpet-area groups that belong to a unit type: within a square
+ * foot of its stated carpet area, and in its block when its name names one. */
+const carpetGroupsFor = (
+  facts: ReraSnapshot,
+  variant: DossierUnitVariant | null,
+) => {
+  if (variant === null) return [];
+  const carpet = positiveNumber(areasByBasis(variant.areas).carpet);
+  if (carpet === null) return [];
+  const block = blockNamedIn(variant.variantName);
+  return facts.carpetGroups.filter(
+    (group) =>
+      (block === null || group.block === block) &&
+      Math.abs(groupSqft(group) - carpet) <= 1,
+  );
+};
+
+const partyText = (
+  parties: { name: string; projectsCompleted: number | null }[],
+): string | null =>
+  parties.length === 0
+    ? null
+    : parties
+        .map((party) =>
+          party.projectsCompleted === null
+            ? party.name
+            : `${party.name} (${party.projectsCompleted} projects)`,
+        )
+        .join("\n");
+
+/** Progress with the period it is to, when it is the regulator's own filing figure
+ * (a hand-entered figure that differs is not credited to a quarter). */
+const progressLabel = (dossier: PropertyDossier): string | null => {
+  const base = progressText(dossier.rera.constructionProgressPercent);
+  const filing = dossier.rera.facts?.filing;
+  if (
+    base === null ||
+    !filing ||
+    filing.source !== "quarterly_filing" ||
+    !filing.periodEndsOn ||
+    filing.progressPercent === null ||
+    Math.abs(
+      Number(dossier.rera.constructionProgressPercent) - filing.progressPercent,
+    ) > 0.05
+  ) {
+    return base;
+  }
+  return `${base} (to ${shortDate(filing.periodEndsOn)})`;
 };
 
 /* ------------------------------------------------------------------ */
@@ -533,12 +712,12 @@ export const buildComparison = (
     reraRegistered: displayReraRegistered(dossier),
     registrationNumber: dossier.rera.registrationNumber,
     regulatorCheckedOn: shortDate(dossier.rera.lastCheckedAt),
-    primaryMediaId:
-      dossier.media.find((media) => media.isPrimary)?.id ??
-      dossier.media[0]?.id ??
-      null,
+    primaryMediaId: identityPicture(dossier.media)?.id ?? null,
     variant: chosen[i].variant ? optionOf(chosen[i].variant) : null,
     floorPlans: floorPlansFor(dossier, chosen[i].variant?.id ?? null),
+    photos: dossier.media
+      .filter((media) => media.mediaType === "photo")
+      .map(({ id, caption, attribution }) => ({ id, caption, attribution })),
     variants: dossier.unitVariants.map(optionOf),
     variantChosenBy: chosen[i].by,
   }));
@@ -550,7 +729,7 @@ export const buildComparison = (
       dossier: PropertyDossier,
       variant: DossierUnitVariant | null,
     ) => CompareCell,
-    options?: { numeric?: boolean },
+    options?: { numeric?: boolean; category?: string },
   ) =>
     finishRow(
       key,
@@ -583,7 +762,7 @@ export const buildComparison = (
             d.rera.constructionProgressPercent === null
               ? null
               : Number(d.rera.constructionProgressPercent),
-            progressText(d.rera.constructionProgressPercent),
+            progressLabel(d),
             sourced(d, "construction_progress"),
           ),
         { numeric: true },
@@ -626,6 +805,84 @@ export const buildComparison = (
       ),
     ),
   );
+  unitRows.push(
+    row("units_per_floor", "This unit type's units per floor", (_d, v) =>
+      numberCell(
+        v?.unitsPerFloor ?? null,
+        v?.unitsPerFloor == null ? null : String(v.unitsPerFloor),
+      ),
+    ),
+    row(
+      "efficiency",
+      "Efficiency (carpet share of super built-up)",
+      (_d, v) => {
+        const percent = efficiencyPercent(v);
+        return numberCell(
+          percent === null ? null : Math.round(percent * 10) / 10,
+          percent === null ? null : `${oneDecimal(percent)}%`,
+        );
+      },
+      { numeric: true },
+    ),
+    row(
+      "balcony_ratio",
+      "Balcony area (share of carpet area)",
+      (_d, v) => {
+        const percent = balconyPercent(v);
+        return numberCell(
+          percent === null ? null : Math.round(percent * 10) / 10,
+          percent === null ? null : `${oneDecimal(percent)}%`,
+        );
+      },
+      { numeric: true },
+    ),
+    row(
+      "units_available_of_type",
+      "Units of this type available",
+      (d, v) => {
+        const facts = d.rera.facts;
+        const matched = facts ? carpetGroupsFor(facts, v) : [];
+        if (
+          matched.length === 0 ||
+          matched.some((group) => group.bookedCount === undefined)
+        ) {
+          return textCell(null);
+        }
+        const flats = matched.reduce((sum, group) => sum + group.flatCount, 0);
+        const booked = matched.reduce(
+          (sum, group) => sum + (group.bookedCount ?? 0),
+          0,
+        );
+        const asOn = shortDate(facts?.inventory?.asOn ?? null);
+        return numberCell(
+          flats - booked,
+          `${flats - booked} of ${flats}${asOn ? `, as on ${asOn}` : ""}`,
+          true,
+        );
+      },
+      { numeric: true },
+    ),
+    row("exclusive_area", "Balcony and open terrace (RERA)", (d, v) => {
+      const facts = d.rera.facts;
+      const matched = facts ? carpetGroupsFor(facts, v) : [];
+      const mins = matched
+        .map((group) => group.exclusiveAreaMinSqm)
+        .filter((value): value is number => value !== undefined);
+      const maxes = matched
+        .map((group) => group.exclusiveAreaMaxSqm)
+        .filter((value): value is number => value !== undefined);
+      if (mins.length === 0 || maxes.length === 0) return textCell(null);
+      const low = Math.min(...mins);
+      const high = Math.max(...maxes);
+      return textCell(
+        Math.round(areaToSqft(low, "sqm")) ===
+          Math.round(areaToSqft(high, "sqm"))
+          ? sqmText(low)
+          : `${formatSqft(String(Math.round(areaToSqft(low, "sqm"))))} to ${sqmText(high)}`,
+        true,
+      );
+    }),
+  );
   groups.push({ key: "unit_type", title: "The unit type", rows: unitRows });
 
   groups.push({
@@ -653,12 +910,94 @@ export const buildComparison = (
     ],
   });
 
+  // What belongs to the compared unit type alone (a private terrace, a plunge
+  // pool): the union of what either side's chosen unit type has a recorded status
+  // for, each read from that side's own unit type, never from the project.
+  const unitAmenityKeys = new Map<
+    string,
+    { label: string; category: string }
+  >();
+  for (const { variant } of chosen) {
+    for (const amenity of variant?.amenities ?? []) {
+      if (amenity.status !== "not_stated") {
+        unitAmenityKeys.set(amenity.key, {
+          label: amenity.label,
+          category: amenity.category,
+        });
+      }
+    }
+  }
+  groups.push({
+    key: "unit_amenities",
+    title: "Private amenities of the unit type",
+    rows: [...unitAmenityKeys.entries()]
+      .sort(
+        (a, b) =>
+          a[1].category.localeCompare(b[1].category) ||
+          a[1].label.localeCompare(b[1].label),
+      )
+      .map(([key, meta]) =>
+        row(
+          `unit_amenity_${key}`,
+          meta.label,
+          (_d, v) => {
+            const found = v?.amenities.find((amenity) => amenity.key === key);
+            return AMENITY_STATE(found?.status ?? "not_stated");
+          },
+          { category: meta.category },
+        ),
+      ),
+  });
+
   groups.push({
     key: "project",
     title: "The project",
     rows: [
       row("property_type", "Type", (d) => textCell(d.propertyType.label)),
       row("developer", "Developer", (d) => textCell(d.developer.name)),
+      row("architect", "Architect", (d) =>
+        textCell(partyText(d.rera.facts?.architects ?? []), true),
+      ),
+      row("engineer", "Structural engineer", (d) =>
+        textCell(partyText(d.rera.facts?.engineers ?? []), true),
+      ),
+      row("contractor", "Contractor", (d) =>
+        textCell(partyText(d.rera.facts?.contractors ?? []), true),
+      ),
+      // The promoter group's own declaration to the regulator.
+      row(
+        "promoter_years",
+        "Promoter group's experience in Gujarat",
+        (d) => {
+          const years = d.rera.facts?.promoter?.yearsInGujarat ?? null;
+          return numberCell(
+            years,
+            years === null
+              ? null
+              : `${years} ${years === 1 ? "year" : "years"}`,
+            true,
+          );
+        },
+        { numeric: true },
+      ),
+      row(
+        "promoter_completed",
+        "Projects completed by the promoter group",
+        (d) => {
+          const count = d.rera.facts?.promoter?.completedProjects ?? null;
+          return numberCell(count, count === null ? null : String(count), true);
+        },
+        { numeric: true },
+      ),
+      row(
+        "promoter_ongoing",
+        "Projects ongoing by the promoter group",
+        (d) => {
+          const count = d.rera.facts?.promoter?.ongoingProjects ?? null;
+          return numberCell(count, count === null ? null : String(count), true);
+        },
+        { numeric: true },
+      ),
       row("locality", "Locality", (d) => textCell(d.location.locality)),
       row("city", "City", (d) => textCell(d.location.city)),
       row("pincode", "Pincode", (d) => textCell(d.location.pincode)),
@@ -680,6 +1019,183 @@ export const buildComparison = (
           d.totalUnits === null ? null : String(d.totalUnits),
           sourced(d, "total_units"),
         ),
+      ),
+      row(
+        "land_area",
+        "Land area",
+        (d) => {
+          const land = landAreaOf(d);
+          return numberCell(
+            land === null ? null : land.sqft,
+            land === null ? null : landAreaText(land),
+          );
+        },
+        { numeric: true },
+      ),
+      row(
+        "units_per_acre",
+        "Density",
+        (d) => {
+          const density = unitsPerAcre(d);
+          return numberCell(
+            density === null ? null : Math.round(density.perAcre * 10) / 10,
+            density === null
+              ? null
+              : `${oneDecimal(density.perAcre)} units per acre${density.fromRera ? " (land area per RERA)" : ""}`,
+          );
+        },
+        { numeric: true },
+      ),
+      // The whole floor per tower, counted from RERA's flat numbers, else stated
+      // by a floor plan that covers the whole floor (`floor-density.ts`); never a
+      // division. A unit type's own count is a separate row in "The unit type".
+      row(
+        "floor_units",
+        "Units per floor",
+        (d) => {
+          const found = unitsPerFloorOf(d);
+          return numberCell(
+            found === null ? null : typicalUnitsPerFloor(found),
+            unitsPerFloorText(d),
+            found?.source === "rera",
+          );
+        },
+        { numeric: true },
+      ),
+      row(
+        "open_area",
+        "Open area",
+        (d) => {
+          const facts = d.rera.facts;
+          const share = facts ? openAreaShare(facts) : null;
+          return numberCell(
+            share === null ? null : Math.round(share * 10) / 10,
+            facts === null || facts.openAreaSqm === null || share === null
+              ? null
+              : `${sqmText(facts.openAreaSqm)}, ${oneDecimal(share)}% of the site`,
+            true,
+          );
+        },
+        { numeric: true },
+      ),
+      row(
+        "units_available",
+        "Units available",
+        (d) => {
+          const inventory = d.rera.facts?.inventory;
+          if (
+            !inventory ||
+            inventory.availableUnits === null ||
+            inventory.totalUnits === null
+          ) {
+            return textCell(null);
+          }
+          const asOn = shortDate(inventory.asOn);
+          return numberCell(
+            inventory.availableUnits,
+            `${inventory.availableUnits} of ${inventory.totalUnits}${asOn ? `, as on ${asOn}` : ""}`,
+            true,
+          );
+        },
+        { numeric: true },
+      ),
+      row(
+        "lifts",
+        "Lifts",
+        (d) => {
+          const lifts = d.rera.facts ? liftsTotal(d.rera.facts) : null;
+          return numberCell(lifts, lifts === null ? null : String(lifts), true);
+        },
+        { numeric: true },
+      ),
+      row(
+        "units_per_lift",
+        "Units per lift (calculated)",
+        (d) => {
+          const lifts = d.rera.facts ? liftsTotal(d.rera.facts) : null;
+          const units = positiveNumber(
+            d.totalUnits ?? d.rera.facts?.inventory?.totalUnits ?? null,
+          );
+          if (lifts === null || lifts <= 0 || units === null) {
+            return textCell(null);
+          }
+          const perLift = units / lifts;
+          return numberCell(
+            Math.round(perLift * 10) / 10,
+            `${oneDecimal(perLift)} units per lift`,
+            true,
+          );
+        },
+        { numeric: true },
+      ),
+      row(
+        "covered_parking",
+        "Covered parking (RERA)",
+        (d) => {
+          const slots = positiveNumber(
+            d.rera.facts?.coveredParkingSlots ?? null,
+          );
+          return numberCell(
+            slots,
+            slots === null ? null : `${slots} slots`,
+            true,
+          );
+        },
+        { numeric: true },
+      ),
+      row(
+        "parking_per_unit",
+        "Covered parking per unit (calculated)",
+        (d) => {
+          const slots = positiveNumber(
+            d.rera.facts?.coveredParkingSlots ?? null,
+          );
+          const units = positiveNumber(
+            d.totalUnits ?? d.rera.facts?.inventory?.totalUnits ?? null,
+          );
+          if (slots === null || units === null) return textCell(null);
+          const perUnit = slots / units;
+          return numberCell(
+            Math.round(perUnit * 10) / 10,
+            `${oneDecimal(perUnit)} per unit`,
+            true,
+          );
+        },
+        { numeric: true },
+      ),
+      row(
+        "floors_rera",
+        "Floors (per RERA)",
+        (d) => {
+          const floors = d.rera.facts ? floorsMostStated(d.rera.facts) : null;
+          return numberCell(
+            floors,
+            floors === null ? null : String(floors),
+            true,
+          );
+        },
+        { numeric: true },
+      ),
+      row("plan_authority", "Plans passed by", (d) =>
+        textCell(d.rera.facts?.planPassingAuthority ?? null, true),
+      ),
+      row("registered_on", "RERA registered on", (d) =>
+        textCell(shortDate(d.rera.facts?.registeredOn ?? null), true),
+      ),
+      row("filings", "Regulator filings submitted", (d) => {
+        const filings = d.rera.facts?.filings;
+        return filings
+          ? textCell(`${filings.submitted} of ${filings.listed}`, true)
+          : textCell(null);
+      }),
+      row(
+        "developer_completed",
+        "Developer's completed projects listed here",
+        (d) =>
+          numberCell(
+            d.developer.completedProjectsCount,
+            String(d.developer.completedProjectsCount),
+          ),
       ),
     ],
   });
@@ -706,12 +1222,56 @@ export const buildComparison = (
           a[1].label.localeCompare(b[1].label),
       )
       .map(([key, meta]) =>
-        row(`amenity_${key}`, meta.label, (d) => {
-          const found = d.amenities.find((amenity) => amenity.key === key);
-          return AMENITY_STATE(found?.status ?? "not_stated");
-        }),
+        row(
+          `amenity_${key}`,
+          meta.label,
+          (d) => {
+            const found = d.amenities.find((amenity) => amenity.key === key);
+            return AMENITY_STATE(found?.status ?? "not_stated");
+          },
+          { category: meta.category },
+        ),
       ),
   });
+
+  // What is near each project (schema v12 location facts, kept out of the
+  // specifications): one row per kind, each landmark on its own line.
+  const nearbyRows: {
+    key: string;
+    label: string;
+    pick: (d: PropertyDossier) => string[];
+  }[] = [
+    {
+      key: "nearby_connectivity",
+      label: "Connectivity",
+      pick: (d) => d.location.nearby.connectivity,
+    },
+    {
+      key: "nearby_hospitals",
+      label: "Hospitals",
+      pick: (d) => d.location.nearby.hospitals,
+    },
+    {
+      key: "nearby_schools",
+      label: "Schools and institutions",
+      pick: (d) => d.location.nearby.schools,
+    },
+  ];
+  const statedNearby = nearbyRows.filter((entry) =>
+    dossiers.some((d) => entry.pick(d).length > 0),
+  );
+  if (statedNearby.length > 0) {
+    groups.push({
+      key: "location",
+      title: "Location and connectivity",
+      rows: statedNearby.map((entry) =>
+        row(entry.key, entry.label, (d) => {
+          const items = entry.pick(d);
+          return textCell(items.length > 0 ? items.join("\n") : null);
+        }),
+      ),
+    });
+  }
 
   const specKeys = new Map<string, { label: string; category: string }>();
   for (const dossier of dossiers) {
@@ -731,13 +1291,21 @@ export const buildComparison = (
           a[1].label.localeCompare(b[1].label),
       )
       .map(([key, meta]) =>
-        row(`spec_${key}`, meta.label, (d) => {
-          const found = d.specifications.find((spec) => spec.key === key);
-          if (!found) return missing("not_stated");
-          if (found.status === "explicitly_not_offered")
-            return missing("not_offered");
-          return textCell(found.valueText);
-        }),
+        row(
+          `spec_${key}`,
+          meta.label,
+          (d) => {
+            const found = d.specifications.find((spec) => spec.key === key);
+            if (!found) return missing("not_stated");
+            if (found.status === "explicitly_not_offered")
+              return missing("not_offered");
+            // A printed run of items ("A; B; C") is one item to a line.
+            return textCell(
+              splitListValue(found.valueText)?.join("\n") ?? found.valueText,
+            );
+          },
+          { category: meta.category },
+        ),
       ),
   });
 

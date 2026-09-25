@@ -13,6 +13,7 @@ import type {
   AreaBasis,
   CatalogItemStatus,
   DossierAmenity,
+  DossierNearby,
   DossierSpecification,
   DossierUnitVariant,
   PropertyDossier,
@@ -161,6 +162,96 @@ export const humaniseCategory = (category: string): string => {
   return spaced.charAt(0).toUpperCase() + spaced.slice(1);
 };
 
+/** `property.specifications.amenities_full_list` (schema v12). */
+export const AMENITIES_FULL_LIST_KEY = "amenities_full_list";
+
+/**
+ * Pulls `amenities_full_list` out of the generic specifications list.
+ *
+ * Every other specification compares like any other printed fact, but this
+ * one is deliberately different (schema v12): it is the developer's full,
+ * unfiltered amenity list, never catalog-matched and never a comparison row.
+ * Grouping it by category alongside true specs like `flooring` or
+ * `power_backup` would bury that distinction under identical formatting, so
+ * the dossier renders it beside the catalog-matched Amenities section
+ * instead of inside Specifications.
+ */
+export const splitAmenitiesFullList = (
+  specifications: readonly DossierSpecification[],
+): {
+  amenitiesFullList: DossierSpecification | null;
+  specifications: DossierSpecification[];
+} => {
+  const amenitiesFullList =
+    specifications.find((spec) => spec.key === AMENITIES_FULL_LIST_KEY) ?? null;
+  return {
+    amenitiesFullList,
+    specifications: specifications.filter(
+      (spec) => spec.key !== AMENITIES_FULL_LIST_KEY,
+    ),
+  };
+};
+
+/**
+ * A printed value that lists several things, as its items: brochures print
+ * "24/7 CCTV; Access control in lobby; Fire sprinklers" as one run of text, which
+ * nobody reads as a list. Items are split on semicolons or line breaks and nothing
+ * is reworded. A value with fewer than two items is not a list and returns null.
+ */
+export const splitListValue = (
+  text: string | null | undefined,
+): string[] | null => {
+  const items = (text ?? "")
+    .split(/[;\n]/)
+    .map((item) => item.trim())
+    .filter((item) => item !== "");
+  return items.length >= 2 ? items : null;
+};
+
+/** A single printed value longer than this is set on its own line under its label,
+ * not squeezed beside it. */
+export const LONG_VALUE_LENGTH = 48;
+
+const NEARBY_KEYS = {
+  connectivity: "nearby_connectivity",
+  hospitals: "nearby_hospitals",
+  schools: "nearby_schools",
+  plotNumber: "plot_no",
+} as const;
+
+/** One entry per landmark: the brochure prints them separated by semicolons or
+ * on separate lines. Nothing is reworded. */
+export const splitLandmarks = (text: string | null): string[] =>
+  (text ?? "")
+    .split(/[;\n]/)
+    .map((item) => item.trim())
+    .filter((item) => item !== "");
+
+/**
+ * Pulls what is near the project (connectivity, hospitals, schools) and the plot
+ * number out of the specifications, which is not where a buyer looks for them.
+ * The dossier and the comparison show them with the location; what is left is
+ * how the project is built.
+ */
+export const splitNearbyFacts = (
+  specifications: readonly DossierSpecification[],
+): { nearby: DossierNearby; specifications: DossierSpecification[] } => {
+  const textOf = (key: string) => {
+    const spec = specifications.find((item) => item.key === key);
+    return spec && spec.status === "available" ? spec.valueText : null;
+  };
+  const moved = new Set<string>(Object.values(NEARBY_KEYS));
+  return {
+    nearby: {
+      connectivity: splitLandmarks(textOf(NEARBY_KEYS.connectivity)),
+      hospitals: splitLandmarks(textOf(NEARBY_KEYS.hospitals)),
+      schools: splitLandmarks(textOf(NEARBY_KEYS.schools)),
+      plotNumber: textOf(NEARBY_KEYS.plotNumber)?.trim() || null,
+    },
+    specifications: specifications.filter((spec) => !moved.has(spec.key)),
+  };
+};
+
 export interface RoomDimension {
   name: string;
   lengthFt: number;
@@ -239,9 +330,7 @@ export const formatRoomDimension = (room: RoomDimension): string => {
     return area === null ? size : `${size}, ${area} sq ft`;
   }
   const computed = formatSqft(String(Math.round(room.lengthFt * room.widthFt)));
-  return computed === null
-    ? size
-    : `${size}, ${computed} sq ft (calculated from the sides)`;
+  return computed === null ? size : `${size}, ${computed} sq ft (calculated)`;
 };
 
 /** The distinct BHK types across a dossier's variants, for summaries. */

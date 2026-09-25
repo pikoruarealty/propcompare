@@ -1,3 +1,5 @@
+import { isGoogleMapsUrl } from "@/lib/properties/map-url";
+import { reraSnapshotProblem } from "@/lib/rera/snapshot";
 import { LISTING_STATUSES } from "./edit-only-fields";
 
 export class SubmissionPayloadError extends Error {
@@ -31,6 +33,21 @@ export interface SubmissionUnitVariantAreaRow {
   areaSqft: number;
 }
 
+/**
+ * What one unit type says about one catalog amenity that belongs to it, not to
+ * the project (a private terrace, a plunge pool). "Not stated" is the absence of
+ * an entry, never an entry.
+ */
+export interface SubmissionUnitVariantAmenity {
+  key: string;
+  status: "available" | "explicitly_not_offered";
+}
+
+export const UNIT_VARIANT_AMENITY_STATUSES = [
+  "available",
+  "explicitly_not_offered",
+] as const;
+
 export interface SubmissionUnitVariant {
   variantName: string;
   bhkTypeKey?: string;
@@ -38,6 +55,8 @@ export interface SubmissionUnitVariant {
   totalUnitsOfVariant?: number;
   unitsPerFloor?: number;
   areas?: SubmissionUnitVariantAreaRow[];
+  /** When present, the complete set for this unit type; absent leaves it as it is. */
+  amenities?: SubmissionUnitVariantAmenity[];
   dimensions?: {
     rooms?: SubmissionRoomDimension[];
     foyer?: SubmissionRoomDimension | null;
@@ -189,6 +208,45 @@ const readUnitVariants = (
         };
       });
     }
+    if (candidate.amenities !== undefined) {
+      if (!Array.isArray(candidate.amenities)) {
+        throw new SubmissionPayloadError(
+          `${itemPath}.amenities must be an array`,
+        );
+      }
+      const keys = new Set<string>();
+      variant.amenities = candidate.amenities.map((entry, amenityIndex) => {
+        const amenityPath = `${itemPath}.amenities[${amenityIndex}]`;
+        if (!isRecord(entry)) {
+          throw new SubmissionPayloadError(`${amenityPath} must be an object`);
+        }
+        const key = readNonEmptyString(entry.key, `${amenityPath}.key`);
+        if (!lookups.amenityKeys.has(key)) {
+          throw new SubmissionPayloadError(
+            `${amenityPath}.key is not an approved amenity`,
+          );
+        }
+        if (keys.has(key)) {
+          throw new SubmissionPayloadError(
+            `${itemPath}.amenities names ${key} twice`,
+          );
+        }
+        keys.add(key);
+        if (
+          !(UNIT_VARIANT_AMENITY_STATUSES as readonly unknown[]).includes(
+            entry.status,
+          )
+        ) {
+          throw new SubmissionPayloadError(
+            `${amenityPath}.status must be available or explicitly_not_offered`,
+          );
+        }
+        return {
+          key,
+          status: entry.status as SubmissionUnitVariantAmenity["status"],
+        };
+      });
+    }
     if (candidate.dimensions !== undefined) {
       if (!isRecord(candidate.dimensions)) {
         throw new SubmissionPayloadError(
@@ -262,7 +320,20 @@ const validateFieldValue = (
     return readPositiveInteger(value, path);
   }
   if (dataType === "positive_number") {
-    return readPositiveNumber(value, path);
+    const number = readPositiveNumber(value, path);
+    // The project's position: a coordinate outside India is a typo, not a place.
+    if (fieldKey === "property.latitude" && (number < 6 || number > 38)) {
+      throw new SubmissionPayloadError(`${path} must be a latitude in India`);
+    }
+    if (fieldKey === "property.longitude" && (number < 68 || number > 98)) {
+      throw new SubmissionPayloadError(`${path} must be a longitude in India`);
+    }
+    return number;
+  }
+  if (dataType === "rera_snapshot") {
+    const problem = reraSnapshotProblem(value);
+    if (problem) throw new SubmissionPayloadError(`${path} ${problem}`);
+    return value;
   }
   if (dataType === "percentage_0_to_100") {
     if (
@@ -299,6 +370,15 @@ const validateFieldValue = (
       throw new SubmissionPayloadError(`${path} must be an ISO calendar date`);
     }
     return value;
+  }
+  if (dataType === "map_url") {
+    const trimmed = readNonEmptyString(value, path).trim();
+    if (!isGoogleMapsUrl(trimmed)) {
+      throw new SubmissionPayloadError(
+        `${path} must be an https Google Maps link`,
+      );
+    }
+    return trimmed;
   }
   if (dataType === "pincode") {
     const trimmed = readNonEmptyString(value, path).trim();
@@ -364,6 +444,17 @@ const validateFieldValue = (
       throw new SubmissionPayloadError(`${path} names a unit type twice`);
     }
     return names;
+  }
+  if (dataType === "media_id") {
+    if (
+      typeof value !== "string" ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        value.trim(),
+      )
+    ) {
+      throw new SubmissionPayloadError(`${path} must be a picture id`);
+    }
+    return value.trim().toLowerCase();
   }
   if (dataType === "media_id_array") {
     const ids = Array.isArray(value)

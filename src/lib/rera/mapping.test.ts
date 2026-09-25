@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   compareWithRecord,
   derivePossessionStatus,
+  legalEntityTypeFromRera,
   LEGAL_ENTITY_FIELD_KEY,
   matchLegalEntity,
   writableItems,
@@ -142,6 +143,8 @@ describe("compareWithRecord", () => {
       "property.rera_construction_progress_percent",
       "property.pincode",
       "property.rera_project_land_area_sqft",
+      "property.total_floors",
+      "property.total_towers",
       "property.possession_status",
       "property.amenities",
       LEGAL_ENTITY_FIELD_KEY,
@@ -423,5 +426,326 @@ describe("compareWithRecord — carpet area by unit type", () => {
     const item = carpet({ carpetGroups: groups }, undefined);
     expect(item.proposedValue).toBeNull();
     expect(item.note).toMatch(/no unit types are entered yet/i);
+  });
+});
+
+describe("the second-pass items (position, map link, snapshot)", () => {
+  const withDetails: RegulatorRecord = {
+    ...record,
+    details: {
+      version: 1,
+      layoutLandAreaSqm: 7628,
+      openAreaSqm: 3131.1,
+      coveredAreaSqm: 4496.9,
+      coveredParkingAreaSqm: null,
+      filing: {
+        quarter: "Q-14",
+        periodEndsOn: "2026-06-30",
+        source: "quarterly_filing",
+        progressPercent: 67.71875,
+        blocks: [],
+      },
+      inventory: {
+        totalUnits: 76,
+        bookedUnits: 63,
+        availableUnits: 13,
+        asOn: "2026-07-03",
+      },
+      filings: { listed: 18, submitted: 17 },
+      planPassingAuthority: "AUDA",
+      registeredOn: "2022-11-11",
+      architects: [],
+      engineers: [],
+      contractors: [],
+      boundary: [
+        { lat: 23.0275, lng: 72.4888 },
+        { lat: 23.0274, lng: 72.49 },
+        { lat: 23.0269, lng: 72.49 },
+      ],
+      centre: { lat: 23.0272712, lng: 72.4894294 },
+    },
+  };
+
+  it("proposes the boundary's centre as the position and a search by name as the map link, where none is held", () => {
+    const items = byKey(compareWithRecord(withDetails, {}, entities));
+
+    expect(items["property.latitude"]).toMatchObject({
+      status: "not_held",
+      proposedValue: 23.0272712,
+    });
+    expect(items["property.longitude"]).toMatchObject({
+      status: "not_held",
+      proposedValue: 72.4894294,
+    });
+    // The name search leads; RERA's own value stays the boundary centre, the
+    // alternative when the search lands on the wrong place.
+    expect(items["property.google_maps_url"]).toMatchObject({
+      status: "not_held",
+      proposedValue:
+        "https://www.google.com/maps/search/?api=1&query=The%20Kimana%20Towers%20Ahmedabad",
+      reraValue: "https://www.google.com/maps?q=23.0272712,72.4894294",
+    });
+    expect(items["property.google_maps_url"].note).toMatch(
+      /search from the project.s name.*wrong place.*centre of the boundary/i,
+    );
+  });
+
+  it("proposes the boundary's pin as the map link only when there is no name to search", () => {
+    const items = byKey(
+      compareWithRecord(
+        { ...withDetails, projectName: "", district: null },
+        { "property.name": null, "property.locality": null },
+        entities,
+      ),
+    );
+    expect(items["property.google_maps_url"].proposedValue).toBe(
+      "https://www.google.com/maps?q=23.0272712,72.4894294",
+    );
+  });
+
+  it("treats a held name search, or a held boundary pin, as the same link", () => {
+    const search =
+      "https://www.google.com/maps/search/?api=1&query=The%20Kimana%20Towers%20Ahmedabad";
+    for (const held of [
+      search,
+      "https://www.google.com/maps?q=23.0272712,72.4894294",
+    ]) {
+      const item = byKey(
+        compareWithRecord(
+          withDetails,
+          { "property.google_maps_url": held },
+          entities,
+        ),
+      )["property.google_maps_url"];
+      expect(item.status).toBe("same");
+      expect(item.proposedValue).toBeNull();
+    }
+  });
+
+  it("never overwrites a pin or a link an admin already holds, but shows the difference", () => {
+    const held = {
+      "property.latitude": 23.03,
+      "property.longitude": 72.5,
+      "property.google_maps_url":
+        "https://www.google.com/maps/place/Kimana/@23.03,72.5,17z",
+    };
+    const compared = compareWithRecord(withDetails, held, entities);
+    const items = byKey(compared);
+
+    for (const key of [
+      "property.latitude",
+      "property.longitude",
+      "property.google_maps_url",
+    ]) {
+      expect(items[key].status).toBe("differs");
+      expect(items[key].proposedValue).toBeNull();
+    }
+    expect(writableItems(compared).map((item) => item.fieldKey)).not.toContain(
+      "property.latitude",
+    );
+  });
+
+  it("falls back to a search from the name when RERA drew no boundary, and says so", () => {
+    const noBoundary: RegulatorRecord = {
+      ...withDetails,
+      details: { ...withDetails.details!, boundary: [], centre: null },
+    };
+    const items = byKey(
+      compareWithRecord(noBoundary, { "property.locality": "Ambli" }, entities),
+    );
+
+    expect(items["property.latitude"].status).toBe("rera_silent");
+    expect(items["property.google_maps_url"].status).toBe("not_held");
+    expect(items["property.google_maps_url"].proposedValue).toBe(
+      "https://www.google.com/maps/search/?api=1&query=The%20Kimana%20Towers%20Ambli%20Ahmedabad",
+    );
+    expect(items["property.google_maps_url"].note).toMatch(/search/i);
+  });
+
+  it("says which filing the progress figure is from", () => {
+    const items = byKey(compareWithRecord(withDetails, {}, entities));
+
+    expect(items["property.rera_construction_progress_percent"].note).toMatch(
+      /quarterly filing \(Q-14, period ending 2026-06-30\)/,
+    );
+  });
+
+  it("proposes the snapshot, and calls it the same only when every fact matches", () => {
+    const first = byKey(compareWithRecord(withDetails, {}, entities));
+    const snapshot = first["property.rera_snapshot"];
+
+    expect(snapshot.status).toBe("not_held");
+    expect(snapshot.reraValue).toMatch(
+      /filing Q-14, 13 units available as on 2026-07-03/,
+    );
+
+    const held = { "property.rera_snapshot": snapshot.proposedValue };
+    expect(
+      byKey(compareWithRecord(withDetails, held, entities))[
+        "property.rera_snapshot"
+      ].status,
+    ).toBe("same");
+
+    const changed: RegulatorRecord = {
+      ...withDetails,
+      details: {
+        ...withDetails.details!,
+        inventory: { ...withDetails.details!.inventory!, availableUnits: 9 },
+      },
+    };
+    expect(
+      byKey(compareWithRecord(changed, held, entities))[
+        "property.rera_snapshot"
+      ].status,
+    ).toBe("differs");
+  });
+
+  it("proposes the floors the latest filing states, and says why a difference needs a look", () => {
+    const withFloors: RegulatorRecord = {
+      ...withDetails,
+      details: {
+        ...withDetails.details!,
+        filing: {
+          ...withDetails.details!.filing,
+          blocks: [
+            { name: "A", progressPercent: 50, floors: 22, lifts: 4, slabs: 24 },
+            { name: "B", progressPercent: 50, floors: 20, lifts: 4, slabs: 24 },
+          ],
+        },
+      },
+    };
+
+    const none = byKey(compareWithRecord(withFloors, {}, entities));
+    expect(none["property.total_floors"]).toMatchObject({
+      status: "not_held",
+      proposedValue: 22,
+    });
+
+    const held = byKey(
+      compareWithRecord(withFloors, { "property.total_floors": 24 }, entities),
+    );
+    expect(held["property.total_floors"]).toMatchObject({
+      status: "differs",
+      proposedValue: 22,
+      currentValue: 24,
+    });
+    expect(held["property.total_floors"].note).toMatch(
+      /podium, stilt or terrace/,
+    );
+
+    // A record with no filing blocks says nothing about floors.
+    expect(
+      byKey(compareWithRecord(record, {}, entities))["property.total_floors"]
+        .status,
+    ).toBe("rera_silent");
+  });
+
+  it("adds none of these for a record that predates them", () => {
+    const keys = compareWithRecord(record, {}, entities).map(
+      (item) => item.fieldKey,
+    );
+
+    for (const key of [
+      "property.latitude",
+      "property.google_maps_url",
+      "property.rera_snapshot",
+    ]) {
+      expect(keys).not.toContain(key);
+    }
+  });
+});
+
+describe("legalEntityTypeFromRera", () => {
+  it.each([
+    ["LIMITED LIABILITY PARTNERSHIP FIRM", "llp"],
+    ["Limited Liability Partnership", "llp"],
+    ["PARTNERSHIP FIRM", "partnership"],
+    ["COMPANY", "company"],
+    ["PRIVATE LIMITED COMPANY", "company"],
+    ["INDIVIDUAL/PROPRIETORSHIP", "proprietorship"],
+    ["TRUST", "trust"],
+  ])("reads %j as %s", (wording, expected) => {
+    expect(legalEntityTypeFromRera(wording)).toBe(expected);
+  });
+
+  it("says other, never a guess, for wording it does not know or none at all", () => {
+    expect(legalEntityTypeFromRera("SOCIETY")).toBe("other");
+    expect(legalEntityTypeFromRera("")).toBe("other");
+    expect(legalEntityTypeFromRera(null)).toBe("other");
+  });
+});
+
+describe("amenities from RERA's flags", () => {
+  const labels = {
+    clubhouse: "Clubhouse",
+    landscaped_garden: "Landscaped garden",
+    swimming_pool: "Swimming pool",
+  };
+  const flagged: RegulatorRecord = {
+    ...record,
+    declaredAmenityKeys: ["landscaped_garden"],
+    notProposedAmenityKeys: ["clubhouse", "multipurpose_hall"],
+  };
+
+  it("adds a declared amenity to the brochure's set and removes nothing", () => {
+    const item = byKey(
+      compareWithRecord(
+        flagged,
+        { "property.amenities": ["gymnasium", "clubhouse"] },
+        entities,
+        labels,
+      ),
+    )["property.amenities"];
+
+    expect(item.proposedValue).toEqual([
+      "gymnasium",
+      "clubhouse",
+      "landscaped_garden",
+    ]);
+  });
+
+  it("only prompts a check when RERA does not propose something the brochure lists", () => {
+    const item = byKey(
+      compareWithRecord(
+        flagged,
+        {
+          "property.amenities": ["gymnasium", "clubhouse", "landscaped_garden"],
+        },
+        entities,
+        labels,
+      ),
+    )["property.amenities"];
+
+    // Nothing to change: the brochure is kept.
+    expect(item.status).toBe("same");
+    expect(item.proposedValue).toBeNull();
+    expect(item.note).toMatch(/does not propose Clubhouse/);
+    expect(item.note).toMatch(/brochure is kept/i);
+  });
+
+  it("stays quiet when the brochure lists nothing RERA does not propose", () => {
+    const item = byKey(
+      compareWithRecord(
+        flagged,
+        { "property.amenities": ["gymnasium"] },
+        entities,
+        labels,
+      ),
+    )["property.amenities"];
+
+    expect(item.note).not.toMatch(/does not propose/);
+  });
+
+  it("says nothing about not-proposed amenities for a record that predates them", () => {
+    const item = byKey(
+      compareWithRecord(
+        { ...record, declaredAmenityKeys: [] },
+        { "property.amenities": ["clubhouse"] },
+        entities,
+        labels,
+      ),
+    )["property.amenities"];
+
+    expect(item.note).not.toMatch(/does not propose/);
   });
 });

@@ -1,0 +1,1 @@
+ALTER TABLE "buyer_intake_sessions" ALTER COLUMN "city" DROP NOT NULL;

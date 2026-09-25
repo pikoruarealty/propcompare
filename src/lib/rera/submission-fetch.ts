@@ -1,3 +1,4 @@
+import { syncReraPriceRange } from "@/lib/pricing/ranges";
 import { WORKING_STATUSES } from "@/lib/submissions/working-statuses";
 import { and, desc, eq, ne, or, sql } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
@@ -14,8 +15,14 @@ import {
   editSubmissionField,
   ReconciliationError,
 } from "@/lib/submissions/reconciliation";
+import { createLegalEntity } from "@/lib/developers/legal-entities";
 import {
   compareWithRecord,
+  legalEntityTypeFromRera,
+  matchLegalEntity,
+  LATITUDE_FIELD_KEY,
+  LONGITUDE_FIELD_KEY,
+  MAP_URL_KEY,
   writableItems,
   type LegalEntityChoice,
   type ReraComparisonItem,
@@ -35,6 +42,9 @@ export class ReraFetchError extends Error {
       | "duplicate_number"
       | "job_not_found"
       | "nothing_to_apply"
+      | "no_promoter"
+      | "no_developer"
+      | "entity_exists"
       | "invalid_value"
       | "invalid_number"
       | "not_found"
@@ -90,7 +100,7 @@ const requireEditable = (submission: SubmissionScope) => {
  * value for an edit of an existing property, overlaid with the submission's own
  * candidates (a rejected candidate does not count).
  */
-const loadCurrentValues = async (
+export const loadCurrentValues = async (
   database: PostgresJsDatabase,
   submission: SubmissionScope,
 ): Promise<Record<string, unknown>> => {
@@ -284,6 +294,9 @@ export const fetchReraForSubmission = async (
       })),
     })
     .where(eq(reraFetchJobs.id, job.id));
+  // The project's stated price range goes to the private schema, never into the
+  // record above; best effort, so it cannot fail the check.
+  await syncReraPriceRange({ adapter, registrationNumber: number });
   return { jobId: job.id, record, comparison };
 };
 
@@ -381,6 +394,91 @@ export const getReraState = async (
  * Fields RERA is silent on are left alone. Still a draft: nothing reaches the live
  * catalogue except through review and publish.
  */
+/**
+ * Records the promoter RERA names as a legal entity of the submission's developer,
+ * so the promoter row of the comparison can propose it and "Use RERA values" can
+ * link it. Only when the fetched record names a promoter and none of the
+ * developer's recorded entities already matches it (same rule as the comparison:
+ * case and punctuation ignored). The name is stored as the regulator prints it; the
+ * type is read from the regulator's wording and is "other" when unclear, for an
+ * admin to correct on the developer page. The promoter's registration number is not
+ * stated on the public record, so it is left blank. This edits the developer's
+ * entity list, not the listing: nothing reaches a live property except by publish.
+ */
+export const addPromoterAsLegalEntity = async (
+  database: PostgresJsDatabase,
+  input: { submissionId: string },
+): Promise<{ id: string; legalName: string }> => {
+  const submission = await loadSubmission(database, input.submissionId);
+  requireEditable(submission);
+  const found = await latestSucceededJob(database, submission);
+  if (!found) {
+    throw new ReraFetchError(
+      "job_not_found",
+      "Fetch the RERA record first, then add its promoter.",
+    );
+  }
+  const legalName =
+    found.record.promoterName?.trim().replace(/\s+/g, " ") ?? "";
+  if (legalName === "") {
+    throw new ReraFetchError(
+      "no_promoter",
+      "RERA names no promoter for this project.",
+    );
+  }
+
+  let developerId = submission.developerId;
+  if (!developerId && submission.propertyId) {
+    const [property] = await database
+      .select({ developerId: properties.developerId })
+      .from(properties)
+      .where(eq(properties.id, submission.propertyId));
+    developerId = property?.developerId ?? null;
+  }
+  if (!developerId) {
+    throw new ReraFetchError(
+      "no_developer",
+      "This submission has no developer to record the promoter under.",
+    );
+  }
+
+  const existing = matchLegalEntity(
+    legalName,
+    await loadEntities(database, { developerId, propertyId: null }),
+  );
+  if (existing) {
+    throw new ReraFetchError(
+      "entity_exists",
+      `${existing.legalName} is already recorded for this developer.`,
+    );
+  }
+
+  const created = await createLegalEntity(database, developerId, {
+    legalName,
+    entityType: legalEntityTypeFromRera(found.record.promoterType),
+    reraPromoterRegistrationNumber: null,
+  });
+  if (!created.ok) {
+    throw new ReraFetchError(
+      "entity_exists",
+      created.code === "invalid"
+        ? (Object.values(created.errors)[0] ??
+            "That entity could not be added.")
+        : "The developer was not found.",
+    );
+  }
+  return { id: created.id, legalName };
+};
+
+/** RERA's proposed pin and map link are a place someone should look at before it
+ * is published, so they are written as needing review: publishing waits for an
+ * admin or the developer to check the small map and confirm or correct them. */
+const NEEDS_A_LOOK = new Set([
+  LATITUDE_FIELD_KEY,
+  LONGITUDE_FIELD_KEY,
+  MAP_URL_KEY,
+]);
+
 export const applyReraValues = async (
   database: PostgresJsDatabase,
   input: { submissionId: string; jobId: string },
@@ -416,7 +514,9 @@ export const applyReraValues = async (
         submissionId: submission.id,
         fieldKey: item.fieldKey,
         value: item.proposedValue,
-        reviewStatus: "confirmed",
+        reviewStatus: NEEDS_A_LOOK.has(item.fieldKey)
+          ? "needs_review"
+          : "confirmed",
       });
     } catch (cause) {
       if (cause instanceof ReconciliationError) {

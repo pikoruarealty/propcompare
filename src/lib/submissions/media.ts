@@ -1,11 +1,14 @@
 import { isWorkingStatus } from "./working-statuses";
 import { randomUUID } from "node:crypto";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import {
+  propertyMedia,
+  propertySubmissionFields,
   propertySubmissionMedia,
   propertySubmissions,
 } from "@/db/schema/catalog";
+import { MAIN_PHOTO_FIELD_KEY } from "./edit-only-fields";
 import type { StorageAdapter } from "@/lib/storage/adapter";
 
 const UUID = /^[0-9a-f-]{36}$/i;
@@ -251,5 +254,82 @@ export const reviewSubmissionMedia = async (
       "media_not_found",
       "Media candidate not found.",
     );
+  }
+};
+
+/**
+ * Permanently removes a media candidate: unlike rejecting one (a recorded
+ * decision that stays visible), a rejected candidate the admin does not want
+ * to keep looking at is deleted outright, storage object and row both.
+ * Pre-publication only, exactly like every other write here — nothing this
+ * removes has ever reached `property_media`.
+ */
+export const deleteSubmissionMedia = async (
+  deps: { database: PostgresJsDatabase; storage: StorageAdapter },
+  input: { submissionId: string; mediaId: string },
+): Promise<void> => {
+  const { database, storage } = deps;
+  if (!UUID.test(input.submissionId) || !UUID.test(input.mediaId)) {
+    throw new SubmissionMediaError(
+      "media_not_found",
+      "Media candidate not found.",
+    );
+  }
+  const [submission] = await database
+    .select({ status: propertySubmissions.status })
+    .from(propertySubmissions)
+    .where(eq(propertySubmissions.id, input.submissionId));
+  if (!submission) {
+    throw new SubmissionMediaError(
+      "submission_not_found",
+      "Submission not found.",
+    );
+  }
+  if (!isWorkingStatus(submission.status)) {
+    throw new SubmissionMediaError(
+      "invalid_state",
+      "Pictures can only be removed before the submission is published or rejected.",
+    );
+  }
+  const [deleted] = await database
+    .delete(propertySubmissionMedia)
+    .where(
+      and(
+        eq(propertySubmissionMedia.id, input.mediaId),
+        eq(propertySubmissionMedia.submissionId, input.submissionId),
+      ),
+    )
+    .returning({ gcsPath: propertySubmissionMedia.gcsPath });
+  if (!deleted) {
+    throw new SubmissionMediaError(
+      "media_not_found",
+      "Media candidate not found.",
+    );
+  }
+  // A main-photo choice that named this picture goes with it.
+  await database
+    .delete(propertySubmissionFields)
+    .where(
+      and(
+        eq(propertySubmissionFields.submissionId, input.submissionId),
+        eq(propertySubmissionFields.fieldKey, MAIN_PHOTO_FIELD_KEY),
+        sql`${propertySubmissionFields.value} = ${JSON.stringify(input.mediaId)}::jsonb`,
+      ),
+    );
+  // A brochure page's file key is derived from its document and page, so a
+  // picture that is already live, or another submission's candidate, can share
+  // this file. Only a file nothing else points at is removed.
+  const [otherCandidate] = await database
+    .select({ id: propertySubmissionMedia.id })
+    .from(propertySubmissionMedia)
+    .where(eq(propertySubmissionMedia.gcsPath, deleted.gcsPath))
+    .limit(1);
+  const [live] = await database
+    .select({ id: propertyMedia.id })
+    .from(propertyMedia)
+    .where(eq(propertyMedia.gcsPath, deleted.gcsPath))
+    .limit(1);
+  if (!otherCandidate && !live) {
+    await storage.delete(deleted.gcsPath).catch(() => undefined);
   }
 };

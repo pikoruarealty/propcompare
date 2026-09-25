@@ -38,8 +38,9 @@ High-level system shape. For _why_ each choice was made, see [DECISIONS.md](DECI
 
 ┌────────────────────────────────────────────────────────────┐
 │  private schema — RLS on, zero policies, service-role only   │
-│  unit_price_history, unit_current_bucket (view)               │
-│  read only by: the discovery/comparison matching service      │
+│  unit_price_history, unit_current_bucket (view),               │
+│  rera_price_ranges, staged_unit_prices                        │
+│  used only by: the matching service and the pricing module    │
 └────────────────────────────────────────────────────────────┘
 ```
 
@@ -80,7 +81,7 @@ trigger and admin page-routing UI remain separate planned work.
 
 ## Budget bucketing (never expose exact price)
 
-`private.unit_price_history` holds exact prices with full history (source: developer submission, admin manual entry, or RERA extract), in the `private` schema — RLS is enabled and forced with zero policies. The normal application role has no `private` schema access; only the dedicated `BYPASSRLS` service role may read it. A derived view, `private.unit_current_bucket`, maps each unit variant to a `budget_buckets` row for coarse classification. The discovery/comparison matching service is the only code path allowed the service connection; it calculates an inclusive private match range of `buyer_min × 0.80` through `buyer_max × 1.20` against current unit prices and returns only property/unit-variant ids — never a price or price range. The property detail page shows no price at all by default, until enquiry.
+`private.unit_price_history` holds exact prices with full history (source: developer submission, admin manual entry, or RERA extract), in the `private` schema — RLS is enabled and forced with zero policies. The normal application role has no `private` schema access; only the dedicated `BYPASSRLS` service role may read it. A derived view, `private.unit_current_bucket`, maps each unit variant to a `budget_buckets` row for coarse classification. Two code paths are allowed the service connection: the discovery/comparison matching service and the pricing module (`src/lib/pricing/`), which stages an admin's typed unit-type prices in `private.staged_unit_prices`, applies them to `unit_price_history` right after the publish transaction commits, and keeps the price range a regulator states for a project in `private.rera_price_ranges` (schema v16; a fallback for a property with no admin price). The matcher it calculates an inclusive private match range of `buyer_min × 0.80` through `buyer_max × 1.20` against current unit prices and returns only property/unit-variant ids — never a price or price range. The property detail page shows no price at all by default, until enquiry.
 
 ## Multi-agent development
 

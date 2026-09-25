@@ -1,5 +1,7 @@
+import type { LegalEntityType } from "@/lib/developers/legal-entity-types";
 import { areaToSqft } from "@/lib/units/measurements";
 import { compareCarpetAreas, type CarpetUnitRow } from "./carpet-area";
+import { buildReraSnapshot, snapshotFingerprint } from "./snapshot";
 import type { RegulatorCarpetGroup, RegulatorRecord } from "./types";
 
 /**
@@ -71,9 +73,61 @@ export const RERA_AUTHORITATIVE_FIELDS: ReraFieldRule[] = [
         ? null
         : Math.round(areaToSqft(record.landAreaSqm, "sqm") * 100) / 100,
   },
+  {
+    // The most floors any block states in the latest filing. A brochure may count
+    // podium or terrace levels the regulator does not, so a difference is shown for
+    // review with that in words (see `compareWithRecord`), never taken silently.
+    fieldKey: "property.total_floors",
+    label: "Floors (RERA's latest filing)",
+    read: (record) => {
+      const floors = (record.details?.filing.blocks ?? [])
+        .map((block) => block.floors)
+        .filter((value): value is number => value !== null);
+      return floors.length === 0 ? null : Math.max(...floors);
+    },
+  },
+  {
+    // The towers the registered blocks name ("T1+T2+T3+T4" is four), else the
+    // towers the flat numbers name (owner direction, 2026-09-25).
+    fieldKey: "property.total_towers",
+    label: "Towers (RERA's registered blocks)",
+    read: (record) =>
+      record.details?.towerCount ?? record.details?.towers?.length ?? null,
+  },
 ];
 
+export const SNAPSHOT_FIELD_KEY = "property.rera_snapshot";
+export const LATITUDE_FIELD_KEY = "property.latitude";
+export const LONGITUDE_FIELD_KEY = "property.longitude";
+export const MAP_URL_KEY = "property.google_maps_url";
 export const LEGAL_ENTITY_FIELD_KEY = "property.legal_entity_id";
+
+/**
+ * Our kind of legal entity for the regulator's own wording of the promoter's type
+ * ("LIMITED LIABILITY PARTNERSHIP FIRM", "COMPANY"). Order matters: an LLP's name
+ * contains both "LIMITED" and "PARTNERSHIP". Anything not clearly one kind is
+ * "other", for an admin to correct, never guessed into a specific kind.
+ */
+export const legalEntityTypeFromRera = (
+  promoterType: string | null,
+): LegalEntityType => {
+  const type = (promoterType ?? "").toUpperCase();
+  if (type.includes("LIMITED LIABILITY") || /\bLLP\b/.test(type)) return "llp";
+  if (type.includes("PARTNERSHIP")) return "partnership";
+  if (
+    type.includes("COMPANY") ||
+    type.includes("PRIVATE LIMITED") ||
+    type.includes("PUBLIC LIMITED") ||
+    /\b(PVT|LTD)\b/.test(type)
+  ) {
+    return "company";
+  }
+  if (type.includes("PROPRIETOR") || type.includes("INDIVIDUAL")) {
+    return "proprietorship";
+  }
+  if (type.includes("TRUST")) return "trust";
+  return "other";
+};
 export const POSSESSION_STATUS_FIELD_KEY = "property.possession_status";
 export const AMENITIES_FIELD_KEY = "property.amenities";
 export const UNIT_VARIANTS_FIELD_KEY = "unit_variants";
@@ -109,7 +163,13 @@ export interface ReraComparisonItem {
   reraValue: string | number | null;
   /** What we would write. Null when nothing can be proposed for this field. A
    * list (the amenity set) for a set-valued field. */
-  proposedValue: string | number | string[] | Record<string, unknown>[] | null;
+  proposedValue:
+    | string
+    | number
+    | string[]
+    | Record<string, unknown>[]
+    | Record<string, unknown>
+    | null;
   /** What we hold now, for display. */
   currentValue: string | number | null;
   status: ComparisonStatus;
@@ -197,6 +257,178 @@ export const compareWithRecord = (
     };
   });
 
+  // Which filing the progress figure is from: a quarterly report (the promoter's)
+  // or, only when none could be read, the older certified one.
+  const progress = items.find(
+    (item) => item.fieldKey === "property.rera_construction_progress_percent",
+  );
+  const filing = record.details?.filing;
+  if (progress && progress.reraValue !== null && filing) {
+    progress.note =
+      filing.source === "quarterly_filing" && filing.quarter
+        ? `As reported in the promoter's latest quarterly filing (${filing.quarter}, period ending ${filing.periodEndsOn ?? "not stated"}).`
+        : filing.source === "certified_form_one"
+          ? "The latest quarterly filing could not be read, so this is the older architect-certified figure."
+          : undefined;
+  }
+
+  const floors = items.find(
+    (item) => item.fieldKey === "property.total_floors",
+  );
+  const towers = items.find(
+    (item) => item.fieldKey === "property.total_towers",
+  );
+  if (towers && towers.status === "differs") {
+    towers.note =
+      'RERA names these towers in the project\'s registered blocks. A brochure can print a storey count where the towers should be ("31-storey towers"), so check before keeping it.';
+  }
+
+  if (floors && floors.status === "differs") {
+    floors.note =
+      "RERA counts the floors of its blocks as filed. A brochure can count podium, stilt or terrace levels as floors, so check which is meant before using RERA's number.";
+  }
+
+  // The project's position and its map link, from the boundary RERA draws. These
+  // are proposals for an admin to confirm by looking at the map: they fill a gap,
+  // and a pin an admin already holds is never overwritten by a later check.
+  const centre = record.details?.centre ?? null;
+  const positionRule = (
+    fieldKey: string,
+    label: string,
+    reraValue: number | null,
+  ): ReraComparisonItem => {
+    const currentValue = asDisplay(current[fieldKey]);
+    const differs =
+      reraValue !== null &&
+      currentValue !== null &&
+      !sameValue(reraValue, currentValue);
+    return {
+      fieldKey,
+      label,
+      reraValue,
+      proposedValue: currentValue === null ? reraValue : null,
+      currentValue,
+      status:
+        reraValue === null
+          ? "rera_silent"
+          : currentValue === null
+            ? "not_held"
+            : differs
+              ? "differs"
+              : "same",
+      note: differs
+        ? "Kept: a position is already held, and an admin's confirmed pin is not overwritten. Check the map if RERA's centre looks right."
+        : reraValue !== null && currentValue === null
+          ? "The centre of the boundary RERA draws for the project. Check it on the map before publishing."
+          : undefined,
+    };
+  };
+  // Only for a record that tried to read the boundary: an older one never asked,
+  // which is not the same as RERA drawing none.
+  if (record.details) {
+    items.push(
+      positionRule(LATITUDE_FIELD_KEY, "Latitude", centre?.lat ?? null),
+      positionRule(LONGITUDE_FIELD_KEY, "Longitude", centre?.lng ?? null),
+    );
+  }
+
+  const heldMapUrl = asDisplay(current[MAP_URL_KEY]);
+  const nameQuery = [
+    asDisplay(current["property.name"]) ?? record.projectName,
+    asDisplay(current["property.locality"]),
+    asDisplay(current["property.city"]) ?? record.district,
+  ]
+    .filter((part): part is string | number => part !== null && part !== "")
+    .join(" ");
+  const boundaryLink = centre
+    ? `https://www.google.com/maps?q=${centre.lat},${centre.lng}`
+    : null;
+  const searchLink =
+    nameQuery !== ""
+      ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(nameQuery)}`
+      : null;
+  // A search by the project's name and place first: it lands where the name is
+  // pinned on Google Maps, which is usually where a buyer looks for it. The
+  // boundary's centre is a computed point that can sit a little off that pin, so it
+  // stays visible as RERA's own value, the alternative when the search is wrong
+  // (owner decision, 2026-09-25).
+  const proposedMapUrl = searchLink ?? boundaryLink;
+  if (record.details)
+    items.push({
+      fieldKey: MAP_URL_KEY,
+      label: "Map link",
+      reraValue: boundaryLink,
+      proposedValue: heldMapUrl === null ? proposedMapUrl : null,
+      currentValue: heldMapUrl,
+      status:
+        heldMapUrl !== null
+          ? boundaryLink !== null &&
+            heldMapUrl !== boundaryLink &&
+            heldMapUrl !== searchLink
+            ? "differs"
+            : "same"
+          : proposedMapUrl === null
+            ? "rera_silent"
+            : "not_held",
+      note:
+        heldMapUrl !== null
+          ? boundaryLink !== null &&
+            heldMapUrl !== boundaryLink &&
+            heldMapUrl !== searchLink
+            ? "Kept: a link is already held. RERA's boundary centre is a different place, so check the map."
+            : undefined
+          : searchLink !== null
+            ? boundaryLink !== null
+              ? "A Google Maps search from the project's name and place. Check the map: if it lands on the wrong place, RERA's value here is a pin at the centre of the boundary it draws."
+              : "RERA drew no boundary for this project, so this is a Google Maps search from its name and place. Check the map: a search can land on the wrong place."
+            : boundaryLink !== null
+              ? "A pin at the centre of the boundary RERA draws. Check it on the map before publishing."
+              : undefined,
+    });
+
+  // Everything else RERA states about the project, kept as one reviewed item: the
+  // quarter it is as on, open and covered area, availability, lifts and floors per
+  // block, filing record, the team, and availability per carpet area.
+  const snapshot = buildReraSnapshot(record);
+  if (snapshot) {
+    const held = current[SNAPSHOT_FIELD_KEY];
+    const heldSnapshot =
+      held !== null && typeof held === "object" && !Array.isArray(held)
+        ? (held as Record<string, unknown>)
+        : null;
+    const describe = (value: Record<string, unknown> | null): string | null => {
+      if (!value) return null;
+      const filing = value.filing as
+        | { quarter?: string | null; progressPercent?: number | null }
+        | undefined;
+      const inventory = value.inventory as
+        | { availableUnits?: number | null; asOn?: string | null }
+        | null
+        | undefined;
+      const parts = [
+        filing?.quarter ? `filing ${filing.quarter}` : "latest figures",
+        typeof inventory?.availableUnits === "number"
+          ? `${inventory.availableUnits} units available as on ${inventory.asOn ?? "an unstated date"}`
+          : null,
+      ].filter((part): part is string => part !== null);
+      return parts.join(", ");
+    };
+    const same =
+      heldSnapshot !== null &&
+      snapshotFingerprint(heldSnapshot) === snapshotFingerprint(snapshot);
+    items.push({
+      fieldKey: SNAPSHOT_FIELD_KEY,
+      label: "RERA project facts",
+      reraValue: describe(snapshot as unknown as Record<string, unknown>),
+      proposedValue: snapshot as unknown as Record<string, unknown>,
+      currentValue: describe(heldSnapshot),
+      status: same ? "same" : heldSnapshot === null ? "not_held" : "differs",
+      note: same
+        ? undefined
+        : "Open and covered area, units booked and available, lifts, filing record, the team and availability by carpet area, as RERA states them. Shown on the property's page with the quarter or date each is as on.",
+    });
+  }
+
   // Possession status: derived, so it says so.
   const derived = derivePossessionStatus(record);
   const currentStatus = asDisplay(current[POSSESSION_STATUS_FIELD_KEY]);
@@ -231,6 +463,15 @@ export const compareWithRecord = (
   const declared = record.declaredAmenityKeys ?? [];
   const label = (key: string) => amenityLabels[key] ?? key;
   const missing = declared.filter((key) => !held.includes(key));
+  // The brochure is the primary source: a "not proposed" in RERA's filing only
+  // prompts a look at a brochure claim, and changes nothing.
+  const contradicted = (record.notProposedAmenityKeys ?? []).filter((key) =>
+    held.includes(key),
+  );
+  const contradictionNote =
+    contradicted.length > 0
+      ? `RERA's latest filing does not propose ${contradicted.map(label).join(", ")}, but it is listed here. The brochure is kept; check it.`
+      : undefined;
   items.push({
     fieldKey: AMENITIES_FIELD_KEY,
     label: "Amenities",
@@ -244,11 +485,16 @@ export const compareWithRecord = (
           ? "same"
           : "not_held",
     note:
-      declared.length === 0
-        ? "RERA lists no amenities for this project, so ours are left as they are."
-        : missing.length > 0
-          ? "RERA declares this and it is not yet listed. It is added; nothing is removed."
-          : undefined,
+      [
+        declared.length === 0
+          ? "RERA lists no amenities for this project, so ours are left as they are."
+          : missing.length > 0
+            ? "RERA declares this and it is not yet listed. It is added; nothing is removed."
+            : undefined,
+        contradictionNote,
+      ]
+        .filter((part): part is string => part !== undefined)
+        .join(" ") || undefined,
   });
 
   const currentEntityId = asDisplay(current[LEGAL_ENTITY_FIELD_KEY]);

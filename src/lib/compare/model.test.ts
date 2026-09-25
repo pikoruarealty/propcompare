@@ -22,9 +22,11 @@ const variant = (
     ? { key: bhk, label: bhk.toUpperCase().replace("BHK", " BHK") }
     : null,
   layoutType: null,
+  unitsPerFloor: null,
   totalUnitsOfVariant: null,
   dimensions: null,
   areas: carpet === null ? [] : [{ basis: "carpet", areaSqft: String(carpet) }],
+  amenities: [],
   ...extra,
 });
 
@@ -211,8 +213,52 @@ describe("the rows", () => {
       "timeline",
       "unit_type",
       "project",
+      "location",
       "trust",
     ]);
+  });
+
+  it("compares what is near each project as its own group, one landmark per line, never among the specifications", () => {
+    const model = buildComparison([a, b]);
+    const location = model.groups.find((group) => group.key === "location");
+    expect(location?.rows.map((row) => row.label)).toEqual([
+      "Connectivity",
+      "Hospitals",
+      "Schools and institutions",
+    ]);
+    const connectivity = location?.rows[0].cells[0];
+    expect(connectivity?.text).toBe(
+      "Vastrapur Metro Station 1.1 Km\nAirport 16.2 Km",
+    );
+    const specs = model.groups.find((group) => group.key === "specifications");
+    const specKeys = (specs?.rows ?? []).map((row) => row.key).join(" ");
+    expect(specKeys).not.toMatch(/nearby/);
+  });
+
+  it("shows a printed run of specification items one to a line", () => {
+    const withSafety = (valueText: string): PropertyDossier => ({
+      ...a,
+      specifications: [
+        {
+          key: "safety_features",
+          label: "Safety features",
+          category: "building_operation",
+          valueText,
+          status: "available",
+        },
+      ],
+    });
+    const model = buildComparison([
+      withSafety("24/7 CCTV; Access control in lobby; Fire sprinklers"),
+      withSafety("Gated entry"),
+    ]);
+    const specs = model.groups.find((group) => group.key === "specifications");
+    const row = specs?.rows.find((r) => r.key === "spec_safety_features");
+
+    expect(row?.cells[0].text).toBe(
+      "24/7 CCTV\nAccess control in lobby\nFire sprinklers",
+    );
+    expect(row?.cells[1].text).toBe("Gated entry");
   });
 
   it("marks rows that are the same, so the screen can show them plainly", () => {
@@ -245,6 +291,52 @@ describe("the rows", () => {
       "not_offered",
       "value",
     ]);
+  });
+
+  it("compares a unit type's private amenities on the chosen unit types, apart from the project's amenities", () => {
+    const penthouse = property("p", {
+      unitVariants: [
+        variant("Penthouse", "4bhk", 3000, {
+          amenities: [
+            amenity("jacuzzi", "available"),
+            amenity("sauna", "explicitly_not_offered"),
+          ],
+        }),
+      ],
+      // The project's amenity of the same name must not leak into the unit row.
+      amenities: [amenity("sauna", "available")],
+    });
+    const flat = property("f", {
+      unitVariants: [variant("4 BHK", "4bhk", 2900)],
+    });
+    const model = buildComparison([penthouse, flat]);
+
+    const group = model.groups.find((g) => g.key === "unit_amenities");
+    expect(group?.title).toBe("Private amenities of the unit type");
+    expect(group?.rows.map((row) => row.key)).toEqual([
+      "unit_amenity_jacuzzi",
+      "unit_amenity_sauna",
+    ]);
+    expect(
+      rowOf(model, "unit_amenity_jacuzzi")!.cells.map((c) => c.state),
+    ).toEqual(["value", "not_stated"]);
+    expect(
+      rowOf(model, "unit_amenity_sauna")!.cells.map((c) => c.state),
+    ).toEqual(["not_offered", "not_stated"]);
+    expect(rowOf(model, "unit_amenity_sauna")!.status).toBe("gap");
+    // Placed with the unit type, before the project's own groups.
+    const keys = model.groups.map((g) => g.key);
+    expect(keys.indexOf("unit_amenities")).toBeGreaterThan(
+      keys.indexOf("unit_type"),
+    );
+    expect(keys.indexOf("unit_amenities")).toBeLessThan(
+      keys.indexOf("project"),
+    );
+  });
+
+  it("leaves the private amenities group out when no chosen unit type states one", () => {
+    const model = buildComparison([property("a"), property("b")]);
+    expect(model.groups.some((g) => g.key === "unit_amenities")).toBe(false);
   });
 
   it("carries the regulator-checked marker only for facts the regulator's record stated", () => {

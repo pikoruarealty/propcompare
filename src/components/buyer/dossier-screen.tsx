@@ -1,4 +1,10 @@
 import Link from "next/link";
+import { identityPicture } from "@/lib/properties/identity-picture";
+import { mapEmbedUrl } from "@/lib/properties/map-url";
+import { DossierTracker } from "@/components/analytics/page-tracker";
+import { densityText } from "@/lib/properties/density";
+import { unitsPerFloorText } from "@/lib/properties/floor-density";
+import { reraFactLines } from "@/lib/properties/rera-facts";
 import {
   MediaGallery,
   type GalleryItem,
@@ -19,14 +25,18 @@ import {
   formatRoomDimension,
   dossierFactCount,
   formatSqft,
+  LONG_VALUE_LENGTH,
   groupByCategory,
   humaniseCategory,
   readRoomDimensions,
   shortUnitTypeName,
+  splitAmenitiesFullList,
+  splitListValue,
 } from "@/lib/properties/dossier";
 import type { ReraSourcedFact } from "@/lib/properties/rera-source";
 import type {
   DossierMedia,
+  DossierLock,
   DossierRera,
   DossierUnitVariant,
   MediaType,
@@ -36,6 +46,16 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CompareToggle } from "./compare-toggle";
 import { developerHref } from "./developer-screen";
 import { EnquiryForm } from "./enquiry-form";
+import {
+  LockedAmenities,
+  LockedConfigurations,
+  LockedFacts,
+  LockedMedia,
+  LockedSpecifications,
+  UNLOCK_ID,
+  UnlockPrompt,
+} from "./locked-sections";
+import { ReportProblemLink } from "./report-problem-link";
 import { SavePropertyButton } from "./save-property-button";
 import { FactValue } from "./fact-value";
 import { PageContainer, PageFrame, PageSection } from "./page-frame";
@@ -93,7 +113,9 @@ function Fact({
       </dt>
       <dd
         className={
-          large ? "text-foreground text-xl" : "text-foreground text-sm"
+          large
+            ? "text-foreground text-xl [overflow-wrap:anywhere]"
+            : "text-foreground text-sm [overflow-wrap:anywhere]"
         }
       >
         {children}
@@ -301,6 +323,19 @@ function UnitVariant({ variant }: { variant: DossierUnitVariant }) {
           </dl>
         </div>
       )}
+
+      {/*
+       * What belongs to this unit type alone, apart from the project's amenities
+       * above. A unit type with none stated says so rather than showing nothing.
+       */}
+      <div data-slot="variant-amenities" className="flex flex-col gap-2">
+        <Eyebrow>Private amenities</Eyebrow>
+        {variant.amenities.length === 0 ? (
+          <BodyText className="text-muted-foreground">Not stated</BodyText>
+        ) : (
+          <CatalogList items={variant.amenities} />
+        )}
+      </div>
     </article>
   );
 }
@@ -320,11 +355,16 @@ function UnitVariant({ variant }: { variant: DossierUnitVariant }) {
 function MediaSection({
   media,
   unitVariants,
+  lock,
 }: {
   media: readonly DossierMedia[];
   unitVariants: PropertyDossier["unitVariants"];
+  /** Set for a signed-out visitor: what was withheld beyond the preview. */
+  lock?: DossierLock;
 }) {
-  if (media.length === 0) {
+  const withheld =
+    lock !== undefined && lock.hiddenPhotos + lock.hiddenFloorPlans > 0;
+  if (media.length === 0 && !withheld) {
     return (
       <Section
         title="Photos and plans"
@@ -414,6 +454,7 @@ function MediaSection({
       data-slot="dossier-media"
     >
       {sections.length > 0 ? <MediaGallery sections={sections} /> : null}
+      {lock ? <LockedMedia lock={lock} /> : null}
       {documents.length > 0 ? (
         <ul className="flex flex-col gap-2">
           {documents.map((item) => (
@@ -443,6 +484,7 @@ function CatalogSection({
   slot,
   items,
   emptyMessage,
+  trailing,
 }: {
   title: string;
   id: string;
@@ -455,11 +497,14 @@ function CatalogSection({
     valueText?: string | null;
   }[];
   emptyMessage: string;
+  /** Rendered inside the section, after the catalog rows. */
+  trailing?: React.ReactNode;
 }) {
   if (items.length === 0) {
     return (
       <Section title={title} id={id} data-slot={slot}>
         <BodyText className="text-muted-foreground">{emptyMessage}</BodyText>
+        {trailing}
       </Section>
     );
   }
@@ -508,39 +553,98 @@ function CatalogSection({
           </div>
         </details>
       )}
+
+      {trailing}
     </Section>
   );
 }
 
-function CatalogList({
-  items,
-}: {
-  items: readonly {
-    key: string;
-    label: string;
-    status: "available" | "not_stated" | "explicitly_not_offered";
-    valueText?: string | null;
-  }[];
-}) {
+type CatalogRowItem = {
+  key: string;
+  label: string;
+  status: "available" | "not_stated" | "explicitly_not_offered";
+  valueText?: string | null;
+};
+
+/** A stated value that is a run of items ("A; B; C") or a long sentence has no
+ * room beside its label; it is set full width beneath it. */
+const isWide = (item: CatalogRowItem): boolean =>
+  item.status === "available" &&
+  (splitListValue(item.valueText) !== null ||
+    (item.valueText?.length ?? 0) > LONG_VALUE_LENGTH);
+
+/**
+ * A printed list as a list: one item to a line in two columns, each on its own
+ * hairline, instead of one run of text separated by semicolons.
+ */
+function ItemList({ items }: { items: readonly string[] }) {
   return (
-    <dl className="grid grid-cols-1 gap-x-8 gap-y-2 sm:grid-cols-2">
-      {items.map((item) => (
-        <div
-          key={item.key}
-          data-slot="catalog-item"
-          data-status={item.status}
-          className="border-border flex flex-wrap items-baseline justify-between gap-x-4 border-b pb-1"
+    <ul
+      data-slot="item-list"
+      className="grid grid-cols-1 gap-x-8 sm:grid-cols-2"
+    >
+      {items.map((item, index) => (
+        <li
+          key={`${item}:${index}`}
+          className="border-border text-foreground flex gap-3 border-b py-2 text-sm leading-6"
         >
-          <dt className="text-muted-foreground text-sm">{item.label}</dt>
-          <dd className="text-sm">
-            <FactValue
-              status={item.status}
-              value={item.valueText ?? undefined}
-            />
-          </dd>
-        </div>
+          <span
+            aria-hidden="true"
+            className="bg-muted-foreground mt-3 h-px w-3 shrink-0"
+          />
+          <span className="min-w-0 [overflow-wrap:anywhere]">{item}</span>
+        </li>
       ))}
-    </dl>
+    </ul>
+  );
+}
+
+function CatalogList({ items }: { items: readonly CatalogRowItem[] }) {
+  const narrow = items.filter((item) => !isWide(item));
+  const wide = items.filter(isWide);
+  return (
+    <div className="flex flex-col gap-4">
+      {narrow.length === 0 ? null : (
+        <dl className="grid grid-cols-1 gap-x-8 gap-y-2 sm:grid-cols-2">
+          {narrow.map((item) => (
+            <div
+              key={item.key}
+              data-slot="catalog-item"
+              data-status={item.status}
+              className="border-border flex flex-wrap items-baseline justify-between gap-x-4 border-b pb-1"
+            >
+              <dt className="text-muted-foreground text-sm">{item.label}</dt>
+              <dd className="text-sm [overflow-wrap:anywhere]">
+                <FactValue
+                  status={item.status}
+                  value={item.valueText ?? undefined}
+                />
+              </dd>
+            </div>
+          ))}
+        </dl>
+      )}
+      {wide.map((item) => {
+        const list = splitListValue(item.valueText);
+        return (
+          <div
+            key={item.key}
+            data-slot="catalog-item"
+            data-status={item.status}
+            className="flex flex-col gap-1"
+          >
+            <p className="text-muted-foreground text-sm">{item.label}</p>
+            {list ? (
+              <ItemList items={list} />
+            ) : (
+              <p className="border-border text-foreground border-b pb-2 text-sm leading-6 [overflow-wrap:anywhere]">
+                {item.valueText}
+              </p>
+            )}
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
@@ -554,15 +658,26 @@ const SECTION_LINKS = [
   { href: "#configurations", label: "Configurations" },
   { href: "#amenities", label: "Amenities" },
   { href: "#specifications", label: "Specifications" },
-  { href: "#rera", label: "RERA" },
   { href: "#location", label: "Location" },
+  { href: "#rera", label: "RERA" },
   { href: "#developer", label: "Developer" },
   { href: "#enquiry", label: "Ask about this property" },
 ] as const;
 
 export function DossierScreen({ dossier }: DossierScreenProps) {
   const { location, possession, rera, developer } = dossier;
-  const verifiedFact = reraVerifiedFact(rera);
+  const embedUrl = mapEmbedUrl(location.mapUrl);
+  const nearbyLists = [
+    { label: "Connectivity", items: location.nearby.connectivity },
+    { label: "Hospitals", items: location.nearby.hospitals },
+    { label: "Schools and institutions", items: location.nearby.schools },
+  ];
+  const verifiedFact = reraVerifiedFact({
+    registered: rera.registered,
+    registrationNumber: rera.registrationNumber,
+    // The date of the latest successful check of the regulator's record.
+    lastVerifiedAt: rera.lastCheckedAt,
+  });
   const possessionDate = formatPossessionDate(possession.possessionDate);
   const launchDate = formatPossessionDate(possession.launchDate);
   const carpetRange = formatAreaRange(
@@ -573,13 +688,39 @@ export function DossierScreen({ dossier }: DossierScreenProps) {
     dossier.media.find((m) => m.mediaType === "photo" && m.isPrimary) ??
     dossier.media.find((m) => m.mediaType === "photo") ??
     null;
-  const counts = dossierFactCount(dossier);
+  const lock = dossier.lock;
+  const counts = lock ? null : dossierFactCount(dossier);
   const confirmedByRera =
     rera.lastCheckedAt === null ? 0 : rera.sourcedFacts.length;
   const overImage = heroPhoto !== null;
+  const { amenitiesFullList, specifications } = splitAmenitiesFullList(
+    dossier.specifications,
+  );
+
+  const amenitiesFullListBlock =
+    amenitiesFullList === null ? null : (
+      <div className="flex flex-col gap-2 pt-2" data-slot="amenities-full-list">
+        <Eyebrow>{amenitiesFullList.label}</Eyebrow>
+        <BodyText className="text-muted-foreground text-sm">
+          As printed by the developer, broader than the catalog above and not
+          used to compare properties.
+        </BodyText>
+        {splitListValue(amenitiesFullList.valueText) ? (
+          <ItemList items={splitListValue(amenitiesFullList.valueText) ?? []} />
+        ) : (
+          <BodyText className="text-sm">
+            <FactValue
+              status={amenitiesFullList.status}
+              value={amenitiesFullList.valueText}
+            />
+          </BodyText>
+        )}
+      </div>
+    );
 
   return (
     <PageFrame>
+      <DossierTracker slug={dossier.slug} />
       {/*
        * Structured data describing a residence, never an offer — an offer's
        * purpose is to carry a price. Built by `dossierJsonLd`, which is tested
@@ -675,7 +816,9 @@ export function DossierScreen({ dossier }: DossierScreenProps) {
               <CompareToggle
                 slug={dossier.slug}
                 name={dossier.name}
-                mediaId={heroPhoto?.id ?? dossier.media[0]?.id ?? null}
+                mediaId={
+                  heroPhoto?.id ?? identityPicture(dossier.media)?.id ?? null
+                }
               />
               <SavePropertyButton propertyId={dossier.id} slug={dossier.slug} />
             </div>
@@ -727,9 +870,12 @@ export function DossierScreen({ dossier }: DossierScreenProps) {
 
         <PageSection className="grid grid-cols-1 gap-12 lg:grid-cols-12">
           <div className="flex min-w-0 flex-col gap-14 lg:col-span-8">
+            {lock ? <UnlockPrompt slug={dossier.slug} lock={lock} /> : null}
+
             <MediaSection
               media={dossier.media}
               unitVariants={dossier.unitVariants}
+              lock={lock}
             />
 
             <Section
@@ -741,94 +887,234 @@ export function DossierScreen({ dossier }: DossierScreenProps) {
                 <BodyText className="text-muted-foreground">
                   No unit configurations have been published for this property.
                 </BodyText>
+              ) : lock ? (
+                <LockedConfigurations variants={dossier.unitVariants} />
               ) : (
                 <Configurations variants={dossier.unitVariants} />
               )}
             </Section>
 
-            <CatalogSection
-              title="Amenities"
-              id="amenities"
-              slot="dossier-amenities"
-              items={dossier.amenities}
-              emptyMessage="No amenities have been recorded for this property."
-            />
+            {lock ? (
+              <Section
+                title="Amenities"
+                id="amenities"
+                data-slot="dossier-amenities"
+              >
+                <LockedAmenities catalog={lock.amenityCatalog} />
+                {amenitiesFullListBlock}
+              </Section>
+            ) : (
+              <CatalogSection
+                title="Amenities"
+                id="amenities"
+                slot="dossier-amenities"
+                items={dossier.amenities}
+                emptyMessage="No amenities have been recorded for this property."
+                trailing={amenitiesFullListBlock}
+              />
+            )}
 
-            <CatalogSection
-              title="Specifications"
-              id="specifications"
-              slot="dossier-specifications"
-              items={dossier.specifications}
-              emptyMessage="No specifications have been recorded for this property."
-            />
-
-            <Section title="RERA" id="rera" data-slot="dossier-rera">
-              <dl className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-                {/*
-                 * `registered: false` renders as "Not stated", not as "Not
-                 * registered". The column defaults to false and no code path sets
-                 * it — the field contract records that OCR never sets RERA
-                 * verification — so false means "no registration has been
-                 * recorded here", which is not the same claim as "this project is
-                 * not registered". Asserting the latter about a real project
-                 * would be a fabricated fact of the worst kind.
-                 */}
-                <Fact label="Registration">
-                  <FactValue value={rera.registered ? "Registered" : null} />
-                </Fact>
-                <Fact label="Registration number">
-                  <FactValue value={rera.registrationNumber} tabular />
-                  <ReraSource rera={rera} fact="registration_number" />
-                </Fact>
-                <Fact label="Last verified">
-                  <FactValue
-                    value={
-                      rera.lastVerifiedAt === null
-                        ? null
-                        : rera.lastVerifiedAt.slice(0, 10)
-                    }
-                    tabular
-                  />
-                </Fact>
-                <Fact label="Project land area">
-                  <FactValue
-                    value={
-                      formatSqft(rera.projectLandAreaSqft) === null
-                        ? null
-                        : `${formatSqft(rera.projectLandAreaSqft)} sq ft`
-                    }
-                    tabular
-                  />
-                </Fact>
-                <Fact label="Carpet area range">
-                  <FactValue value={carpetRange} tabular />
-                </Fact>
-                <Fact label="Construction progress">
-                  <FactValue
-                    value={formatPercent(rera.constructionProgressPercent)}
-                    tabular
-                  />
-                  <ReraSource rera={rera} fact="construction_progress" />
-                </Fact>
-              </dl>
-            </Section>
+            {lock ? (
+              <Section
+                title="Specifications"
+                id="specifications"
+                data-slot="dossier-specifications"
+              >
+                <LockedSpecifications catalog={lock.specificationCatalog} />
+              </Section>
+            ) : (
+              <CatalogSection
+                title="Specifications"
+                id="specifications"
+                slot="dossier-specifications"
+                items={specifications}
+                emptyMessage="No specifications have been recorded for this property."
+              />
+            )}
 
             <Section
               title="Location"
               id="location"
               data-slot="dossier-location"
             >
-              <dl className="grid grid-cols-2 gap-6 sm:grid-cols-3">
-                <Fact label="Locality">
-                  <FactValue value={location.locality} />
-                </Fact>
-                <Fact label="City">
-                  <FactValue value={location.city} />
-                </Fact>
-                <Fact label="Pincode">
-                  <FactValue value={location.pincode} tabular />
-                </Fact>
-              </dl>
+              {lock ? (
+                <LockedFacts
+                  slot="locked-location"
+                  labels={[
+                    "Pincode",
+                    "Map",
+                    "Connectivity",
+                    "Hospitals",
+                    "Schools and institutions",
+                  ]}
+                  unlock="Sign in to see exactly where it is and what is nearby"
+                />
+              ) : (
+                <>
+                  <dl className="grid grid-cols-2 gap-6 sm:grid-cols-3">
+                    <Fact label="Locality">
+                      <FactValue value={location.locality} />
+                    </Fact>
+                    <Fact label="City">
+                      <FactValue value={location.city} />
+                    </Fact>
+                    <Fact label="Pincode">
+                      <FactValue value={location.pincode} tabular />
+                    </Fact>
+                    {location.nearby.plotNumber ? (
+                      <Fact label="Plot number">
+                        <FactValue value={location.nearby.plotNumber} tabular />
+                      </Fact>
+                    ) : null}
+                  </dl>
+
+                  {location.mapUrl ? (
+                    <div
+                      data-slot="dossier-map"
+                      className="mt-8 flex flex-col gap-3"
+                    >
+                      {embedUrl ? (
+                        <iframe
+                          src={embedUrl}
+                          title={`Map of ${dossier.name}`}
+                          loading="lazy"
+                          referrerPolicy="no-referrer-when-downgrade"
+                          className="border-border aspect-[16/9] w-full rounded-lg border"
+                        />
+                      ) : null}
+                      <a
+                        href={location.mapUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-primary w-fit text-sm underline underline-offset-4"
+                      >
+                        Open in Google Maps
+                      </a>
+                    </div>
+                  ) : null}
+
+                  <div
+                    data-slot="dossier-nearby"
+                    className="mt-8 grid gap-8 sm:grid-cols-3"
+                  >
+                    {nearbyLists.map((list) =>
+                      list.items.length > 0 ? (
+                        <div key={list.label} className="flex flex-col gap-2">
+                          <h3 className="font-display text-lg">{list.label}</h3>
+                          <ul className="flex flex-col gap-1.5 text-sm">
+                            {list.items.map((item) => (
+                              <li key={item}>{item}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      ) : null,
+                    )}
+                  </div>
+                  {nearbyLists.every((list) => list.items.length === 0) ? (
+                    <p
+                      data-slot="dossier-nearby-empty"
+                      className="text-muted-foreground mt-8 text-sm"
+                    >
+                      Nearby connectivity, hospitals and schools are not stated.
+                    </p>
+                  ) : null}
+                </>
+              )}
+            </Section>
+
+            <Section title="RERA" id="rera" data-slot="dossier-rera">
+              {lock ? (
+                <LockedFacts
+                  slot="locked-rera"
+                  labels={[
+                    "Last checked with RERA",
+                    "Project land area",
+                    "Density",
+                    "Units per floor",
+                    "Carpet area range",
+                    "Construction progress",
+                    "Units available",
+                    "Latest quarterly filing",
+                    "The team",
+                  ]}
+                  unlock="Sign in to see the full RERA record"
+                />
+              ) : (
+                <>
+                  <dl className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                    {/*
+                     * `registered: false` renders as "Not stated", not as "Not
+                     * registered". The column defaults to false and no code path sets
+                     * it — the field contract records that OCR never sets RERA
+                     * verification — so false means "no registration has been
+                     * recorded here", which is not the same claim as "this project is
+                     * not registered". Asserting the latter about a real project
+                     * would be a fabricated fact of the worst kind.
+                     */}
+                    <Fact label="Registration">
+                      <FactValue
+                        value={rera.registered ? "Registered" : null}
+                      />
+                    </Fact>
+                    <Fact label="Registration number">
+                      <FactValue value={rera.registrationNumber} tabular />
+                      <ReraSource rera={rera} fact="registration_number" />
+                    </Fact>
+                    {/* The date of the latest successful check of the regulator's
+                     * record. */}
+                    <Fact label="Last checked with RERA">
+                      <FactValue
+                        value={
+                          rera.lastCheckedAt === null
+                            ? null
+                            : shortDate(rera.lastCheckedAt)
+                        }
+                        tabular
+                      />
+                    </Fact>
+                    <Fact label="Project land area">
+                      <FactValue
+                        value={
+                          formatSqft(rera.projectLandAreaSqft) === null
+                            ? null
+                            : `${formatSqft(rera.projectLandAreaSqft)} sq ft`
+                        }
+                        tabular
+                      />
+                    </Fact>
+                    {/* Calculated from the land area and the unit count; it replaced the
+                     * density specification (schema v18), so it is stated here. */}
+                    <Fact label="Density">
+                      <FactValue value={densityText(dossier)} tabular />
+                    </Fact>
+                    {/* The whole floor, worked out from units, towers and floors: not one
+                     * unit type's count on its floor. */}
+                    <Fact label="Units per floor">
+                      <FactValue value={unitsPerFloorText(dossier)} tabular />
+                    </Fact>
+                    <Fact label="Carpet area range">
+                      <FactValue value={carpetRange} tabular />
+                    </Fact>
+                    <Fact label="Construction progress">
+                      <FactValue
+                        value={formatPercent(rera.constructionProgressPercent)}
+                        tabular
+                      />
+                      <ReraSource rera={rera} fact="construction_progress" />
+                    </Fact>
+                    {/* Everything else the regulator states, each with the quarter or
+                     * date it is as on (schema v17). A figure it does not state has no
+                     * line. */}
+                    {rera.facts
+                      ? reraFactLines(rera.facts).map((line) => (
+                          <Fact key={line.label} label={line.label}>
+                            <FactValue value={line.value} tabular />
+                          </Fact>
+                        ))
+                      : null}
+                  </dl>
+                </>
+              )}
             </Section>
 
             <Section
@@ -836,36 +1122,46 @@ export function DossierScreen({ dossier }: DossierScreenProps) {
               id="developer"
               data-slot="dossier-developer"
             >
-              <dl className="flex flex-col gap-4">
-                <Fact label="Name">
-                  <Link
-                    href={developerHref(developer.id)}
-                    className="underline underline-offset-4"
-                  >
-                    {developer.name}
-                  </Link>{" "}
-                  <span className="text-muted-foreground">
-                    (all their published projects)
-                  </span>
-                </Fact>
-                <Fact label="About">
-                  <FactValue value={developer.description} />
-                </Fact>
-                <Fact label="Website">
-                  {developer.website === null ? (
-                    <FactValue value={null} />
-                  ) : (
-                    <a
-                      href={developer.website}
-                      rel="noopener noreferrer nofollow"
-                      target="_blank"
-                      className="underline underline-offset-4"
-                    >
-                      {developer.website}
-                    </a>
-                  )}
-                </Fact>
-              </dl>
+              {lock ? (
+                <LockedFacts
+                  slot="locked-developer"
+                  labels={["About", "Website"]}
+                  unlock="Sign in to see more about the developer"
+                />
+              ) : (
+                <>
+                  <dl className="flex flex-col gap-4">
+                    <Fact label="Name">
+                      <Link
+                        href={developerHref(developer.id)}
+                        className="underline underline-offset-4"
+                      >
+                        {developer.name}
+                      </Link>{" "}
+                      <span className="text-muted-foreground">
+                        (all their published projects)
+                      </span>
+                    </Fact>
+                    <Fact label="About">
+                      <FactValue value={developer.description} />
+                    </Fact>
+                    <Fact label="Website">
+                      {developer.website === null ? (
+                        <FactValue value={null} />
+                      ) : (
+                        <a
+                          href={developer.website}
+                          rel="noopener noreferrer nofollow"
+                          target="_blank"
+                          className="underline underline-offset-4"
+                        >
+                          {developer.website}
+                        </a>
+                      )}
+                    </Fact>
+                  </dl>
+                </>
+              )}
             </Section>
 
             <Section
@@ -895,40 +1191,59 @@ export function DossierScreen({ dossier }: DossierScreenProps) {
             className="lg:sticky lg:top-24 lg:col-span-4 lg:self-start"
           >
             <div className="bg-tone-sage border-border flex flex-col gap-6 rounded-lg border p-6">
-              <div
-                data-slot="dossier-completeness"
-                className="flex flex-col gap-3"
-              >
-                <Eyebrow>Facts stated</Eyebrow>
-                <p className="font-display text-5xl leading-none">
-                  {counts.stated}
-                  <span className="text-muted-foreground text-2xl">
-                    {" "}
-                    of {counts.total}
-                  </span>
-                </p>
+              {counts === null ? (
                 <div
-                  role="img"
-                  aria-label={`${counts.stated} of ${counts.total} facts stated`}
-                  className="bg-border h-1.5 w-full overflow-hidden rounded-full"
+                  data-slot="dossier-locked-note"
+                  className="flex flex-col gap-3"
                 >
-                  <div
-                    className="bg-primary h-full"
-                    style={{
-                      width: `${counts.total === 0 ? 0 : (counts.stated / counts.total) * 100}%`,
-                    }}
-                  />
+                  <Eyebrow>Full record</Eyebrow>
+                  <p className="text-muted-foreground text-sm leading-6">
+                    The unit types, amenities, floor plans and remaining photos
+                    open when you sign in.
+                  </p>
+                  <a
+                    href={`#${UNLOCK_ID}`}
+                    className="text-primary w-fit text-sm underline underline-offset-4"
+                  >
+                    Sign in with your phone number
+                  </a>
                 </div>
-                <p className="text-muted-foreground text-xs leading-5">
-                  How much of this record has been stated. It says nothing about
-                  the property itself.
-                  {confirmedByRera > 0
-                    ? ` ${confirmedByRera} ${
-                        confirmedByRera === 1 ? "fact matches" : "facts match"
-                      } the GujRERA record.`
-                    : ""}
-                </p>
-              </div>
+              ) : (
+                <div
+                  data-slot="dossier-completeness"
+                  className="flex flex-col gap-3"
+                >
+                  <Eyebrow>Facts stated</Eyebrow>
+                  <p className="font-display text-5xl leading-none">
+                    {counts.stated}
+                    <span className="text-muted-foreground text-2xl">
+                      {" "}
+                      of {counts.total}
+                    </span>
+                  </p>
+                  <div
+                    role="img"
+                    aria-label={`${counts.stated} of ${counts.total} facts stated`}
+                    className="bg-border h-1.5 w-full overflow-hidden rounded-full"
+                  >
+                    <div
+                      className="bg-primary h-full"
+                      style={{
+                        width: `${counts.total === 0 ? 0 : (counts.stated / counts.total) * 100}%`,
+                      }}
+                    />
+                  </div>
+                  <p className="text-muted-foreground text-xs leading-5">
+                    How much of this record has been stated. It says nothing
+                    about the property itself.
+                    {confirmedByRera > 0
+                      ? ` ${confirmedByRera} ${
+                          confirmedByRera === 1 ? "fact matches" : "facts match"
+                        } the GujRERA record.`
+                      : ""}
+                  </p>
+                </div>
+              )}
               <nav
                 aria-label="On this page"
                 className="border-border border-t pt-5"
@@ -951,13 +1266,14 @@ export function DossierScreen({ dossier }: DossierScreenProps) {
           </aside>
         </PageSection>
 
-        <div className="pb-16">
+        <div className="flex flex-wrap items-center gap-6 pb-16">
           <Link
             href={BROWSE_PATH}
             className="border-border text-foreground inline-flex items-center rounded-lg border px-4 py-2 text-sm transition-colors hover:border-[var(--color-terracotta)]"
           >
             Back to all properties
           </Link>
+          <ReportProblemLink propertyName={dossier.name} />
         </div>
       </PageContainer>
     </PageFrame>

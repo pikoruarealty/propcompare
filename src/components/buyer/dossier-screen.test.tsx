@@ -130,6 +130,60 @@ describe("DossierScreen — the full property", () => {
   });
 });
 
+describe("DossierScreen — units per floor", () => {
+  it("states what a whole-floor plan says, saying where it came from, never a division", () => {
+    // The fixture's towers each have one unit type stating 4 a floor.
+    const { main } = renderDossier(richDossierFixture);
+    expect(main).toHaveTextContent("4 in A and B (floor plans)");
+    expect(main).not.toHaveTextContent("about 6.6");
+  });
+
+  it("says not stated when no plan covers a whole floor and RERA has not counted it", () => {
+    const { container } = renderDossier({
+      ...richDossierFixture,
+      unitVariants: richDossierFixture.unitVariants.map((variant) => ({
+        ...variant,
+        unitsPerFloor: null,
+      })),
+    });
+    const fact = [...container.querySelectorAll("dt")].find(
+      (term) => term.textContent === "Units per floor",
+    )?.parentElement;
+    expect(fact).toHaveTextContent("Not stated");
+  });
+});
+
+describe("DossierScreen — a unit type's private amenities", () => {
+  it("lists what the open unit type states, with 'not offered' kept apart", () => {
+    const { container } = renderDossier(richDossierFixture);
+    const amenities = openVariant(container).querySelector<HTMLElement>(
+      '[data-slot="variant-amenities"]',
+    )!;
+
+    expect(amenities).toHaveTextContent("Private amenities");
+    const jacuzzi = within(amenities)
+      .getByText("Jacuzzi")
+      .closest('[data-slot="catalog-item"]')!;
+    const sauna = within(amenities)
+      .getByText("Sauna")
+      .closest('[data-slot="catalog-item"]')!;
+    expect(jacuzzi).toHaveAttribute("data-status", "available");
+    expect(sauna).toHaveAttribute("data-status", "explicitly_not_offered");
+  });
+
+  it("says 'Not stated' for a unit type with none, rather than showing nothing", async () => {
+    const user = userEvent.setup();
+    const { container } = renderDossier(richDossierFixture);
+    await user.click(screen.getAllByRole("tab")[1]);
+    const amenities = openVariant(container).querySelector<HTMLElement>(
+      '[data-slot="variant-amenities"]',
+    )!;
+
+    expect(amenities).toHaveTextContent("Not stated");
+    expect(amenities.querySelector('[data-slot="catalog-item"]')).toBeNull();
+  });
+});
+
 describe("DossierScreen — area bases", () => {
   it("lists every basis a variant published", () => {
     const { container } = renderDossier(richDossierFixture);
@@ -302,7 +356,10 @@ describe("DossierScreen — the verified badge", () => {
     const badge = container.querySelector('[data-slot="verified-badge"]');
 
     expect(badge).not.toBeNull();
-    expect(badge).toHaveTextContent(
+    // The badge says "RERA Verified" alone; the number is in its tooltip and in
+    // the RERA section below.
+    expect(badge?.textContent?.trim()).toBe("RERA Verified");
+    expect(badge?.getAttribute("title")).toContain(
       richDossierFixture.rera.registrationNumber!,
     );
   });
@@ -516,5 +573,101 @@ describe("DossierScreen — crediting the regulator", () => {
         }).container,
       ),
     ).toHaveLength(0);
+  });
+
+  it("shows the location with a map, a link to Google Maps, and what is nearby as plain lists", () => {
+    const { main } = renderDossier(richDossierFixture);
+    const location = sectionOf(main, "dossier-location");
+
+    const frame = location.querySelector("iframe");
+    expect(frame).not.toBeNull();
+    expect(frame?.getAttribute("src")).toContain("output=embed");
+    expect(frame?.getAttribute("src")).toContain("23.0369");
+    expect(
+      within(location).getByRole("link", { name: "Open in Google Maps" }),
+    ).toHaveAttribute("href", richDossierFixture.location.mapUrl);
+
+    expect(
+      within(location).getByRole("heading", { name: "Connectivity" }),
+    ).toBeVisible();
+    expect(within(location).getByText("Airport 16.2 Km")).toBeVisible();
+    expect(
+      within(location).getByText("Apex Heart Institute 650 Mtr"),
+    ).toBeVisible();
+  });
+
+  it("draws no map for a short share link, but still offers the link; and says plainly when nothing nearby is stated", () => {
+    const { main } = renderDossier({
+      ...sparseDossierFixture,
+      location: {
+        ...sparseDossierFixture.location,
+        mapUrl: "https://maps.app.goo.gl/AbCdEf123",
+      },
+    });
+    const location = sectionOf(main, "dossier-location");
+    expect(location.querySelector("iframe")).toBeNull();
+    expect(
+      within(location).getByRole("link", { name: "Open in Google Maps" }),
+    ).toBeVisible();
+    expect(
+      within(location).getByText(
+        "Nearby connectivity, hospitals and schools are not stated.",
+      ),
+    ).toBeVisible();
+  });
+
+  it("shows no map and no link when none is set", () => {
+    const { main } = renderDossier(sparseDossierFixture);
+    const location = sectionOf(main, "dossier-location");
+    expect(location.querySelector("iframe")).toBeNull();
+    expect(
+      within(location).queryByRole("link", { name: "Open in Google Maps" }),
+    ).toBeNull();
+  });
+});
+
+describe("DossierScreen — density", () => {
+  it("states the calculated density in the RERA section, in place of the retired specification", () => {
+    const { main } = renderDossier({
+      ...richDossierFixture,
+      plotAreaSqft: null,
+      totalUnits: 100,
+      rera: { ...richDossierFixture.rera, projectLandAreaSqft: "87120.00" },
+    });
+
+    const rera = within(sectionOf(main, "dossier-rera"));
+    expect(rera.getByText("Density")).toBeInTheDocument();
+    expect(
+      rera.getByText("50 units per acre (land area per RERA)"),
+    ).toBeInTheDocument();
+  });
+
+  it("says not stated when the land area is not known", () => {
+    const { main } = renderDossier({
+      ...richDossierFixture,
+      plotAreaSqft: null,
+      totalUnits: 100,
+      rera: { ...richDossierFixture.rera, projectLandAreaSqft: null },
+    });
+
+    const rera = sectionOf(main, "dossier-rera");
+    const fact = within(rera).getByText("Density").closest("div");
+    expect(fact).toHaveTextContent(/not stated/i);
+  });
+});
+
+describe("DossierScreen — the verified badge's date", () => {
+  it("carries the date of the latest successful RERA check", () => {
+    const { container } = renderDossier({
+      ...richDossierFixture,
+      rera: {
+        ...richDossierFixture.rera,
+        registered: true,
+        lastCheckedAt: "2026-09-20T06:00:00.000Z",
+      },
+    });
+
+    const badge = container.querySelector('[data-slot="verified-badge"]');
+    expect(badge?.getAttribute("title")).toMatch(/last verified 2026-09-20/);
   });
 });

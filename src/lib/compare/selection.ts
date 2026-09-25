@@ -64,6 +64,15 @@ const snapshot = (): CompareChoice[] => {
   return cachedItems;
 };
 
+/** The slugs in the comparison set right now, read outside React (analytics). */
+export const currentCompareSlugs = (): string[] => {
+  try {
+    return snapshot().map((item) => item.slug);
+  } catch {
+    return [];
+  }
+};
+
 const write = (items: CompareChoice[]) => {
   try {
     window.localStorage.setItem(

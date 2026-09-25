@@ -40,12 +40,15 @@ const renderPanel = (
       published={published}
       removedIds={[]}
       onSetRemoved={onSetRemoved}
+      mainPhotoId={null}
+      onSetMainPhoto={async () => null}
       media={[]}
       variantNames={[]}
       editable
       reviewable
       pending={false}
       onReview={() => undefined}
+      onDelete={() => undefined}
       onUploaded={() => undefined}
       {...overrides}
     />,
@@ -121,12 +124,15 @@ describe("MediaPanel — pictures already on the listing", () => {
         published={published}
         removedIds={[]}
         onSetRemoved={async () => null}
+        mainPhotoId={null}
+        onSetMainPhoto={async () => null}
         media={[]}
         variantNames={[]}
         editable={false}
         reviewable
         pending={false}
         onReview={() => undefined}
+        onDelete={() => undefined}
         onUploaded={() => undefined}
       />,
     );
@@ -139,5 +145,85 @@ describe("MediaPanel — pictures already on the listing", () => {
     expect(
       document.querySelector('[data-slot="published-pictures"]'),
     ).toBeNull();
+  });
+});
+
+describe("MediaPanel — the main photo", () => {
+  const candidate = (over: Record<string, unknown> = {}) => ({
+    id: "44444444-4444-4444-8444-444444444444",
+    submissionId: "s1",
+    mediaType: "photo" as const,
+    caption: "New clubhouse",
+    attribution: "Sun VN",
+    sourceKind: "own" as const,
+    unitVariantName: null,
+    reviewStatus: "confirmed" as const,
+    isPublic: true,
+    previewUrl: "https://example.test/x.webp",
+    ...over,
+  });
+
+  it("marks the current main photo, and offers the action on the other photos only", async () => {
+    const user = userEvent.setup();
+    const onSetMainPhoto = vi.fn(async () => null);
+    renderPanel({
+      mainPhotoId: published[0].id,
+      onSetMainPhoto,
+      media: [candidate()] as never,
+    });
+
+    const [photo, plan] = Array.from(cards());
+    expect(
+      within(photo).getByText(/Main photo: stands for the project/),
+    ).toBeVisible();
+    expect(
+      within(photo).queryByRole("button", { name: "Make main photo" }),
+    ).toBeNull();
+    // A floor plan can never be the main photo.
+    expect(
+      within(plan).queryByRole("button", { name: "Make main photo" }),
+    ).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "Make main photo" }));
+    expect(onSetMainPhoto).toHaveBeenCalledWith(candidate().id);
+  });
+
+  it("offers it on a live photo, and does not offer it on an unapproved or private candidate", async () => {
+    const user = userEvent.setup();
+    const onSetMainPhoto = vi.fn(async () => null);
+    renderPanel({
+      mainPhotoId: candidate().id,
+      onSetMainPhoto,
+      media: [
+        candidate(),
+        candidate({
+          id: "55555555-5555-4555-8555-555555555555",
+          reviewStatus: "needs_review",
+        }),
+        candidate({
+          id: "66666666-6666-4666-8666-666666666666",
+          isPublic: false,
+        }),
+      ] as never,
+    });
+
+    // Only the live photo can be chosen: the one candidate that is approved and
+    // public is already the main photo, and the other two cannot be.
+    const buttons = screen.getAllByRole("button", { name: "Make main photo" });
+    expect(buttons).toHaveLength(1);
+    await user.click(buttons[0]);
+    expect(onSetMainPhoto).toHaveBeenCalledWith(published[0].id);
+  });
+
+  it("shows the reason when the choice cannot be saved", async () => {
+    const user = userEvent.setup();
+    renderPanel({
+      mainPhotoId: null,
+      onSetMainPhoto: async () => "That field is not active.",
+    });
+    await user.click(screen.getByRole("button", { name: "Make main photo" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "That field is not active.",
+    );
   });
 });

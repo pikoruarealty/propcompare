@@ -249,3 +249,41 @@ describe("confirmed brochure routing", () => {
     expect(job.status).toBe("draft");
   });
 });
+
+describe("a single-facility page against the real catalog", () => {
+  it("is matched to its amenity and kept out of the amenities read when the routing is saved", async () => {
+    const created = await createDraft(4);
+
+    const manifest = await saveConfirmedRouting(db, {
+      ocrJobId: created.ocrJobId,
+      pages: [
+        { pageNumber: 1, category: "project_details" },
+        { pageNumber: 2, category: "amenities", caption: "Swimming Pool" },
+        { pageNumber: 3, category: "amenities", caption: "Observatory" },
+        { pageNumber: 4, category: "ignore" },
+      ],
+    });
+
+    expect(manifest.singleFacilities).toEqual([
+      {
+        pageNumber: 2,
+        caption: "Swimming Pool",
+        amenityKey: "swimming_pool",
+        amenityLabel: "Swimming pool",
+      },
+    ]);
+    const amenities = manifest.scopes.find(
+      (scope) => scope.kind === "amenities",
+    );
+    expect(amenities?.pages.map((page) => page.pageNumber)).toEqual([1, 3]);
+
+    const [job] = await db
+      .select({ routingManifest: ocrExtractionJobs.routingManifest })
+      .from(ocrExtractionJobs)
+      .where(eq(ocrExtractionJobs.id, created.ocrJobId));
+    expect(job.routingManifest).toEqual(manifest);
+
+    // It queues like any confirmed routing; nothing paid happens here.
+    await queueConfirmedOcr(db, created.ocrJobId);
+  });
+});

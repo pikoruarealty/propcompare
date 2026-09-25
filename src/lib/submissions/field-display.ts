@@ -10,7 +10,12 @@
  */
 
 export type FieldGroupKey =
-  "project" | "developer" | "amenities" | "specifications" | "unit_types";
+  | "project"
+  | "location"
+  | "developer"
+  | "amenities"
+  | "specifications"
+  | "unit_types";
 
 export const FIELD_GROUPS: {
   key: FieldGroupKey;
@@ -21,6 +26,12 @@ export const FIELD_GROUPS: {
     key: "project",
     title: "Project",
     description: "Name, location, possession and registration.",
+  },
+  {
+    key: "location",
+    title: "Location & connectivity",
+    description:
+      "Landmarks, transit, hospitals and schools near the project, and its plot number, as the brochure prints them.",
   },
   {
     key: "developer",
@@ -45,9 +56,26 @@ export const FIELD_GROUPS: {
   },
 ];
 
+/** The specification fields the catalog files under "Location & legal"
+ * (schema v12): what is near the project, not how it is built. */
+const LOCATION_SPECIFICATION_KEYS = new Set([
+  "property.google_maps_url",
+  "property.latitude",
+  "property.longitude",
+  "property.specifications.nearby_connectivity",
+  "property.specifications.nearby_hospitals",
+  "property.specifications.nearby_schools",
+  "property.specifications.plot_no",
+]);
+
 export const groupOfField = (fieldKey: string): FieldGroupKey => {
   if (fieldKey === "unit_variants") return "unit_types";
   if (fieldKey === "property.amenities") return "amenities";
+  // The developer's own full amenities list is shown with the amenities, as it is
+  // on the dossier, not among the construction specifications.
+  if (fieldKey === "property.specifications.amenities_full_list")
+    return "amenities";
+  if (LOCATION_SPECIFICATION_KEYS.has(fieldKey)) return "location";
   if (fieldKey.startsWith("property.specifications.")) return "specifications";
   if (fieldKey.startsWith("developer.")) return "developer";
   if (fieldKey === "property.legal_entity_id") return "developer";

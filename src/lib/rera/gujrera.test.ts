@@ -1,17 +1,27 @@
 import { describe, expect, it } from "vitest";
-import { createGujreraAdapter, type FetchLike } from "./gujrera";
+import {
+  boundaryCentre,
+  createGujreraAdapter,
+  parseBoundary,
+  readAmenityFlags,
+  type FetchLike,
+} from "./gujrera";
 import {
   amarisDetailResponse,
   amarisFormOneResponse,
+  boundaryResponse,
   detailResponse,
   flatListResponse,
   formOneResponse,
   inventoryResponse,
+  latestFilingRoutes,
   kimanaSearchHit,
   KIMANA_NUMBER,
+  latestFormOneWithFlagsResponse,
   POISON,
   POISON_TEXT,
   progressResponse,
+  promoterResponse,
   quartersResponse,
   searchResponse,
   summaryResponse,
@@ -27,10 +37,12 @@ const fakeSite = (overrides: Routes = {}) => {
     "/project_reg/public/global-search": searchResponse(),
     "/project_reg/public/getproject-details/17929": detailResponse,
     "/project_reg/public/alldatabyprojectid/17929": summaryResponse,
+    "/user_reg/promoter/promoter17009": promoterResponse,
     "/formone/public/getfrom-one-progs-rept-projectid/17929": progressResponse,
     "/formthree/public/get-fromthree-a-details-byid/417562": inventoryResponse,
     "/quarter/public/getprojectqtrs/17929": quartersResponse,
     "/formone/public/getfrom-one-byformone-id/278008": formOneResponse,
+    ...latestFilingRoutes,
     "/formthree/public/get-inv-details-for-view": flatListResponse,
     ...overrides,
   };
@@ -75,7 +87,8 @@ describe("GujRERA adapter — a full record", () => {
       completionDate: "2027-04-30",
       district: "Ahmedabad",
       totalUnits: 76,
-      constructionProgressPercent: 67.71875,
+      // The latest quarterly filing's figure, not the older certified one.
+      constructionProgressPercent: 93.72324444444445,
       gaps: [],
       fetchedAt: "2026-09-20T06:00:00.000Z",
     });
@@ -106,6 +119,7 @@ describe("GujRERA adapter — a full record", () => {
     const site = fakeSite({
       "/project_reg/public/getproject-details/17929": amarisDetailResponse,
       "/formone/public/getfrom-one-byformone-id/278008": amarisFormOneResponse,
+      "/formone/public/getfrom-one-byformone-id/325057": amarisFormOneResponse,
     });
 
     const record =
@@ -132,14 +146,22 @@ describe("GujRERA adapter — a full record", () => {
     const site = fakeSite({
       "/formone/public/getfrom-one-byformone-id/278008": () =>
         new Response("no", { status: 500 }),
+      "/formone/public/getfrom-one-byformone-id/325057": () =>
+        new Response("no", { status: 500 }),
     });
 
     const record =
       await adapterFor(site).lookupByRegistrationNumber(KIMANA_NUMBER);
 
     expect(record.blocks).toEqual([]);
-    // No block names means no way to ask for the flat list either.
-    expect(record.gaps).toEqual(["blocks", "flat carpet areas"]);
+    // No block names means no way to ask for the flat list either. The older
+    // certified progress still stands in for the filing's.
+    expect(record.constructionProgressPercent).toBe(67.71875);
+    expect(record.gaps).toEqual([
+      "latest filing progress",
+      "blocks",
+      "flat carpet areas",
+    ]);
   });
 
   it("reports the latest quarterly filing, ignoring other filing kinds", async () => {
@@ -153,6 +175,63 @@ describe("GujRERA adapter — a full record", () => {
       submittedOn: "2026-07-03",
       status: "SUBMITTED",
     });
+  });
+
+  it("reads the promoter group's stated history from the promoter's own record, and only that", async () => {
+    const site = fakeSite();
+    const record =
+      await adapterFor(site).lookupByRegistrationNumber(KIMANA_NUMBER);
+
+    // Years in Gujarat, and the completed and ongoing counts "by Group Entity".
+    expect(record.details?.promoter).toEqual({
+      yearsInGujarat: 11,
+      completedProjects: 0,
+      ongoingProjects: 1,
+    });
+    // Asked once, at the id the project's summary names.
+    expect(
+      site.calls.filter((call) =>
+        call.url.endsWith("/user_reg/promoter/promoter17009"),
+      ),
+    ).toHaveLength(1);
+    // Nothing else of that record (contact details, PAN, address, website, the areas
+    // built) is kept.
+    const stored = JSON.stringify(record);
+    for (const kept of [
+      "POISON-PAN",
+      "POISON ADDRESS",
+      "poison.example",
+      "7799",
+    ]) {
+      expect(stored).not.toContain(kept);
+    }
+  });
+
+  it("records a gap, and states no history, when the promoter's record cannot be read", async () => {
+    const record = await adapterFor(
+      fakeSite({
+        "/user_reg/promoter/promoter17009": () =>
+          new Response("no", { status: 500 }),
+      }),
+    ).lookupByRegistrationNumber(KIMANA_NUMBER);
+
+    expect(record.details?.promoter).toBeNull();
+    expect(record.gaps).toContain("promoter history");
+    expect(record.totalUnits).toBe(76);
+  });
+
+  it("states no history when the record prints none of the three figures", async () => {
+    const record = await adapterFor(
+      fakeSite({
+        "/user_reg/promoter/promoter17009": {
+          ...promoterResponse,
+          entities_experienceInState: "",
+          entities_noOfProjectsCompleted: null,
+          entities_ongoingProjects: "many",
+        },
+      }),
+    ).lookupByRegistrationNumber(KIMANA_NUMBER);
+    expect(record.details?.promoter).toBeNull();
   });
 
   it("lets no price and no contact detail into the record", async () => {
@@ -192,9 +271,10 @@ describe("GujRERA adapter — a full record", () => {
     });
     await adapter.lookupByRegistrationNumber(KIMANA_NUMBER);
 
-    // Search, detail, summary, progress, unit count, blocks, one flat list per
-    // block, and quarterly filings.
-    expect(seen.length).toBe(8);
+    // Search, detail, summary, the promoter's record, the latest filing's form ids,
+    // its progress and blocks, the certified progress, unit count, one flat list
+    // per block, quarterly filings and the boundary.
+    expect(seen.length).toBe(11);
     for (const init of seen) {
       const headers = init.headers as Record<string, string>;
       expect(headers["User-Agent"]).toMatch(/^PropCompare-RERA-Check/);
@@ -330,6 +410,8 @@ describe("GujRERA adapter — when the site misbehaves", () => {
 
   it("still returns a record when optional pieces are missing, and says which", async () => {
     const site = fakeSite({
+      "/quarter/public/get-qtr-form-details/17929": () =>
+        new Response("no", { status: 500 }),
       "/formone/public/getfrom-one-progs-rept-projectid/17929": () =>
         new Response("Data Not Found", { status: 200 }),
       "/quarter/public/getprojectqtrs/17929": () =>
@@ -341,7 +423,11 @@ describe("GujRERA adapter — when the site misbehaves", () => {
 
     expect(record.constructionProgressPercent).toBeNull();
     expect(record.latestQuarter).toBeNull();
-    expect(record.gaps).toEqual(["construction progress", "quarterly filings"]);
+    expect(record.gaps).toEqual([
+      "latest filing",
+      "construction progress",
+      "quarterly filings",
+    ]);
     // What did arrive is intact.
     expect(record.totalUnits).toBe(76);
     expect(record.projectName).toBe("The Kimana Towers");
@@ -349,6 +435,8 @@ describe("GujRERA adapter — when the site misbehaves", () => {
 
   it("ignores a progress figure outside 0–100 rather than storing it", async () => {
     const site = fakeSite({
+      "/quarter/public/get-qtr-form-details/17929": () =>
+        new Response("no", { status: 500 }),
       "/formone/public/getfrom-one-progs-rept-projectid/17929": {
         ...progressResponse,
         data: 240,
@@ -363,7 +451,7 @@ describe("GujRERA adapter — when the site misbehaves", () => {
 
   it("does not invent a unit count when the inventory is not a positive whole number", async () => {
     const site = fakeSite({
-      "/formthree/public/get-fromthree-a-details-byid/417562": {
+      "/formthree/public/get-fromthree-a-details-byid/446362": {
         ...inventoryResponse,
         numberOfUnits: 0,
       },
@@ -373,6 +461,147 @@ describe("GujRERA adapter — when the site misbehaves", () => {
       await adapterFor(site).lookupByRegistrationNumber(KIMANA_NUMBER);
 
     expect(record.totalUnits).toBeNull();
+  });
+});
+
+describe("GujRERA adapter — the second pass (latest filing, areas, boundary)", () => {
+  it("reads open and covered area, the authority, filing counts and the team", async () => {
+    const record =
+      await adapterFor(fakeSite()).lookupByRegistrationNumber(KIMANA_NUMBER);
+
+    expect(record.details).toMatchObject({
+      version: 1,
+      layoutLandAreaSqm: 7628,
+      openAreaSqm: 3131.1,
+      coveredAreaSqm: 4496.9,
+      coveredParkingAreaSqm: 12553.45,
+      planPassingAuthority: "AUDA",
+      registeredOn: "2022-11-11",
+      filings: { listed: 3, submitted: 3 },
+      architects: [{ name: "HM Architects", projectsCompleted: 62 }],
+      engineers: [{ name: "Setu Infrastructure", projectsCompleted: 80 }],
+      contractors: [{ name: "Builder Ltd", projectsCompleted: 24 }],
+    });
+  });
+
+  it("reads the carpet-area range from the flats listed, and the covered parking", async () => {
+    const record =
+      await adapterFor(fakeSite()).lookupByRegistrationNumber(KIMANA_NUMBER);
+
+    // The smallest and largest of the four carpet areas in the fixture's list.
+    expect(record.details?.carpetAreaRangeSqm).toEqual({
+      min: 277.26,
+      max: 572.59,
+    });
+    expect(record.details?.coveredParkingSlots).toBe(246);
+  });
+
+  it("states no carpet-area range when the flat list could not be read", async () => {
+    const record = await adapterFor(
+      fakeSite({
+        "/formthree/public/get-inv-details-for-view": () =>
+          new Response("boom", { status: 500 }),
+      }),
+    ).lookupByRegistrationNumber(KIMANA_NUMBER);
+
+    expect(record.details?.carpetAreaRangeSqm).toBeNull();
+  });
+
+  it("labels progress with the quarterly filing it came from, block by block", async () => {
+    const record =
+      await adapterFor(fakeSite()).lookupByRegistrationNumber(KIMANA_NUMBER);
+
+    expect(record.details?.filing).toMatchObject({
+      quarter: "Q-14",
+      periodEndsOn: "2026-06-30",
+      source: "quarterly_filing",
+      progressPercent: 93.72324444444445,
+      blocks: [
+        {
+          name: "A+B",
+          progressPercent: 95.86533333333334,
+          floors: 22,
+          lifts: 8,
+          slabs: 24,
+        },
+      ],
+    });
+  });
+
+  it("uses the older certified figure, and says so, when no filing can be read", async () => {
+    const record = await adapterFor(
+      fakeSite({
+        "/quarter/public/get-qtr-form-details/17929": () =>
+          new Response("no", { status: 500 }),
+      }),
+    ).lookupByRegistrationNumber(KIMANA_NUMBER);
+
+    expect(record.constructionProgressPercent).toBe(67.71875);
+    expect(record.details?.filing).toMatchObject({
+      quarter: null,
+      source: "certified_form_one",
+      progressPercent: 67.71875,
+    });
+    expect(record.gaps).toContain("latest filing");
+  });
+
+  it("states units booked and available as on the date the flat list carries", async () => {
+    const record =
+      await adapterFor(fakeSite()).lookupByRegistrationNumber(KIMANA_NUMBER);
+
+    expect(record.details?.inventory).toEqual({
+      totalUnits: 76,
+      bookedUnits: 24,
+      availableUnits: 52,
+      asOn: "2026-07-03",
+    });
+  });
+
+  it("takes the centre of the drawn boundary and drops the closing point", async () => {
+    const record =
+      await adapterFor(fakeSite()).lookupByRegistrationNumber(KIMANA_NUMBER);
+
+    expect(record.details?.boundary).toHaveLength(4);
+    expect(record.details?.centre?.lat).toBeCloseTo(23.02727, 4);
+    expect(record.details?.centre?.lng).toBeCloseTo(72.48943, 4);
+  });
+
+  it("reports a missing boundary as a gap and never reads the cost beside it", async () => {
+    const record = await adapterFor(
+      fakeSite({
+        "/maplocation/public/getProjectLocations/17929": {
+          ...boundaryResponse,
+          coordinates: [],
+        },
+      }),
+    ).lookupByRegistrationNumber(KIMANA_NUMBER);
+
+    expect(record.details?.boundary).toEqual([]);
+    expect(record.details?.centre).toBeNull();
+    expect(record.gaps).toContain("boundary");
+    expect(JSON.stringify(record)).not.toContain(String(POISON));
+  });
+});
+
+describe("boundary parsing", () => {
+  it("drops points outside India and a ring with fewer than three points left", () => {
+    expect(
+      parseBoundary([
+        { lat: "23.0", lang: "72.4" },
+        { lat: "0", lang: "0" },
+        { lat: "23.1", lang: "72.5" },
+      ]),
+    ).toEqual([]);
+  });
+
+  it("finds the centre of a square", () => {
+    const square = [
+      { lat: 23, lng: 72 },
+      { lat: 23, lng: 72.002 },
+      { lat: 23.002, lng: 72.002 },
+      { lat: 23.002, lng: 72 },
+    ];
+    expect(boundaryCentre(square)).toEqual({ lat: 23.001, lng: 72.001 });
   });
 });
 
@@ -389,6 +618,9 @@ describe("GujRERA adapter — carpet area per flat", () => {
         flatCount: 36,
         firstFlat: "A-301",
         lastFlat: "A-2002",
+        bookedCount: 12,
+        exclusiveAreaMinSqm: 194.42,
+        exclusiveAreaMaxSqm: 194.42,
       },
       {
         block: "A",
@@ -396,6 +628,9 @@ describe("GujRERA adapter — carpet area per flat", () => {
         flatCount: 2,
         firstFlat: "A-2101",
         lastFlat: "A-2102",
+        bookedCount: 0,
+        exclusiveAreaMinSqm: 194.42,
+        exclusiveAreaMaxSqm: 194.42,
       },
       {
         block: "B",
@@ -403,6 +638,9 @@ describe("GujRERA adapter — carpet area per flat", () => {
         flatCount: 36,
         firstFlat: "B-301",
         lastFlat: "B-2002",
+        bookedCount: 12,
+        exclusiveAreaMinSqm: 194.42,
+        exclusiveAreaMaxSqm: 194.42,
       },
       {
         block: "B",
@@ -410,6 +648,9 @@ describe("GujRERA adapter — carpet area per flat", () => {
         flatCount: 2,
         firstFlat: "B-2101",
         lastFlat: "B-2102",
+        bookedCount: 0,
+        exclusiveAreaMinSqm: 194.42,
+        exclusiveAreaMaxSqm: 194.42,
       },
     ]);
     expect(record.gaps).toEqual([]);
@@ -420,7 +661,7 @@ describe("GujRERA adapter — carpet area per flat", () => {
     expect(call?.method).toBe("POST");
     expect(JSON.parse(call?.body ?? "{}")).toEqual({
       blockName: "A+B",
-      formThreeId: 417562,
+      formThreeId: 446362,
     });
   });
 
@@ -428,6 +669,7 @@ describe("GujRERA adapter — carpet area per flat", () => {
     const site = fakeSite({
       "/project_reg/public/getproject-details/17929": amarisDetailResponse,
       "/formone/public/getfrom-one-byformone-id/278008": amarisFormOneResponse,
+      "/formone/public/getfrom-one-byformone-id/325057": amarisFormOneResponse,
     });
     await adapterFor(site).lookupByRegistrationNumber(KIMANA_NUMBER);
     const asked = site.calls
@@ -443,7 +685,7 @@ describe("GujRERA adapter — carpet area per flat", () => {
     expect(stored).not.toContain(String(POISON));
     expect(stored).not.toContain(POISON_TEXT);
     expect(stored).not.toMatch(
-      /allottee|mobile|unitConsideration|received|balance|BOOKED/i,
+      /allottee|mobile|unitConsideration|received|balance|"(UN)?BOOKED"/i,
     );
     expect(stored).not.toContain("A-305");
   });
@@ -496,7 +738,139 @@ describe("GujRERA adapter — carpet area per flat", () => {
         flatCount: 1,
         firstFlat: "A-999",
         lastFlat: "A-999",
+        bookedCount: 1,
+        exclusiveAreaMinSqm: 194.42,
+        exclusiveAreaMaxSqm: 194.42,
       },
+    ]);
+  });
+});
+
+describe("GujRERA adapter, the project price range", () => {
+  const withCosts = (mincost: unknown, maxcost: unknown) =>
+    fakeSite({
+      "/project_reg/public/global-search": searchResponse([
+        { ...kimanaSearchHit, mincost, maxcost },
+      ]),
+    });
+
+  it("reads the project's stated minimum and maximum cost, and nothing else", async () => {
+    const site = withCosts(22_573_000, 66_319_200);
+    const range = await adapterFor(site).lookupPriceRange!(KIMANA_NUMBER);
+
+    expect(range).toEqual({ minInr: 22_573_000, maxInr: 66_319_200 });
+    // One search request; it does not touch the per-flat list where prices are masked.
+    expect(site.calls).toHaveLength(1);
+    expect(site.calls[0].url).toContain("/project_reg/public/global-search");
+  });
+
+  it("rounds to whole rupees", async () => {
+    const range = await adapterFor(withCosts(22_573_000.4, 66_319_200.6))
+      .lookupPriceRange!(KIMANA_NUMBER);
+
+    expect(range).toEqual({ minInr: 22_573_000, maxInr: 66_319_201 });
+  });
+
+  it.each([
+    ["missing", undefined, undefined],
+    ["zero", 0, 0],
+    ["masked", "******", "******"],
+    ["upside down", 66_319_200, 22_573_000],
+    ["one bound only", 22_573_000, null],
+  ])("returns null when the range is %s", async (_label, min, max) => {
+    expect(
+      await adapterFor(withCosts(min, max)).lookupPriceRange!(KIMANA_NUMBER),
+    ).toBeNull();
+  });
+
+  it("refuses a number that is not a Gujarat RERA number, and a project it cannot find", async () => {
+    const adapter = adapterFor(withCosts(1, 2));
+
+    await expect(adapter.lookupPriceRange!("NOT-A-NUMBER")).rejects.toThrow(
+      RegulatorError,
+    );
+    await expect(
+      adapterFor(
+        fakeSite({
+          "/project_reg/public/global-search": searchResponse([]),
+        }),
+      ).lookupPriceRange!(KIMANA_NUMBER),
+    ).rejects.toMatchObject({ code: "not_found" });
+  });
+
+  it("leaves the record itself free of money even when the search hit states a range", async () => {
+    const record = await adapterFor(
+      withCosts(22_573_000, 66_319_200),
+    ).lookupByRegistrationNumber(KIMANA_NUMBER);
+    const everything = JSON.stringify(record);
+
+    expect(everything).not.toContain("22573000");
+    expect(everything).not.toContain("66319200");
+  });
+});
+
+describe("amenity flags: the brochure stays primary", () => {
+  it("adds a swimming pool or landscaping only on a yes, and treats a no as a prompt, not a fact", () => {
+    expect(
+      readAmenityFlags([{ sewSwimCapacityFlag: "Yes" }], {
+        landscapingYesNo: "YES",
+      }),
+    ).toEqual({
+      declared: ["swimming_pool", "landscaped_garden"],
+      notProposed: [],
+    });
+    expect(
+      readAmenityFlags([{ sewSwimCapacityFlag: "No" }], {
+        landscapingYesNo: "NO",
+      }),
+    ).toEqual({
+      declared: [],
+      notProposed: ["swimming_pool", "landscaped_garden"],
+    });
+  });
+
+  it("says nothing for a blank or unreadable flag", () => {
+    expect(
+      readAmenityFlags([{ sewSwimCapacityFlag: null }, {}], {
+        landscapingYesNo: "",
+        communityBuildingsYesNo: "MAYBE",
+      }),
+    ).toEqual({ declared: [], notProposed: [] });
+    expect(readAmenityFlags([], null)).toEqual({
+      declared: [],
+      notProposed: [],
+    });
+  });
+
+  it("never adds an amenity for community buildings, security or fire protection, and points a no at the halls", () => {
+    expect(
+      readAmenityFlags([], {
+        communityBuildingsYesNo: "YES",
+        securityYesNo: "YES",
+        fireProtectionYesNo: "YES",
+        waterConservationYesNo: "YES",
+        useofRenewableEnergyYesNo: "YES",
+      }),
+    ).toEqual({ declared: [], notProposed: [] });
+    expect(readAmenityFlags([], { communityBuildingsYesNo: "NO" })).toEqual({
+      declared: [],
+      notProposed: ["clubhouse", "multipurpose_hall", "banquet_hall"],
+    });
+  });
+
+  it("reads the flags from the latest filing's Form 1B", async () => {
+    const record = await adapterFor(
+      fakeSite({
+        "/formone/public/getfrom-one-byformone-id/325057":
+          latestFormOneWithFlagsResponse,
+      }),
+    ).lookupByRegistrationNumber(KIMANA_NUMBER);
+
+    expect(record.declaredAmenityKeys).toEqual(["landscaped_garden"]);
+    expect(record.notProposedAmenityKeys).toEqual([
+      "clubhouse",
+      "multipurpose_hall",
+      "banquet_hall",
     ]);
   });
 });
