@@ -1,5 +1,6 @@
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
+import { specificationIsActive } from "@/lib/specifications/active";
 import {
   amenityCatalog,
   bhkTypes,
@@ -140,6 +141,7 @@ export const loadLiveValues = async (
       and(
         eq(propertySpecifications.propertyId, propertyId),
         eq(propertySpecifications.status, "available"),
+        specificationIsActive,
       ),
     );
   for (const row of specifications) {

@@ -15,6 +15,7 @@ import { areaToSqft } from "@/lib/units/measurements";
 import { reraSnapshotProblem, type ReraSnapshot } from "@/lib/rera/snapshot";
 import { reraSourcedFacts, type CheckedRecord } from "./rera-source";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
+import { specificationIsActive } from "@/lib/specifications/active";
 import {
   amenityCatalog,
   bhkTypes,
@@ -600,7 +601,9 @@ export const getPublishedPropertyBySlug = async (
         propertySpecifications.specificationCatalogId,
       ),
     )
-    .where(eq(propertySpecifications.propertyId, row.id))
+    .where(
+      and(eq(propertySpecifications.propertyId, row.id), specificationIsActive),
+    )
     .orderBy(asc(specificationCatalog.category), asc(specificationCatalog.key));
 
   const mediaRows = await db

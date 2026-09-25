@@ -34,10 +34,13 @@ const coreLayoutTypes = [
 
 /** Contract fields switched off because the regulator now states the fact as a
  * number (`DECISIONS.md` 2026-09-24, "RERA second pass, as built"): open area,
- * and density from land area and units. Deactivated, never deleted. */
+ * and density from land area and units; and (2026-09-25) lifts per block and
+ * covered parking. Deactivated, never deleted. */
 const RETIRED_FIELD_KEYS = new Set([
   "property.specifications.open_space",
   "property.specifications.density_units_per_acre",
+  "property.specifications.lifts_per_tower",
+  "property.specifications.parking_levels",
 ]);
 
 const initialAmenityCatalog = [

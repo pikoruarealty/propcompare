@@ -1,0 +1,2 @@
+-- Two specifications the regulator states as numbers (lifts per block, covered parking), shown from its record in the comparison and dossier; deactivated, not deleted, so a property that holds one keeps the stored value and this is reversible.
+UPDATE "property_schema_fields" SET "is_active" = false, "updated_at" = now() WHERE "field_key" IN ('property.specifications.lifts_per_tower', 'property.specifications.parking_levels');

@@ -245,14 +245,6 @@ const runPublish = async (
       .where(eq(propertySubmissionMedia.submissionId, submission.id))
       .for("update");
 
-    const pendingReview = submissionFields.find(
-      (field) => field.reviewStatus === "needs_review",
-    );
-    if (pendingReview) {
-      throw new SubmissionPublishError(
-        `field ${pendingReview.fieldKey} is still needs_review and blocks publication`,
-      );
-    }
     const pendingMediaReview = submissionMedia.find(
       (media) => media.reviewStatus === "needs_review",
     );
@@ -270,6 +262,19 @@ const runPublish = async (
       .from(propertySchemaFields)
       .where(eq(propertySchemaFields.isActive, true));
     const activeFieldKeys = new Set(activeFields.map((f) => f.fieldKey));
+
+    // A value on a retired field is ignored below, so it is not asked of a
+    // reviewer either: a candidate nothing will publish must not block the rest.
+    const pendingReview = submissionFields.find(
+      (field) =>
+        field.reviewStatus === "needs_review" &&
+        activeFieldKeys.has(field.fieldKey),
+    );
+    if (pendingReview) {
+      throw new SubmissionPublishError(
+        `field ${pendingReview.fieldKey} is still needs_review and blocks publication`,
+      );
+    }
 
     const rawPayload: Record<string, unknown> = {};
     for (const field of submissionFields) {

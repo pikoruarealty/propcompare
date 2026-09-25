@@ -617,6 +617,142 @@ describe("publishSubmission", () => {
     expect(mappedRow?.budget_bucket_id).toBe(expectedBucket.id);
   });
 
+  describe("a retired specification", () => {
+    const publishWith = async (fields: Record<string, { value: unknown }>) => {
+      const submissionId = await insertSubmission({
+        developerId,
+        status: "approved",
+        fields: {
+          "property.name": { value: `Test Retired Spec ${randomUUID()}` },
+          "property.type": { value: "apartment" },
+          "property.city": { value: "Ahmedabad" },
+          "property.locality": { value: "Test Locality" },
+          ...fields,
+        },
+      });
+      const result = await publishSubmission({
+        submissionId,
+        actorUserId: testUserId,
+        actorRole: "owner",
+      });
+      createdPropertyIds.push(result.propertyId);
+      return result.propertyId;
+    };
+
+    it("does not block publishing while its candidate is still awaiting review, and writes nothing for it", async () => {
+      const submissionId = await insertSubmission({
+        developerId,
+        status: "approved",
+        fields: {
+          "property.name": { value: `Test Retired Spec ${randomUUID()}` },
+          "property.type": { value: "apartment" },
+          "property.city": { value: "Ahmedabad" },
+          "property.locality": { value: "Test Locality" },
+          "property.specifications.lifts_per_tower": {
+            value: "5",
+            reviewStatus: "needs_review",
+          },
+        },
+      });
+      const result = await publishSubmission({
+        submissionId,
+        actorUserId: testUserId,
+        actorRole: "owner",
+      });
+      createdPropertyIds.push(result.propertyId);
+
+      const rows = await db
+        .select({ key: specificationCatalog.key })
+        .from(propertySpecifications)
+        .innerJoin(
+          specificationCatalog,
+          eq(
+            specificationCatalog.id,
+            propertySpecifications.specificationCatalogId,
+          ),
+        )
+        .where(
+          and(
+            eq(propertySpecifications.propertyId, result.propertyId),
+            eq(propertySpecifications.status, "available"),
+          ),
+        );
+      expect(rows).toEqual([]);
+    });
+
+    it("still blocks publishing when a live field's candidate is awaiting review", async () => {
+      const submissionId = await insertSubmission({
+        developerId,
+        status: "approved",
+        fields: {
+          "property.name": { value: `Test Live Spec ${randomUUID()}` },
+          "property.type": { value: "apartment" },
+          "property.city": { value: "Ahmedabad" },
+          "property.locality": { value: "Test Locality" },
+          "property.specifications.flooring": {
+            value: "Vitrified tiles",
+            reviewStatus: "needs_review",
+          },
+        },
+      });
+      await expect(
+        publishSubmission({
+          submissionId,
+          actorUserId: testUserId,
+          actorRole: "owner",
+        }),
+      ).rejects.toThrow("still needs_review");
+    });
+
+    it("is kept in storage but no longer read out to buyers or to an edit", async () => {
+      const propertyId = await publishWith({
+        "property.specifications.flooring": { value: "Vitrified tiles" },
+      });
+      // A value stored before the field was retired (a test fixture: publishing
+      // ignores a retired field, so this is the only way one can exist now).
+      const [lifts] = await db
+        .select({ id: specificationCatalog.id })
+        .from(specificationCatalog)
+        .where(eq(specificationCatalog.key, "lifts_per_tower"));
+      await db
+        .update(propertySpecifications)
+        .set({ status: "available", valueText: "5" })
+        .where(
+          and(
+            eq(propertySpecifications.propertyId, propertyId),
+            eq(propertySpecifications.specificationCatalogId, lifts.id),
+          ),
+        );
+
+      const [property] = await db
+        .select({ slug: properties.slug })
+        .from(properties)
+        .where(eq(properties.id, propertyId));
+      const dossier = await getPublishedPropertyBySlug(db, property.slug);
+      const stated = dossier!.specifications
+        .filter((spec) => spec.status === "available")
+        .map((spec) => spec.key);
+      expect(stated).toContain("flooring");
+      expect(stated).not.toContain("lifts_per_tower");
+
+      const live = await loadLiveValues(db, propertyId);
+      expect(live["property.specifications.flooring"]).toBe("Vitrified tiles");
+      expect(live["property.specifications.lifts_per_tower"]).toBeUndefined();
+
+      // Still stored, untouched.
+      const [stored] = await db
+        .select({ valueText: propertySpecifications.valueText })
+        .from(propertySpecifications)
+        .where(
+          and(
+            eq(propertySpecifications.propertyId, propertyId),
+            eq(propertySpecifications.specificationCatalogId, lifts.id),
+          ),
+        );
+      expect(stored.valueText).toBe("5");
+    });
+  });
+
   describe("a unit type's own amenities", () => {
     const amenitiesOf = async (propertyId: string) => {
       const rows = await db
