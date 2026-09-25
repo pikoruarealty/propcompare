@@ -130,6 +130,37 @@ describe("DossierScreen — the full property", () => {
   });
 });
 
+describe("DossierScreen — a unit type's private amenities", () => {
+  it("lists what the open unit type states, with 'not offered' kept apart", () => {
+    const { container } = renderDossier(richDossierFixture);
+    const amenities = openVariant(container).querySelector<HTMLElement>(
+      '[data-slot="variant-amenities"]',
+    )!;
+
+    expect(amenities).toHaveTextContent("Private amenities");
+    const jacuzzi = within(amenities)
+      .getByText("Jacuzzi")
+      .closest('[data-slot="catalog-item"]')!;
+    const sauna = within(amenities)
+      .getByText("Sauna")
+      .closest('[data-slot="catalog-item"]')!;
+    expect(jacuzzi).toHaveAttribute("data-status", "available");
+    expect(sauna).toHaveAttribute("data-status", "explicitly_not_offered");
+  });
+
+  it("says 'Not stated' for a unit type with none, rather than showing nothing", async () => {
+    const user = userEvent.setup();
+    const { container } = renderDossier(richDossierFixture);
+    await user.click(screen.getAllByRole("tab")[1]);
+    const amenities = openVariant(container).querySelector<HTMLElement>(
+      '[data-slot="variant-amenities"]',
+    )!;
+
+    expect(amenities).toHaveTextContent("Not stated");
+    expect(amenities.querySelector('[data-slot="catalog-item"]')).toBeNull();
+  });
+});
+
 describe("DossierScreen — area bases", () => {
   it("lists every basis a variant published", () => {
     const { container } = renderDossier(richDossierFixture);

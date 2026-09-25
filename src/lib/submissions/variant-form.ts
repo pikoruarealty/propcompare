@@ -1,6 +1,7 @@
 import type {
   SubmissionRoomDimension,
   SubmissionUnitVariant,
+  SubmissionUnitVariantAmenity,
 } from "./validation";
 
 /**
@@ -48,6 +49,12 @@ export interface VariantForm {
   totalUnitsOfVariant: string;
   unitsPerFloor: string;
   areas: VariantAreaForm[];
+  /**
+   * The unit type's own amenities. `null` when none has been recorded, so
+   * saving writes no list and leaves the live ones alone; an array, even an empty
+   * one, is the complete set.
+   */
+  amenities: SubmissionUnitVariantAmenity[] | null;
   rooms: RoomForm[];
   balconies: RoomForm[];
   /** The foyer, when the floor plan has one; `null` when it has none. */
@@ -61,6 +68,7 @@ export const emptyVariantForm = (): VariantForm => ({
   totalUnitsOfVariant: "",
   unitsPerFloor: "",
   areas: [{ basis: "carpet", areaSqft: "" }],
+  amenities: null,
   rooms: [],
   balconies: [],
   foyer: null,
@@ -84,6 +92,7 @@ export const variantsToForm = (value: unknown): VariantForm[] => {
         basis: a.basis,
         areaSqft: text(a.areaSqft),
       })),
+      amenities: v.amenities ? v.amenities.map((a) => ({ ...a })) : null,
       rooms: (v.dimensions?.rooms ?? []).map(roomToForm),
       balconies: (v.dimensions?.balconies ?? []).map(roomToForm),
       foyer: v.dimensions?.foyer ? roomToForm(v.dimensions.foyer) : null,
@@ -219,6 +228,7 @@ export const formToVariants = (forms: VariantForm[]): VariantsResult => {
       areas.push({ basis: row.basis, areaSqft: area });
     }
     if (areas.length > 0) variant.areas = areas;
+    if (form.amenities) variant.amenities = form.amenities;
     const dimensions: NonNullable<SubmissionUnitVariant["dimensions"]> = {};
     for (const [key, list] of [
       ["rooms", form.rooms],

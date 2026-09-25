@@ -295,6 +295,62 @@ describe("validateSubmissionPayload", () => {
     );
   });
 
+  describe("a unit type's own amenities", () => {
+    const withAmenities = (amenities: unknown) => ({
+      unit_variants: [{ variantName: "Penthouse", amenities }],
+    });
+
+    it("accepts catalog amenities with either stated status", () => {
+      const payload = withAmenities([
+        { key: "gym", status: "available" },
+        { key: "swimming_pool", status: "explicitly_not_offered" },
+      ]);
+      expect(validateSubmissionPayload(payload, activeFields, lookups)).toEqual(
+        payload,
+      );
+    });
+
+    it("accepts an empty list: the complete set is none", () => {
+      const payload = withAmenities([]);
+      expect(validateSubmissionPayload(payload, activeFields, lookups)).toEqual(
+        payload,
+      );
+    });
+
+    it("rejects an amenity outside the catalog", () => {
+      expect(() =>
+        validateSubmissionPayload(
+          withAmenities([{ key: "sauna", status: "available" }]),
+          activeFields,
+          lookups,
+        ),
+      ).toThrow("not an approved amenity");
+    });
+
+    it("rejects not_stated (absence says it), a bad status, a repeat and a non-list", () => {
+      expect(() =>
+        validateSubmissionPayload(
+          withAmenities([{ key: "gym", status: "not_stated" }]),
+          activeFields,
+          lookups,
+        ),
+      ).toThrow("must be available or explicitly_not_offered");
+      expect(() =>
+        validateSubmissionPayload(
+          withAmenities([
+            { key: "gym", status: "available" },
+            { key: "gym", status: "explicitly_not_offered" },
+          ]),
+          activeFields,
+          lookups,
+        ),
+      ).toThrow("names gym twice");
+      expect(() =>
+        validateSubmissionPayload(withAmenities("gym"), activeFields, lookups),
+      ).toThrow("must be an array");
+    });
+  });
+
   it("rejects duplicate unit variant names (case-insensitive)", () => {
     expect(() =>
       validateSubmissionPayload(

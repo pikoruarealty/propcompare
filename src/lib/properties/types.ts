@@ -158,6 +158,12 @@ export interface DossierUnitVariant {
   dimensions: UnitVariantDimensions | null;
   /** May be missing bases; an absent basis is never inferred from another. */
   areas: UnitArea[];
+  /**
+   * What belongs to this unit type alone (a private terrace, a plunge pool), apart
+   * from the project's amenities. Only what has been stated is here (available or
+   * explicitly not offered); an amenity with no entry is not stated.
+   */
+  amenities: DossierAmenity[];
 }
 
 /**

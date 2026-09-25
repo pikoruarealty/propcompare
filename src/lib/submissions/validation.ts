@@ -33,6 +33,21 @@ export interface SubmissionUnitVariantAreaRow {
   areaSqft: number;
 }
 
+/**
+ * What one unit type says about one catalog amenity that belongs to it, not to
+ * the project (a private terrace, a plunge pool). "Not stated" is the absence of
+ * an entry, never an entry.
+ */
+export interface SubmissionUnitVariantAmenity {
+  key: string;
+  status: "available" | "explicitly_not_offered";
+}
+
+export const UNIT_VARIANT_AMENITY_STATUSES = [
+  "available",
+  "explicitly_not_offered",
+] as const;
+
 export interface SubmissionUnitVariant {
   variantName: string;
   bhkTypeKey?: string;
@@ -40,6 +55,8 @@ export interface SubmissionUnitVariant {
   totalUnitsOfVariant?: number;
   unitsPerFloor?: number;
   areas?: SubmissionUnitVariantAreaRow[];
+  /** When present, the complete set for this unit type; absent leaves it as it is. */
+  amenities?: SubmissionUnitVariantAmenity[];
   dimensions?: {
     rooms?: SubmissionRoomDimension[];
     foyer?: SubmissionRoomDimension | null;
@@ -188,6 +205,45 @@ const readUnitVariants = (
         return {
           basis,
           areaSqft: readPositiveNumber(area.areaSqft, `${areaPath}.areaSqft`),
+        };
+      });
+    }
+    if (candidate.amenities !== undefined) {
+      if (!Array.isArray(candidate.amenities)) {
+        throw new SubmissionPayloadError(
+          `${itemPath}.amenities must be an array`,
+        );
+      }
+      const keys = new Set<string>();
+      variant.amenities = candidate.amenities.map((entry, amenityIndex) => {
+        const amenityPath = `${itemPath}.amenities[${amenityIndex}]`;
+        if (!isRecord(entry)) {
+          throw new SubmissionPayloadError(`${amenityPath} must be an object`);
+        }
+        const key = readNonEmptyString(entry.key, `${amenityPath}.key`);
+        if (!lookups.amenityKeys.has(key)) {
+          throw new SubmissionPayloadError(
+            `${amenityPath}.key is not an approved amenity`,
+          );
+        }
+        if (keys.has(key)) {
+          throw new SubmissionPayloadError(
+            `${itemPath}.amenities names ${key} twice`,
+          );
+        }
+        keys.add(key);
+        if (
+          !(UNIT_VARIANT_AMENITY_STATUSES as readonly unknown[]).includes(
+            entry.status,
+          )
+        ) {
+          throw new SubmissionPayloadError(
+            `${amenityPath}.status must be available or explicitly_not_offered`,
+          );
+        }
+        return {
+          key,
+          status: entry.status as SubmissionUnitVariantAmenity["status"],
         };
       });
     }

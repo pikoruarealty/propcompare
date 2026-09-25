@@ -63,6 +63,7 @@ describe("lockDossier", () => {
       expect(variant.layoutType).toBeNull();
       expect(variant.totalUnitsOfVariant).toBeNull();
       expect(variant.unitsPerFloor).toBeNull();
+      expect(variant.amenities).toEqual([]);
     }
   });
 

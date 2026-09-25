@@ -382,6 +382,89 @@ describe("an edit of a published property — the fields", () => {
     ]);
   });
 
+  it("edits a unit type's own amenities, saving the whole set", async () => {
+    const onSave = vi.fn(async () => null);
+    render(
+      <FieldsPanel
+        submission={editing({
+          live: {
+            unit_variants: [
+              {
+                variantName: "Penthouse",
+                amenities: [
+                  { key: "jacuzzi", status: "available" },
+                  { key: "sauna", status: "available" },
+                ],
+              },
+            ],
+          },
+          lookups: {
+            propertyTypes: [],
+            amenities: [
+              { key: "jacuzzi", label: "Jacuzzi", category: "Wellness" },
+              { key: "sauna", label: "Sauna", category: "Wellness" },
+              { key: "spa", label: "Spa", category: "Wellness" },
+            ],
+            bhkTypes: [],
+            layoutTypes: [],
+            legalEntities: [],
+          },
+        } as Partial<SubmissionDetail>)}
+        editable
+        reviewable={false}
+        pending={false}
+        onSave={onSave}
+        onReview={() => {}}
+      />,
+    );
+    await userEvent.click(screen.getByRole("tab", { name: /Amenities/ }));
+
+    // Not offered, one taken off, one added.
+    await userEvent.selectOptions(
+      screen.getByLabelText("Jacuzzi for unit type 1"),
+      "explicitly_not_offered",
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Remove Sauna" }));
+    await userEvent.selectOptions(
+      screen.getByLabelText("Add an amenity to unit type 1"),
+      "spa",
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(onSave).toHaveBeenCalledWith("unit_variants", [
+      {
+        variantName: "Penthouse",
+        amenities: [
+          { key: "jacuzzi", status: "explicitly_not_offered" },
+          { key: "spa", status: "available" },
+        ],
+      },
+    ]);
+  });
+
+  it("saves a unit type without a list when its amenities were never opened", async () => {
+    const onSave = vi.fn(async () => null);
+    render(
+      <FieldsPanel
+        submission={editing({
+          live: {
+            unit_variants: [{ variantName: "Type A", unitsPerFloor: 4 }],
+          },
+        } as Partial<SubmissionDetail>)}
+        editable
+        reviewable={false}
+        pending={false}
+        onSave={onSave}
+        onReview={() => {}}
+      />,
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(onSave).toHaveBeenCalledWith("unit_variants", [
+      { variantName: "Type A", unitsPerFloor: 4 },
+    ]);
+  });
+
   it("says in words when a room has no measurement", async () => {
     panel(editing());
     await userEvent.click(screen.getByRole("tab", { name: /Rooms/ }));

@@ -92,6 +92,7 @@ export type GroupKey =
   | "timeline"
   | "unit_type"
   | "rooms"
+  | "unit_amenities"
   | "project"
   | "amenities"
   | "specifications"
@@ -902,6 +903,45 @@ export const buildComparison = (
         return textCell(otherRoomsText(unclassified));
       }),
     ],
+  });
+
+  // What belongs to the compared unit type alone (a private terrace, a plunge
+  // pool): the union of what either side's chosen unit type has a recorded status
+  // for, each read from that side's own unit type, never from the project.
+  const unitAmenityKeys = new Map<
+    string,
+    { label: string; category: string }
+  >();
+  for (const { variant } of chosen) {
+    for (const amenity of variant?.amenities ?? []) {
+      if (amenity.status !== "not_stated") {
+        unitAmenityKeys.set(amenity.key, {
+          label: amenity.label,
+          category: amenity.category,
+        });
+      }
+    }
+  }
+  groups.push({
+    key: "unit_amenities",
+    title: "Private amenities of the unit type",
+    rows: [...unitAmenityKeys.entries()]
+      .sort(
+        (a, b) =>
+          a[1].category.localeCompare(b[1].category) ||
+          a[1].label.localeCompare(b[1].label),
+      )
+      .map(([key, meta]) =>
+        row(
+          `unit_amenity_${key}`,
+          meta.label,
+          (_d, v) => {
+            const found = v?.amenities.find((amenity) => amenity.key === key);
+            return AMENITY_STATE(found?.status ?? "not_stated");
+          },
+          { category: meta.category },
+        ),
+      ),
   });
 
   groups.push({

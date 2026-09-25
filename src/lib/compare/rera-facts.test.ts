@@ -81,6 +81,7 @@ const variant = (name: string, carpet: number | null): DossierUnitVariant => ({
   totalUnitsOfVariant: null,
   dimensions: null,
   areas: carpet === null ? [] : [{ basis: "carpet", areaSqft: String(carpet) }],
+  amenities: [],
 });
 
 const property = (

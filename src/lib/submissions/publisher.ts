@@ -2,7 +2,7 @@ import {
   applyPricesAfterPublish,
   type ApplyPricesResult,
 } from "@/lib/pricing/apply";
-import { and, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, notInArray, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   amenityCatalog,
@@ -21,6 +21,7 @@ import {
   propertyTypes,
   specificationCatalog,
   unitAreas,
+  unitVariantAmenities,
   unitVariants,
 } from "@/db/schema/catalog";
 import { legalEntityBelongsToDeveloper } from "@/lib/developers/legal-entities";
@@ -41,6 +42,7 @@ type PropertyInsert = typeof properties.$inferInsert;
 type UnitVariantInsert = typeof unitVariants.$inferInsert;
 type UnitAreaInsert = typeof unitAreas.$inferInsert;
 type PropertyAmenityInsert = typeof propertyAmenities.$inferInsert;
+type UnitVariantAmenityInsert = typeof unitVariantAmenities.$inferInsert;
 type PropertySpecificationInsert = typeof propertySpecifications.$inferInsert;
 type PropertyMediaInsert = typeof propertyMedia.$inferInsert;
 
@@ -168,7 +170,7 @@ const assertLegalEntityBelongs = async (
 
 /**
  * The one write path into the live catalog tables (`properties`, `developers`,
- * `unit_variants`, `unit_areas`, `property_amenities`,
+ * `unit_variants`, `unit_areas`, `property_amenities`, `unit_variant_amenities`,
  * `property_specifications`, `property_media`) — see AGENTS.md. It applies exactly one
  * approved submission's reviewed field values and writes a matching
  * `property_revisions` snapshot, all inside one transaction.
@@ -593,6 +595,48 @@ const runPublish = async (
               .onConflictDoUpdate({
                 target: [unitAreas.unitVariantId, unitAreas.basis],
                 set: { areaSqft: areaValues.areaSqft },
+              });
+          }
+        }
+
+        // A unit type's own amenities (schema v11). The list a submission carries is
+        // the whole set for this unit type: what it names is written, anything else
+        // goes back to not stated. A unit type that carries no list is left alone.
+        if (variant.amenities) {
+          const idByKey = new Map(
+            lookups.amenityCatalogRows.map((row) => [row.key, row.id]),
+          );
+          const rows: UnitVariantAmenityInsert[] = variant.amenities.map(
+            (entry) => ({
+              unitVariantId: variantRow.id,
+              amenityCatalogId: requireLookup(
+                idByKey.get(entry.key),
+                `unknown amenity key: ${entry.key}`,
+              ),
+              status: entry.status,
+            }),
+          );
+          const keptIds = rows.map((row) => row.amenityCatalogId);
+          await tx
+            .delete(unitVariantAmenities)
+            .where(
+              and(
+                eq(unitVariantAmenities.unitVariantId, variantRow.id),
+                keptIds.length > 0
+                  ? notInArray(unitVariantAmenities.amenityCatalogId, keptIds)
+                  : undefined,
+              ),
+            );
+          if (rows.length > 0) {
+            await tx
+              .insert(unitVariantAmenities)
+              .values(rows)
+              .onConflictDoUpdate({
+                target: [
+                  unitVariantAmenities.unitVariantId,
+                  unitVariantAmenities.amenityCatalogId,
+                ],
+                set: { status: sql`excluded.status` },
               });
           }
         }

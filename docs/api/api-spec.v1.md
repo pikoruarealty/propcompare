@@ -96,7 +96,7 @@ No summary object contains a price, price-per-square-foot, or bucket value, at a
 
 Published dossier for one property, resolved by `properties.slug`.
 
-**Who gets what (2026-09-24, `DECISIONS.md`).** A caller with a session receives the full dossier. A caller with none receives the locked dossier (`lockDossier`): identity, possession, RERA, specifications, location and developer as usual; each unit variant with its `variantName` and `bhkType` only (`areas` empty; `layoutType`, `totalUnitsOfVariant`, `unitsPerFloor` and `dimensions` null); `amenities` empty; `media` reduced to at most three photographs (the primary first) with no floor plan, video or brochure; and a `lock` object `{ hiddenPhotos, hiddenFloorPlans, amenityCatalog: [{ label, category }] }` saying what was withheld. `lock` is absent from the full dossier. The response is `Cache-Control: private, no-store` either way, because the body depends on the caller.
+**Who gets what (2026-09-24, `DECISIONS.md`).** A caller with a session receives the full dossier. A caller with none receives the locked dossier (`lockDossier`): identity, possession, RERA, specifications, location and developer as usual; each unit variant with its `variantName` and `bhkType` only (`areas` and `amenities` empty; `layoutType`, `totalUnitsOfVariant`, `unitsPerFloor` and `dimensions` null); `amenities` empty; `media` reduced to at most three photographs (the primary first) with no floor plan, video or brochure; and a `lock` object `{ hiddenPhotos, hiddenFloorPlans, amenityCatalog: [{ label, category }] }` saying what was withheld. `lock` is absent from the full dossier. The response is `Cache-Control: private, no-store` either way, because the body depends on the caller.
 
 **Response `200`** — a `PropertyDossier`:
 
@@ -148,7 +148,8 @@ Published dossier for one property, resolved by `properties.slug`.
       "layoutType": { "key": "string", "label": "string" } | null,
       "totalUnitsOfVariant": 0 | null,
       "dimensions": { /* opaque jsonb, room-name -> dimension facts */ } | null,
-      "areas": [{ "basis": "carpet" | "super_built_up" | "built_up", "areaSqft": "string" }]
+      "areas": [{ "basis": "carpet" | "super_built_up" | "built_up", "areaSqft": "string" }],
+      "amenities": [{ "key": "string", "label": "string", "category": "string", "status": "available" | "explicitly_not_offered" }]
     }
   ],
   "amenities": [
@@ -162,6 +163,8 @@ Published dossier for one property, resolved by `properties.slug`.
   ]
 }
 ```
+
+A unit variant's `amenities` are its own, apart from the project's `amenities` below (2026-09-25, `DECISIONS.md`): only stated rows are returned (`available` or `explicitly_not_offered`); an amenity with no entry is not stated.
 
 Ordering: `unitVariants` and `media` are returned ordered by their existing `display_order`/creation order in the schema (`property_media.displayOrder`; `unit_variants` by `createdAt`). `amenities` and `specifications` include every catalog row associated with the property regardless of `status` — the honest-incompleteness states (`not_stated`, `explicitly_not_offered`) are data for the client to render explicitly, never filtered out.
 

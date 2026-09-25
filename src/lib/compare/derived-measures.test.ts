@@ -33,6 +33,7 @@ const variant = (
   totalUnitsOfVariant: null,
   dimensions: null,
   areas: carpet === null ? [] : [{ basis: "carpet", areaSqft: String(carpet) }],
+  amenities: [],
   ...extra,
 });
 

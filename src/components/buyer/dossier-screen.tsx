@@ -319,6 +319,19 @@ function UnitVariant({ variant }: { variant: DossierUnitVariant }) {
           </dl>
         </div>
       )}
+
+      {/*
+       * What belongs to this unit type alone, apart from the project's amenities
+       * above. A unit type with none stated says so rather than showing nothing.
+       */}
+      <div data-slot="variant-amenities" className="flex flex-col gap-2">
+        <Eyebrow>Private amenities</Eyebrow>
+        {variant.amenities.length === 0 ? (
+          <BodyText className="text-muted-foreground">Not stated</BodyText>
+        ) : (
+          <CatalogList items={variant.amenities} />
+        )}
+      </div>
     </article>
   );
 }

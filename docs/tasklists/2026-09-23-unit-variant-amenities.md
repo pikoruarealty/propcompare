@@ -1,6 +1,6 @@
 # Tasklist — unit-type (private) amenities
 
-**Status:** schema done (v11); extraction, dossier, and comparison surfaces not started.
+**Status:** done (2026-09-25), except brochure extraction, which is deferred. Schema done (v11); review, publish, dossier and comparison being built; brochure extraction deferred.
 **Owner:** Bhavarth
 **Branch:** `task/phase-3-completion`
 **Depends on:** `docs/schema/schema.v11.md`, the existing `amenity_catalog`/`amenity_synonyms` vocabulary, the existing `property_submissions` publish transaction.
@@ -15,12 +15,25 @@
 - [x] `unit_variant_amenities` table, FKs, unique index — `docs/schema/schema.v11.md`, migration `0015_minor_scalphunter`.
 - [x] Added to `liveCatalogTables` (`src/db/schema/catalog.ts`) and named in `AGENTS.md`'s publish-transaction-only rule.
 
-## Not started
+## Design (owner-approved 2026-09-25, in chat)
 
-1. **Extraction contract.** A unit-type amenities field needs a home in the OCR/manual submission field contract (`property_schema_fields`), analogous to how `property.amenities` works today but scoped to a `unit_variants` entry instead of the property. Check whether the existing per-scope field-candidate/evidence machinery (`property_submission_fields`, `property_submission_field_evidence`) already generalizes to a unit-scoped field or needs its own shape — this is the main open design question, not a rote copy of the property-level path.
-2. **Publish transaction.** The transaction that currently writes `property_amenities` needs a matching write path for `unit_variant_amenities`, keyed by the submission's per-unit-variant field candidates from (1). Still publish-transaction-only, per `AGENTS.md`.
-3. **Dossier.** A "Private amenities" row in the unit type's own section (not the property's amenities section), showing `available` / `not_stated` / `explicitly_not_offered` the same way the property section already does.
-4. **Comparison.** A "Private amenities" row group, matched unit-type-to-unit-type per `docs/design/comparison.v1.md`'s like-for-like principle (a penthouse's private amenities compare against the other side's penthouse, not its 2 BHK). Needs a look at how the comparison's existing unit-type matching (room-by-room, floor plans) is keyed, and reuse that key rather than inventing a new one.
+No new table and no new contract field. A unit type is already one entry of the `unit_variants` value; it gains an optional `amenities` list of `{ key, status }`, where `key` is an `amenity_catalog` key (validated against the same catalog as `property.amenities`) and `status` is `available` or `explicitly_not_offered`. `not_stated` is the absence of a row, so it is never written. When a variant in a submission carries `amenities`, that list is the complete set for that unit type: the publish transaction upserts the listed rows and deletes any other row of that unit type (back to not stated). A variant without `amenities` leaves its rows untouched, so an edit that does not mention them cannot erase them. Only the publish transaction writes `unit_variant_amenities`.
+
+## Steps
+
+1. [x] Validation: `SubmissionUnitVariant.amenities`, checked against the catalog, no duplicates, two statuses only.
+2. [x] Publish transaction: write `unit_variant_amenities` as above.
+3. [x] Live values: report each live unit type's amenities so an edit starts from what is live.
+4. [x] Review control: the unit-type editor carries and edits the list; saving never drops it.
+5. [x] Buyer read: `DossierUnitVariant.amenities` (`GET /api/v1/properties/{slug}`, so `api-spec.v1.md`); the sign-in lock withholds it.
+6. [x] Dossier: a "Private amenities" row in each unit type's own section.
+7. [x] Comparison: a "Private amenities" row group in the chosen unit types' detail, matched unit type to unit type; part of the locked depth.
+8. [x] Docs: `DECISIONS.md` entry, `PROGRESS.md`, the payload note in the schema doc.
+9. [x] Verification: typecheck, lint, format and the full suite (161 files, 1950 tests) pass, including real-database tests for publish, replacement, refusal and read-back.
+
+## Deferred (needs the owner)
+
+- **Extraction from brochures.** The OCR prompts read unit types from floor-plan pages only. Having them also read a unit type's own amenities changes paid prompts and can only be judged on a paid run, so it waits for the owner's go-ahead. Until then the amenities are entered in review.
 
 ## Non-goals
 
@@ -33,4 +46,4 @@ An admin reviewing a submission can mark a specific unit type's own amenity as a
 
 ## Completion record
 
-_(fill in at completion)_
+Completed 2026-09-25 on `task/phase-3-completion`. See `PROGRESS.md` (2026-09-25) and `DECISIONS.md` (2026-09-25). Acceptance met: a unit type's own amenity is marked in review, published through the normal transaction, shown in that unit type's dossier section, and compared as its own row group matched by unit type. Open for the owner: unit-only catalog entries and brochure extraction.

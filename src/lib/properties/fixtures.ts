@@ -146,6 +146,20 @@ export const richDossierFixture: PropertyDossier = {
         { basis: "built_up", areaSqft: "1180.00" },
         { basis: "super_built_up", areaSqft: "1425.00" },
       ],
+      amenities: [
+        {
+          key: "jacuzzi",
+          label: "Jacuzzi",
+          category: "Wellness",
+          status: "available",
+        },
+        {
+          key: "sauna",
+          label: "Sauna",
+          category: "Wellness",
+          status: "explicitly_not_offered",
+        },
+      ],
     },
     {
       id: "dddddddd-1111-4111-8111-dddddddddddd",
@@ -158,6 +172,7 @@ export const richDossierFixture: PropertyDossier = {
       // Only carpet area was published. The other bases must render as
       // unstated, never derived from this one.
       areas: [{ basis: "carpet", areaSqft: "1310.00" }],
+      amenities: [],
     },
   ],
   amenities: [
@@ -277,6 +292,7 @@ export const sparseDossierFixture: PropertyDossier = {
       unitsPerFloor: null,
       dimensions: null,
       areas: [{ basis: "carpet", areaSqft: "870.00" }],
+      amenities: [],
     },
   ],
   amenities: [

@@ -135,6 +135,10 @@ export function LockedConfigurations({
           ))}
         </div>
       </div>
+      <div className="flex flex-col gap-2">
+        <Eyebrow>Private amenities</Eyebrow>
+        <LockedBar index={AREA_ROW_COUNT + 8} className="h-5 w-1/2" />
+      </div>
       <a href={`#${UNLOCK_ID}`} className={UNLOCK_LINK}>
         Sign in to see the configurations
       </a>

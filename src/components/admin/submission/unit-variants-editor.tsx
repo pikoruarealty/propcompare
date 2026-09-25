@@ -26,8 +26,8 @@ const roomCount = (variant: VariantForm): number =>
 /**
  * Edits the unit types (configurations) of a project, one tab per unit type and,
  * inside it, tabs for the details (name, bedroom type, layout, counts), the
- * measured areas, and the room dimensions (rooms, balconies, foyer). Anything left
- * blank is simply not stated.
+ * measured areas, the room dimensions (rooms, balconies, foyer) and the unit
+ * type's own amenities. Anything left blank is simply not stated.
  *
  * A unit type that is already published is identified by its name, so its name is
  * locked (renaming would add a second type). Removing one is allowed: it is sent
@@ -103,6 +103,10 @@ export function UnitVariantsEditor({
                     Rooms
                     <Count n={roomCount(variant)} />
                   </TabsTrigger>
+                  <TabsTrigger value="amenities">
+                    Amenities
+                    <Count n={variant.amenities?.length ?? 0} />
+                  </TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="details">
@@ -121,6 +125,15 @@ export function UnitVariantsEditor({
 
                 <TabsContent value="rooms">
                   <RoomsTab index={index} variant={variant} update={update} />
+                </TabsContent>
+
+                <TabsContent value="amenities">
+                  <AmenitiesTab
+                    index={index}
+                    variant={variant}
+                    lookups={lookups}
+                    update={update}
+                  />
                 </TabsContent>
               </Tabs>
 
@@ -325,6 +338,94 @@ function AreasTab({
           <Plus /> Add an area
         </Button>
       </div>
+    </div>
+  );
+}
+
+/**
+ * The amenities that belong to this unit type alone (a private terrace, a plunge
+ * pool), from the same approved list as the project's amenities. What is listed
+ * here is the whole set for the unit type: taking one off puts it back to not
+ * stated when this is published, and a unit type never touched here keeps whatever
+ * is live.
+ */
+function AmenitiesTab({
+  index,
+  variant,
+  lookups,
+  update,
+}: {
+  index: number;
+  variant: VariantForm;
+  lookups: SubmissionLookups;
+  update: Update;
+}) {
+  const listed = variant.amenities ?? [];
+  const labelOf = (key: string) =>
+    lookups.amenities.find((a) => a.key === key)?.label ?? key;
+  const unlisted = lookups.amenities.filter(
+    (a) => !listed.some((entry) => entry.key === a.key),
+  );
+  const set = (amenities: NonNullable<VariantForm["amenities"]>) =>
+    update(index, { amenities });
+  return (
+    <div className="flex flex-col gap-3" data-slot="unit-amenities-tab">
+      <span className={labelClass}>
+        Amenities of this unit type{" "}
+        {listed.length > 0 ? `(${listed.length})` : ""}
+      </span>
+      {listed.length === 0 ? (
+        <p className="text-muted-foreground text-sm italic">
+          None recorded. The project&apos;s own amenities are set separately.
+        </p>
+      ) : null}
+      {listed.map((entry) => (
+        <div key={entry.key} className="flex items-center gap-2">
+          <span className="min-w-0 flex-1 text-sm">{labelOf(entry.key)}</span>
+          <select
+            aria-label={`${labelOf(entry.key)} for unit type ${index + 1}`}
+            className={`${inputClass} max-w-48`}
+            value={entry.status}
+            onChange={(e) =>
+              set(
+                listed.map((a) =>
+                  a.key === entry.key
+                    ? { ...a, status: e.target.value as typeof a.status }
+                    : a,
+                ),
+              )
+            }
+          >
+            <option value="available">Available</option>
+            <option value="explicitly_not_offered">Not offered</option>
+          </select>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            aria-label={`Remove ${labelOf(entry.key)}`}
+            onClick={() => set(listed.filter((a) => a.key !== entry.key))}
+          >
+            <Trash2 />
+          </Button>
+        </div>
+      ))}
+      <select
+        aria-label={`Add an amenity to unit type ${index + 1}`}
+        className={`${inputClass} max-w-72`}
+        value=""
+        onChange={(e) => {
+          if (e.target.value)
+            set([...listed, { key: e.target.value, status: "available" }]);
+        }}
+      >
+        <option value="">Add an amenity…</option>
+        {unlisted.map((a) => (
+          <option key={a.key} value={a.key}>
+            {a.label}
+          </option>
+        ))}
+      </select>
     </div>
   );
 }

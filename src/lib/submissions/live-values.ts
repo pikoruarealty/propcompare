@@ -1,4 +1,4 @@
-import { and, asc, eq, isNull } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import {
   amenityCatalog,
@@ -11,6 +11,7 @@ import {
   propertyTypes,
   specificationCatalog,
   unitAreas,
+  unitVariantAmenities,
   unitVariants,
 } from "@/db/schema/catalog";
 
@@ -21,7 +22,7 @@ import {
  * table.
  *
  * Simple fields, the amenity set, each specification, the unit types (with their
- * areas and room dimensions) and the developer's name and narrative are covered.
+ * areas, room dimensions and own amenities) and the developer's name and narrative are covered.
  * A field with no published value is absent, never `null`. Amenities the property
  * does not list as available are absent from the set, so "not stated" and "not
  * offered" both read as not in it.
@@ -178,6 +179,31 @@ export const loadLiveValues = async (
       .from(unitAreas)
       .innerJoin(unitVariants, eq(unitVariants.id, unitAreas.unitVariantId))
       .where(eq(unitVariants.propertyId, propertyId));
+    const amenityRows = await database
+      .select({
+        unitVariantId: unitVariantAmenities.unitVariantId,
+        key: amenityCatalog.key,
+        status: unitVariantAmenities.status,
+      })
+      .from(unitVariantAmenities)
+      .innerJoin(
+        amenityCatalog,
+        eq(amenityCatalog.id, unitVariantAmenities.amenityCatalogId),
+      )
+      .innerJoin(
+        unitVariants,
+        eq(unitVariants.id, unitVariantAmenities.unitVariantId),
+      )
+      .where(
+        and(
+          eq(unitVariants.propertyId, propertyId),
+          inArray(unitVariantAmenities.status, [
+            "available",
+            "explicitly_not_offered",
+          ]),
+        ),
+      )
+      .orderBy(asc(amenityCatalog.key));
     live["unit_variants"] = variants.map((variant) => ({
       variantName: variant.variantName,
       ...(variant.bhkTypeKey ? { bhkTypeKey: variant.bhkTypeKey } : {}),
@@ -191,6 +217,15 @@ export const loadLiveValues = async (
         ? { unitsPerFloor: variant.unitsPerFloor }
         : {}),
       ...(variant.dimensions ? { dimensions: variant.dimensions } : {}),
+      // Only when the unit type has any: an edit that starts from what is live
+      // then carries them instead of dropping them.
+      ...(amenityRows.some((row) => row.unitVariantId === variant.id)
+        ? {
+            amenities: amenityRows
+              .filter((row) => row.unitVariantId === variant.id)
+              .map((row) => ({ key: row.key, status: row.status })),
+          }
+        : {}),
       areas: areas
         .filter((area) => area.unitVariantId === variant.id)
         .map((area) => ({

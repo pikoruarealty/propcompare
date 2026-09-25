@@ -36,6 +36,7 @@ export const lockDossier = (dossier: PropertyDossier): PropertyDossier => {
       unitsPerFloor: null,
       dimensions: null,
       areas: [],
+      amenities: [],
     })),
     amenities: [],
     // The project's facts stay open; what is listed per carpet area is unit-type

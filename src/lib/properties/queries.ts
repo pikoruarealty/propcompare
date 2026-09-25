@@ -1,4 +1,14 @@
-import { and, asc, count, desc, eq, inArray, sql, type SQL } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  inArray,
+  ne,
+  sql,
+  type SQL,
+} from "drizzle-orm";
 import { isListed, mediaIsLive, variantIsLive } from "./visibility";
 import { splitNearbyFacts } from "./dossier";
 import { areaToSqft } from "@/lib/units/measurements";
@@ -19,6 +29,7 @@ import {
   reraFetchJobs,
   specificationCatalog,
   unitAreas,
+  unitVariantAmenities,
   unitVariants,
 } from "@/db/schema/catalog";
 import type {
@@ -519,6 +530,30 @@ export const getPublishedPropertyBySlug = async (
           .where(inArray(unitAreas.unitVariantId, variantIds))
           .orderBy(asc(unitAreas.basis));
 
+  const unitAmenityRows =
+    variantIds.length === 0
+      ? []
+      : await db
+          .select({
+            unitVariantId: unitVariantAmenities.unitVariantId,
+            key: amenityCatalog.key,
+            label: amenityCatalog.label,
+            category: amenityCatalog.category,
+            status: unitVariantAmenities.status,
+          })
+          .from(unitVariantAmenities)
+          .innerJoin(
+            amenityCatalog,
+            eq(amenityCatalog.id, unitVariantAmenities.amenityCatalogId),
+          )
+          .where(
+            and(
+              inArray(unitVariantAmenities.unitVariantId, variantIds),
+              ne(unitVariantAmenities.status, "not_stated"),
+            ),
+          )
+          .orderBy(asc(amenityCatalog.category), asc(amenityCatalog.key));
+
   const areasByVariant = new Map<string, DossierUnitVariant["areas"]>();
   for (const area of areaRows) {
     const entry = { basis: area.basis, areaSqft: area.areaSqft };
@@ -597,6 +632,14 @@ export const getPublishedPropertyBySlug = async (
     unitsPerFloor: variant.unitsPerFloor ?? null,
     dimensions: (variant.dimensions as UnitVariantDimensions | null) ?? null,
     areas: areasByVariant.get(variant.id) ?? [],
+    amenities: unitAmenityRows
+      .filter((amenity) => amenity.unitVariantId === variant.id)
+      .map(({ key, label, category, status }) => ({
+        key,
+        label,
+        category,
+        status,
+      })),
   }));
 
   const amenities: DossierAmenity[] = amenityRows.map((amenity) => ({

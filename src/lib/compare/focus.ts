@@ -20,7 +20,11 @@ export const FOCUS_OPTIONS: {
 }[] = [
   { key: "space", label: "Space", groups: ["unit_type", "rooms"] },
   { key: "timeline", label: "Timeline", groups: ["timeline"] },
-  { key: "amenities", label: "Amenities", groups: ["amenities"] },
+  {
+    key: "amenities",
+    label: "Amenities",
+    groups: ["amenities", "unit_amenities"],
+  },
   { key: "build", label: "Build", groups: ["specifications"] },
   { key: "trust", label: "Trust", groups: ["trust", "project"] },
 ];

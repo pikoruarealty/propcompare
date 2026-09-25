@@ -82,6 +82,17 @@ export function FieldValue({
                   .join(" · ")}
               </p>
             ) : null}
+            {v.amenities && v.amenities.length > 0 ? (
+              <p className="mt-1 text-sm">
+                {v.amenities
+                  .map((a) =>
+                    a.status === "available"
+                      ? labelFor(lookups.amenities, a.key)
+                      : `${labelFor(lookups.amenities, a.key)} (not offered)`,
+                  )
+                  .join(" · ")}
+              </p>
+            ) : null}
             {v.dimensions?.rooms?.length ? (
               <p className="text-muted-foreground mt-1 text-xs">
                 {v.dimensions.rooms.length} room dimension
