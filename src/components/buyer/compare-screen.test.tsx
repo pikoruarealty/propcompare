@@ -48,9 +48,11 @@ const two = () => [
 const locked = () => lockComparison(buildComparison(two(), {}));
 
 describe("CompareScreen — the sign-in gate", () => {
-  it("shows the column identity and the summary to a signed-out visitor", () => {
+  it("shows the column identity, and the summary only as placeholders, to a signed-out visitor", () => {
     signedOut();
-    render(<CompareScreen locked={locked()} requested={{}} />);
+    const { container } = render(
+      <CompareScreen locked={locked()} requested={{}} />,
+    );
 
     expect(screen.getByText("Alpha Heights")).toBeVisible();
     expect(screen.getByText("Beta Residency")).toBeVisible();
@@ -59,6 +61,20 @@ describe("CompareScreen — the sign-in gate", () => {
         name: "What changes between these choices",
       }),
     ).toBeVisible();
+    // No summary line, and no "not enough is stated" either: that too would be a
+    // statement about the two properties.
+    expect(
+      container.querySelector('[data-slot="compare-summary-line"]'),
+    ).toBeNull();
+    expect(
+      container.querySelector('[data-slot="compare-summary-locked"]'),
+    ).not.toBeNull();
+    expect(screen.queryByText(/Not enough is stated/)).toBeNull();
+    expect(
+      screen.getByRole("link", {
+        name: "Sign in to see what changes if you choose one over the other",
+      }),
+    ).toHaveAttribute("href", "#compare-sign-in");
   });
 
   it("locks every row group behind a skeleton, with the real cells absent", () => {

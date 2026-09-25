@@ -31,6 +31,34 @@ const renderLocked = () =>
   render(<DossierScreen dossier={lockDossier(withPhotos(6))} />);
 
 describe("DossierScreen, signed out", () => {
+  it("orders the sections specifications, location, RERA, and shows each below the configurations only as placeholders", () => {
+    const { container } = renderLocked();
+    const titles = screen
+      .getAllByRole("heading", { level: 2 })
+      .map((heading) => heading.textContent);
+    const order = ["Specifications", "Location", "RERA", "Developer"].map(
+      (title) => titles.indexOf(title),
+    );
+    expect(order.every((at) => at >= 0)).toBe(true);
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+
+    for (const slot of [
+      "locked-specifications",
+      "locked-location",
+      "locked-rera",
+      "locked-developer",
+    ]) {
+      expect(container.querySelector(`[data-slot="${slot}"]`)).not.toBeNull();
+    }
+    // None of the withheld values is on the page.
+    const main = container.querySelector("main")!;
+    expect(main).not.toHaveTextContent(richDossierFixture.location.pincode!);
+    expect(container.querySelector('[data-slot="dossier-map"]')).toBeNull();
+    expect(main).not.toHaveTextContent("Vitrified");
+    // The top stays: the name and the registration badge's number.
+    expect(main).toHaveTextContent(richDossierFixture.name);
+  });
+
   it("keeps the section headings and says how to unlock them", () => {
     const { container } = renderLocked();
 

@@ -12,14 +12,31 @@ const model = buildComparison(
 );
 
 describe("lockComparison", () => {
-  it("keeps the identity, the summary and every row's label", () => {
-    const locked = lockComparison(model);
+  it("keeps the identity and every row's label, and withholds the summary", () => {
+    const differing = buildComparison(
+      [
+        { ...richDossierFixture, slug: "a", name: "Alpha Heights" },
+        {
+          ...richDossierFixture,
+          slug: "b",
+          name: "Beta Residency",
+          possession: {
+            ...richDossierFixture.possession,
+            possessionDate: "2031-06-30",
+          },
+        },
+      ],
+      {},
+    );
+    // The model has something to say, and none of it leaves the server.
+    expect(differing.summary.length).toBeGreaterThan(0);
+    expect(lockComparison(differing).summary).toEqual([]);
 
+    const locked = lockComparison(model);
     expect(locked.columns.map((c) => c.name)).toEqual([
       "Alpha Heights",
       "Beta Residency",
     ]);
-    expect(locked.summary).toEqual(model.summary);
     expect(locked.groups.map((g) => [g.key, g.title])).toEqual(
       model.groups.map((g) => [g.key, g.title]),
     );

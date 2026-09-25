@@ -12,8 +12,9 @@ import { BodyText, DisplayHeading, Eyebrow } from "./typography";
 
 /**
  * What a signed-out visitor sees where the dossier's gated detail would be
- * (`DECISIONS.md` 2026-09-24): the configurations, the amenities, the floor plans
- * and all but the first few photographs. The section, the names of things and the
+ * (`DECISIONS.md` 2026-09-24, widened 2026-09-25): everything below the top of the
+ * page, from the configurations' measurements to the developer's details, the
+ * floor plans and all but the first few photographs. The section, the names of things and the
  * shape of the content are all there; the values are shimmering bars. The values
  * themselves were never sent (`lockDossier`), so this is a picture of the layout,
  * not a blur over real data.
@@ -35,7 +36,9 @@ export function UnlockPrompt({
 }) {
   const hidden = [
     "the unit types with their areas and room sizes",
-    "the amenities",
+    "the amenities and specifications",
+    "the location and what is nearby",
+    "the RERA record",
     lock.hiddenFloorPlans > 0 ? "the floor plans" : null,
     lock.hiddenPhotos > 0
       ? `all ${lock.hiddenPhotos} more ${lock.hiddenPhotos === 1 ? "photo" : "photos"}`
@@ -152,11 +155,82 @@ export function LockedAmenities({
 }: {
   catalog: DossierLock["amenityCatalog"];
 }) {
+  return (
+    <LockedCatalog
+      catalog={catalog}
+      slot="locked-amenities"
+      noun="amenities we check for"
+      unlock="Sign in to see which amenities this property offers"
+    />
+  );
+}
+
+/** The same, for the specifications. */
+export function LockedSpecifications({
+  catalog,
+}: {
+  catalog: DossierLock["specificationCatalog"];
+}) {
+  return (
+    <LockedCatalog
+      catalog={catalog}
+      slot="locked-specifications"
+      noun="specifications we record"
+      unlock="Sign in to see how this property is built and finished"
+    />
+  );
+}
+
+/**
+ * Named facts with a bar where each value goes (location, RERA, developer): the
+ * name of a fact is not the fact.
+ */
+export function LockedFacts({
+  labels,
+  slot,
+  unlock,
+}: {
+  labels: string[];
+  slot: string;
+  unlock: string;
+}) {
+  return (
+    <div data-slot={slot} className="flex flex-col gap-5">
+      <dl className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+        {labels.map((label, index) => (
+          <div key={label} className="flex flex-col gap-2">
+            <dt>
+              <Eyebrow>{label}</Eyebrow>
+            </dt>
+            <dd className="py-1">
+              <LockedBar index={index} className="h-5" />
+            </dd>
+          </div>
+        ))}
+      </dl>
+      <a href={`#${UNLOCK_ID}`} className={UNLOCK_LINK}>
+        {unlock}
+      </a>
+    </div>
+  );
+}
+
+function LockedCatalog({
+  catalog,
+  slot,
+  noun,
+  unlock,
+}: {
+  catalog: { label: string; category: string }[];
+  slot: string;
+  noun: string;
+  unlock: string;
+}) {
   const SHOWN = 12;
   const shown = catalog.slice(0, SHOWN);
   const more = catalog.length - shown.length;
   return (
-    <div data-slot="locked-amenities" className="flex flex-col gap-6">
+    <div data-slot={slot} className="flex flex-col gap-6">
       {groupByCategory(shown).map((group) => (
         <div key={group.category} className="flex flex-col gap-2">
           <Eyebrow>{humaniseCategory(group.category)}</Eyebrow>
@@ -177,11 +251,11 @@ export function LockedAmenities({
       ))}
       {more > 0 ? (
         <p className="text-muted-foreground text-sm">
-          and {more} more amenities we check for.
+          and {more} more {noun}.
         </p>
       ) : null}
       <a href={`#${UNLOCK_ID}`} className={UNLOCK_LINK}>
-        Sign in to see which amenities this property offers
+        {unlock}
       </a>
     </div>
   );

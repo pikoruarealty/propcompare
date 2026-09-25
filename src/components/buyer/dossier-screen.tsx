@@ -49,7 +49,9 @@ import { EnquiryForm } from "./enquiry-form";
 import {
   LockedAmenities,
   LockedConfigurations,
+  LockedFacts,
   LockedMedia,
+  LockedSpecifications,
   UNLOCK_ID,
   UnlockPrompt,
 } from "./locked-sections";
@@ -656,8 +658,8 @@ const SECTION_LINKS = [
   { href: "#configurations", label: "Configurations" },
   { href: "#amenities", label: "Amenities" },
   { href: "#specifications", label: "Specifications" },
-  { href: "#rera", label: "RERA" },
   { href: "#location", label: "Location" },
+  { href: "#rera", label: "RERA" },
   { href: "#developer", label: "Developer" },
   { href: "#enquiry", label: "Ask about this property" },
 ] as const;
@@ -912,159 +914,207 @@ export function DossierScreen({ dossier }: DossierScreenProps) {
               />
             )}
 
-            <CatalogSection
-              title="Specifications"
-              id="specifications"
-              slot="dossier-specifications"
-              items={specifications}
-              emptyMessage="No specifications have been recorded for this property."
-            />
-
-            <Section title="RERA" id="rera" data-slot="dossier-rera">
-              <dl className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-                {/*
-                 * `registered: false` renders as "Not stated", not as "Not
-                 * registered". The column defaults to false and no code path sets
-                 * it — the field contract records that OCR never sets RERA
-                 * verification — so false means "no registration has been
-                 * recorded here", which is not the same claim as "this project is
-                 * not registered". Asserting the latter about a real project
-                 * would be a fabricated fact of the worst kind.
-                 */}
-                <Fact label="Registration">
-                  <FactValue value={rera.registered ? "Registered" : null} />
-                </Fact>
-                <Fact label="Registration number">
-                  <FactValue value={rera.registrationNumber} tabular />
-                  <ReraSource rera={rera} fact="registration_number" />
-                </Fact>
-                {/* The date of the latest successful check of the regulator's
-                 * record. */}
-                <Fact label="Last checked with RERA">
-                  <FactValue
-                    value={
-                      rera.lastCheckedAt === null
-                        ? null
-                        : shortDate(rera.lastCheckedAt)
-                    }
-                    tabular
-                  />
-                </Fact>
-                <Fact label="Project land area">
-                  <FactValue
-                    value={
-                      formatSqft(rera.projectLandAreaSqft) === null
-                        ? null
-                        : `${formatSqft(rera.projectLandAreaSqft)} sq ft`
-                    }
-                    tabular
-                  />
-                </Fact>
-                {/* Calculated from the land area and the unit count; it replaced the
-                 * density specification (schema v18), so it is stated here. */}
-                <Fact label="Density">
-                  <FactValue value={densityText(dossier)} tabular />
-                </Fact>
-                {/* The whole floor, worked out from units, towers and floors: not one
-                 * unit type's count on its floor. */}
-                <Fact label="Units per floor">
-                  <FactValue value={unitsPerFloorText(dossier)} tabular />
-                </Fact>
-                <Fact label="Carpet area range">
-                  <FactValue value={carpetRange} tabular />
-                </Fact>
-                <Fact label="Construction progress">
-                  <FactValue
-                    value={formatPercent(rera.constructionProgressPercent)}
-                    tabular
-                  />
-                  <ReraSource rera={rera} fact="construction_progress" />
-                </Fact>
-                {/* Everything else the regulator states, each with the quarter or
-                 * date it is as on (schema v17). A figure it does not state has no
-                 * line. */}
-                {rera.facts
-                  ? reraFactLines(rera.facts).map((line) => (
-                      <Fact key={line.label} label={line.label}>
-                        <FactValue value={line.value} tabular />
-                      </Fact>
-                    ))
-                  : null}
-              </dl>
-            </Section>
+            {lock ? (
+              <Section
+                title="Specifications"
+                id="specifications"
+                data-slot="dossier-specifications"
+              >
+                <LockedSpecifications catalog={lock.specificationCatalog} />
+              </Section>
+            ) : (
+              <CatalogSection
+                title="Specifications"
+                id="specifications"
+                slot="dossier-specifications"
+                items={specifications}
+                emptyMessage="No specifications have been recorded for this property."
+              />
+            )}
 
             <Section
               title="Location"
               id="location"
               data-slot="dossier-location"
             >
-              <dl className="grid grid-cols-2 gap-6 sm:grid-cols-3">
-                <Fact label="Locality">
-                  <FactValue value={location.locality} />
-                </Fact>
-                <Fact label="City">
-                  <FactValue value={location.city} />
-                </Fact>
-                <Fact label="Pincode">
-                  <FactValue value={location.pincode} tabular />
-                </Fact>
-                {location.nearby.plotNumber ? (
-                  <Fact label="Plot number">
-                    <FactValue value={location.nearby.plotNumber} tabular />
-                  </Fact>
-                ) : null}
-              </dl>
+              {lock ? (
+                <LockedFacts
+                  slot="locked-location"
+                  labels={[
+                    "Pincode",
+                    "Map",
+                    "Connectivity",
+                    "Hospitals",
+                    "Schools and institutions",
+                  ]}
+                  unlock="Sign in to see exactly where it is and what is nearby"
+                />
+              ) : (
+                <>
+                  <dl className="grid grid-cols-2 gap-6 sm:grid-cols-3">
+                    <Fact label="Locality">
+                      <FactValue value={location.locality} />
+                    </Fact>
+                    <Fact label="City">
+                      <FactValue value={location.city} />
+                    </Fact>
+                    <Fact label="Pincode">
+                      <FactValue value={location.pincode} tabular />
+                    </Fact>
+                    {location.nearby.plotNumber ? (
+                      <Fact label="Plot number">
+                        <FactValue value={location.nearby.plotNumber} tabular />
+                      </Fact>
+                    ) : null}
+                  </dl>
 
-              {location.mapUrl ? (
-                <div
-                  data-slot="dossier-map"
-                  className="mt-8 flex flex-col gap-3"
-                >
-                  {embedUrl ? (
-                    <iframe
-                      src={embedUrl}
-                      title={`Map of ${dossier.name}`}
-                      loading="lazy"
-                      referrerPolicy="no-referrer-when-downgrade"
-                      className="border-border aspect-[16/9] w-full rounded-lg border"
-                    />
-                  ) : null}
-                  <a
-                    href={location.mapUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-primary w-fit text-sm underline underline-offset-4"
-                  >
-                    Open in Google Maps
-                  </a>
-                </div>
-              ) : null}
-
-              <div
-                data-slot="dossier-nearby"
-                className="mt-8 grid gap-8 sm:grid-cols-3"
-              >
-                {nearbyLists.map((list) =>
-                  list.items.length > 0 ? (
-                    <div key={list.label} className="flex flex-col gap-2">
-                      <h3 className="font-display text-lg">{list.label}</h3>
-                      <ul className="flex flex-col gap-1.5 text-sm">
-                        {list.items.map((item) => (
-                          <li key={item}>{item}</li>
-                        ))}
-                      </ul>
+                  {location.mapUrl ? (
+                    <div
+                      data-slot="dossier-map"
+                      className="mt-8 flex flex-col gap-3"
+                    >
+                      {embedUrl ? (
+                        <iframe
+                          src={embedUrl}
+                          title={`Map of ${dossier.name}`}
+                          loading="lazy"
+                          referrerPolicy="no-referrer-when-downgrade"
+                          className="border-border aspect-[16/9] w-full rounded-lg border"
+                        />
+                      ) : null}
+                      <a
+                        href={location.mapUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-primary w-fit text-sm underline underline-offset-4"
+                      >
+                        Open in Google Maps
+                      </a>
                     </div>
-                  ) : null,
-                )}
-              </div>
-              {nearbyLists.every((list) => list.items.length === 0) ? (
-                <p
-                  data-slot="dossier-nearby-empty"
-                  className="text-muted-foreground mt-8 text-sm"
-                >
-                  Nearby connectivity, hospitals and schools are not stated.
-                </p>
-              ) : null}
+                  ) : null}
+
+                  <div
+                    data-slot="dossier-nearby"
+                    className="mt-8 grid gap-8 sm:grid-cols-3"
+                  >
+                    {nearbyLists.map((list) =>
+                      list.items.length > 0 ? (
+                        <div key={list.label} className="flex flex-col gap-2">
+                          <h3 className="font-display text-lg">{list.label}</h3>
+                          <ul className="flex flex-col gap-1.5 text-sm">
+                            {list.items.map((item) => (
+                              <li key={item}>{item}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      ) : null,
+                    )}
+                  </div>
+                  {nearbyLists.every((list) => list.items.length === 0) ? (
+                    <p
+                      data-slot="dossier-nearby-empty"
+                      className="text-muted-foreground mt-8 text-sm"
+                    >
+                      Nearby connectivity, hospitals and schools are not stated.
+                    </p>
+                  ) : null}
+                </>
+              )}
+            </Section>
+
+            <Section title="RERA" id="rera" data-slot="dossier-rera">
+              {lock ? (
+                <LockedFacts
+                  slot="locked-rera"
+                  labels={[
+                    "Last checked with RERA",
+                    "Project land area",
+                    "Density",
+                    "Units per floor",
+                    "Carpet area range",
+                    "Construction progress",
+                    "Units available",
+                    "Latest quarterly filing",
+                    "The team",
+                  ]}
+                  unlock="Sign in to see the full RERA record"
+                />
+              ) : (
+                <>
+                  <dl className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                    {/*
+                     * `registered: false` renders as "Not stated", not as "Not
+                     * registered". The column defaults to false and no code path sets
+                     * it — the field contract records that OCR never sets RERA
+                     * verification — so false means "no registration has been
+                     * recorded here", which is not the same claim as "this project is
+                     * not registered". Asserting the latter about a real project
+                     * would be a fabricated fact of the worst kind.
+                     */}
+                    <Fact label="Registration">
+                      <FactValue
+                        value={rera.registered ? "Registered" : null}
+                      />
+                    </Fact>
+                    <Fact label="Registration number">
+                      <FactValue value={rera.registrationNumber} tabular />
+                      <ReraSource rera={rera} fact="registration_number" />
+                    </Fact>
+                    {/* The date of the latest successful check of the regulator's
+                     * record. */}
+                    <Fact label="Last checked with RERA">
+                      <FactValue
+                        value={
+                          rera.lastCheckedAt === null
+                            ? null
+                            : shortDate(rera.lastCheckedAt)
+                        }
+                        tabular
+                      />
+                    </Fact>
+                    <Fact label="Project land area">
+                      <FactValue
+                        value={
+                          formatSqft(rera.projectLandAreaSqft) === null
+                            ? null
+                            : `${formatSqft(rera.projectLandAreaSqft)} sq ft`
+                        }
+                        tabular
+                      />
+                    </Fact>
+                    {/* Calculated from the land area and the unit count; it replaced the
+                     * density specification (schema v18), so it is stated here. */}
+                    <Fact label="Density">
+                      <FactValue value={densityText(dossier)} tabular />
+                    </Fact>
+                    {/* The whole floor, worked out from units, towers and floors: not one
+                     * unit type's count on its floor. */}
+                    <Fact label="Units per floor">
+                      <FactValue value={unitsPerFloorText(dossier)} tabular />
+                    </Fact>
+                    <Fact label="Carpet area range">
+                      <FactValue value={carpetRange} tabular />
+                    </Fact>
+                    <Fact label="Construction progress">
+                      <FactValue
+                        value={formatPercent(rera.constructionProgressPercent)}
+                        tabular
+                      />
+                      <ReraSource rera={rera} fact="construction_progress" />
+                    </Fact>
+                    {/* Everything else the regulator states, each with the quarter or
+                     * date it is as on (schema v17). A figure it does not state has no
+                     * line. */}
+                    {rera.facts
+                      ? reraFactLines(rera.facts).map((line) => (
+                          <Fact key={line.label} label={line.label}>
+                            <FactValue value={line.value} tabular />
+                          </Fact>
+                        ))
+                      : null}
+                  </dl>
+                </>
+              )}
             </Section>
 
             <Section
@@ -1072,36 +1122,46 @@ export function DossierScreen({ dossier }: DossierScreenProps) {
               id="developer"
               data-slot="dossier-developer"
             >
-              <dl className="flex flex-col gap-4">
-                <Fact label="Name">
-                  <Link
-                    href={developerHref(developer.id)}
-                    className="underline underline-offset-4"
-                  >
-                    {developer.name}
-                  </Link>{" "}
-                  <span className="text-muted-foreground">
-                    (all their published projects)
-                  </span>
-                </Fact>
-                <Fact label="About">
-                  <FactValue value={developer.description} />
-                </Fact>
-                <Fact label="Website">
-                  {developer.website === null ? (
-                    <FactValue value={null} />
-                  ) : (
-                    <a
-                      href={developer.website}
-                      rel="noopener noreferrer nofollow"
-                      target="_blank"
-                      className="underline underline-offset-4"
-                    >
-                      {developer.website}
-                    </a>
-                  )}
-                </Fact>
-              </dl>
+              {lock ? (
+                <LockedFacts
+                  slot="locked-developer"
+                  labels={["About", "Website"]}
+                  unlock="Sign in to see more about the developer"
+                />
+              ) : (
+                <>
+                  <dl className="flex flex-col gap-4">
+                    <Fact label="Name">
+                      <Link
+                        href={developerHref(developer.id)}
+                        className="underline underline-offset-4"
+                      >
+                        {developer.name}
+                      </Link>{" "}
+                      <span className="text-muted-foreground">
+                        (all their published projects)
+                      </span>
+                    </Fact>
+                    <Fact label="About">
+                      <FactValue value={developer.description} />
+                    </Fact>
+                    <Fact label="Website">
+                      {developer.website === null ? (
+                        <FactValue value={null} />
+                      ) : (
+                        <a
+                          href={developer.website}
+                          rel="noopener noreferrer nofollow"
+                          target="_blank"
+                          className="underline underline-offset-4"
+                        >
+                          {developer.website}
+                        </a>
+                      )}
+                    </Fact>
+                  </dl>
+                </>
+              )}
             </Section>
 
             <Section

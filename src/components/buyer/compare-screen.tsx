@@ -356,6 +356,7 @@ function ComparisonSignInPrompt() {
       : window.location.pathname + window.location.search;
   return (
     <div
+      id="compare-sign-in"
       data-slot="compare-sign-in"
       className="border-border bg-card flex flex-col gap-4 border-b p-6"
     >
@@ -364,9 +365,9 @@ function ComparisonSignInPrompt() {
           Sign in to see the rest of this comparison
         </h2>
         <p className="text-muted-foreground text-sm">
-          What each property is and how they differ at a glance is above.
-          Possession, rooms, amenities, specifications and RERA detail unlock
-          with your phone number — no email, no password.
+          What each property is and which unit type is compared is above. What
+          changes between them, and possession, rooms, amenities, specifications
+          and RERA detail, unlock with your phone number: no email, no password.
         </p>
       </div>
       <div className="max-w-sm">
@@ -1245,7 +1246,28 @@ export function CompareScreen({
         <h2 id="compare-summary-heading" className="font-display text-2xl">
           What changes between these choices
         </h2>
-        {summary.length > 0 ? (
+        {!signedIn ? (
+          // Withheld by the server for a signed-out visitor (`lockComparison`):
+          // the lines' shape, and where to sign in.
+          <div
+            data-slot="compare-summary-locked"
+            className="mt-4 flex flex-col gap-3"
+          >
+            {[0, 1, 2].map((index) => (
+              <LockedBar
+                key={index}
+                index={index}
+                className={index === 2 ? "w-1/2" : "w-5/6"}
+              />
+            ))}
+            <a
+              href="#compare-sign-in"
+              className="text-primary w-fit text-sm underline underline-offset-4"
+            >
+              Sign in to see what changes if you choose one over the other
+            </a>
+          </div>
+        ) : summary.length > 0 ? (
           <ul className="mt-3 flex flex-col gap-2 text-base">
             {summary.map((line) => (
               <li key={line.rowKey} data-slot="compare-summary-line">

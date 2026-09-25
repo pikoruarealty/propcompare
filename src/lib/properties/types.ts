@@ -210,6 +210,8 @@ export interface DossierLock {
   hiddenFloorPlans: number;
   /** The catalog's amenity names (the vocabulary, not this property's answers). */
   amenityCatalog: { label: string; category: string }[];
+  /** The catalog's specification names, likewise. */
+  specificationCatalog: { label: string; category: string }[];
 }
 
 /** The response of `GET /api/v1/properties/{slug}`. */

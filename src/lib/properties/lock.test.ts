@@ -40,15 +40,64 @@ const withPhotos = (count: number, primaryIndex: number): PropertyDossier => ({
 });
 
 describe("lockDossier", () => {
-  it("keeps the identity, possession, RERA, specifications, location and developer", () => {
+  it("keeps only the top of the page: identity, possession, towers and units, and the registration", () => {
     const locked = lockDossier(richDossierFixture);
 
     expect(locked.name).toBe(richDossierFixture.name);
+    expect(locked.description).toBe(richDossierFixture.description);
     expect(locked.possession).toEqual(richDossierFixture.possession);
-    expect(locked.rera).toEqual(richDossierFixture.rera);
-    expect(locked.specifications).toEqual(richDossierFixture.specifications);
-    expect(locked.location).toEqual(richDossierFixture.location);
-    expect(locked.developer).toEqual(richDossierFixture.developer);
+    expect(locked.totalTowers).toBe(richDossierFixture.totalTowers);
+    expect(locked.totalUnits).toBe(richDossierFixture.totalUnits);
+    expect(locked.location.locality).toBe(richDossierFixture.location.locality);
+    expect(locked.location.city).toBe(richDossierFixture.location.city);
+    expect(locked.developer.name).toBe(richDossierFixture.developer.name);
+    expect(locked.rera.registered).toBe(richDossierFixture.rera.registered);
+    expect(locked.rera.registrationNumber).toBe(
+      richDossierFixture.rera.registrationNumber,
+    );
+    expect(locked.rera.lastCheckedAt).toBe(
+      richDossierFixture.rera.lastCheckedAt,
+    );
+  });
+
+  it("withholds everything below the configurations: specifications, location, RERA facts and developer detail", () => {
+    const locked = lockDossier(richDossierFixture);
+
+    expect(locked.specifications).toEqual([]);
+    expect(locked.location).toMatchObject({
+      pincode: null,
+      latitude: null,
+      longitude: null,
+      mapUrl: null,
+      nearby: {
+        connectivity: [],
+        hospitals: [],
+        schools: [],
+        plotNumber: null,
+      },
+    });
+    expect(locked.rera).toMatchObject({
+      projectLandAreaSqft: null,
+      carpetAreaRangeMinSqft: null,
+      carpetAreaRangeMaxSqft: null,
+      constructionProgressPercent: null,
+      facts: null,
+    });
+    // A credit to the regulator stays only on a fact the top still shows.
+    expect(locked.rera.sourcedFacts).not.toContain("construction_progress");
+    expect(locked.developer).toMatchObject({
+      description: null,
+      website: null,
+    });
+    expect(locked.totalFloors).toBeNull();
+    expect(locked.plotAreaSqft).toBeNull();
+    // The names of what is withheld, never this property's answers.
+    expect(locked.lock?.specificationCatalog.map((s) => s.label)).toEqual(
+      richDossierFixture.specifications
+        .filter((s) => s.key !== "amenities_full_list")
+        .map((s) => s.label),
+    );
+    expect(JSON.stringify(locked.lock)).not.toContain("valueText");
   });
 
   it("keeps each unit type's name and BHK and nothing measured", () => {

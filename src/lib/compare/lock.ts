@@ -2,8 +2,10 @@ import type { CompareModel } from "./model";
 
 /**
  * The comparison as a signed-out visitor is allowed to receive it (`AGENTS.md`,
- * "Comparison depth is gated behind sign-in"): who each column is, the
- * differences-first summary, and the name of every row, so the locked skeleton
+ * "Comparison depth is gated behind sign-in"): who each column is and the name of
+ * every row. The differences-first summary is withheld too (owner direction,
+ * `DECISIONS.md` 2026-09-25): which way two properties differ is itself the
+ * comparison. The row names remain so the locked skeleton
  * can say what it is hiding (and, for amenities and specifications, the catalog category heading each row sits under). No cell value, no floor-plan reference, no photo strip, and no
  * per-row status (which rows differ or are gaps is itself a fact about the
  * data) leaves the server.
@@ -28,5 +30,5 @@ export const lockComparison = (model: CompareModel): CompareModel => ({
       ...(row.category === undefined ? {} : { category: row.category }),
     })),
   })),
-  summary: model.summary,
+  summary: [],
 });

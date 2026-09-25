@@ -349,11 +349,10 @@ describe("unit type rows from the regulator's carpet-area groups", () => {
 });
 
 describe("what a signed-out visitor receives", () => {
-  it("keeps the project's facts and withholds the per-carpet-area groups", () => {
+  it("withholds the regulator's facts altogether (2026-09-25)", () => {
     const locked = lockDossier(property("a", facts()));
 
-    expect(locked.rera.facts?.openAreaSqm).toBe(3131.1);
-    expect(locked.rera.facts?.inventory?.availableUnits).toBe(13);
-    expect(locked.rera.facts?.carpetGroups).toEqual([]);
+    expect(locked.rera.facts).toBeNull();
+    expect(JSON.stringify(locked)).not.toContain("3131.1");
   });
 });
