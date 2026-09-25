@@ -1,5 +1,13 @@
 # Progress
 
+## 2026-09-25 (8) — Deep — Phase 4 Part 1: branch reset onto Bhavarth's merge; documentation reconciled; stopped before Part 2
+
+**Done:** reset `task/phase-4-developer-analytics` to `origin/main` `461060d`, discarding the unpushed 2026-09-24 Phase 4 commits (`6bd771b`, `02ad081`) with no backup, by Deep's decision. That work had built a second analytics system (an `analytics` schema as v11, migration `0014`) that collided with Bhavarth's live schema v20 analytics and with `main`'s own v11 and `0014`. Created `docs/tasklists/2026-09-25-phase-4-developer-analytics.md` (Deep's parts only, Bhavarth's reviews as external gates, ten open choices). Replaced the roadmap's narrowed Phase 4 entry, added the dated `DECISIONS.md` entry, and updated the developer flow and the API spec's planned portfolio route. No code, schema or migration changed.
+
+**Verified (throwaway PostgreSQL 18 cluster on port 55432, provisioned from `docker/postgres-init`; the shared 5432 database was not touched):** migrations `0000`–`0024` applied to a fresh database, and a second migrate was a no-op; both seeds ran; format check, lint and typecheck pass; the full suite passed 172 of 173 files and 2025 of 2026 tests. The one failure is already on `main`: `developer-profile.integration.test.ts` throws "The seeded database has no listed property" because it expects a listed property that a freshly seeded database lacks. It is unrelated to analytics and is recorded in the Phase 4 tasklist, not fixed in this docs-only part.
+
+**Stop:** Part 2 needs Deep's approval, open choices 1–3 resolved, and Bhavarth's review of analytics read access.
+
 ## 2026-09-25 (7) - Units per floor and towers read from RERA, prices per unit type with RERA as the fallback, prices in the Units tab
 
 **Done (`DECISIONS.md` 2026-09-25 "Units per floor and towers are read from RERA..."):** (1) **Units per floor** counted per tower from GujRERA's flat numbers (kept in the RERA snapshot), else from a floor plan that is a whole floor, else not stated; no division anywhere. (2) **Towers** from RERA's block names, proposed as `property.total_towers` on each RERA check. (3) **Prices:** typed first, and each unpriced unit type falls back to RERA's project range; the inputs are in the Unit types tab and work on a published property, applying at once. (4) The rate-limit item for the events endpoint was added to `docs/production-readiness.md`, beside the purge schedule and privacy-policy notes already there.
