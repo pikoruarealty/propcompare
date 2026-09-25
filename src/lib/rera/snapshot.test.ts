@@ -102,6 +102,32 @@ describe("reraSnapshotProblem", () => {
     expect(reraSnapshotProblem({ ...good(), source: "" })).toMatch(/regulator/);
   });
 
+  it("accepts a snapshot with or without the promoter's history, and refuses a malformed one", () => {
+    const snapshot = good();
+    expect(reraSnapshotProblem(snapshot)).toBeNull();
+    expect(
+      reraSnapshotProblem({
+        ...snapshot,
+        promoter: {
+          yearsInGujarat: 11,
+          completedProjects: 0,
+          ongoingProjects: null,
+        },
+      }),
+    ).toBeNull();
+    expect(reraSnapshotProblem({ ...snapshot, promoter: null })).toBeNull();
+    for (const bad of [
+      "eleven",
+      { yearsInGujarat: -1, completedProjects: 0, ongoingProjects: 0 },
+      { yearsInGujarat: 1.5, completedProjects: 0, ongoingProjects: 0 },
+      { yearsInGujarat: "11", completedProjects: 0, ongoingProjects: 0 },
+    ]) {
+      expect(reraSnapshotProblem({ ...snapshot, promoter: bad })).toMatch(
+        /promoter/,
+      );
+    }
+  });
+
   it("refuses a snapshot missing a list it must carry", () => {
     const without = good();
     delete without.boundary;

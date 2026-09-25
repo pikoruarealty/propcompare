@@ -204,6 +204,39 @@ describe("project rows from the regulator's facts", () => {
     expect(rowOf(model, "contractor")).toBeUndefined();
   });
 
+  it("compares the promoter group's declared history, leaving a side that states none as not stated", () => {
+    const withHistory = buildComparison([
+      property(
+        "a",
+        facts({
+          promoter: {
+            yearsInGujarat: 11,
+            completedProjects: 0,
+            ongoingProjects: 1,
+          },
+        }),
+      ),
+      property("b", facts({ promoter: null })),
+    ]);
+    expect(texts(withHistory, "promoter_years")).toEqual(["11 years", null]);
+    expect(texts(withHistory, "promoter_completed")).toEqual(["0", null]);
+    expect(texts(withHistory, "promoter_ongoing")).toEqual(["1", null]);
+    expect(
+      rowOf(withHistory, "promoter_years")?.cells.map((cell) => cell.state),
+    ).toEqual(["value", "not_stated"]);
+    // The regulator's own declaration is marked as the regulator's.
+    expect(
+      rowOf(withHistory, "promoter_years")?.cells[0].regulatorChecked,
+    ).toBe(true);
+
+    // Nobody states it: no row at all.
+    const none = buildComparison([
+      property("a", facts({ promoter: null })),
+      property("b", facts()),
+    ]);
+    expect(rowOf(none, "promoter_years")).toBeUndefined();
+  });
+
   it("says a block's lifts are not stated rather than adding what is known", () => {
     const partial = facts({
       filing: {

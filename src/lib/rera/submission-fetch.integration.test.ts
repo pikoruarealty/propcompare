@@ -454,8 +454,9 @@ describe("using RERA's values", () => {
       );
     }
     expect(fields["property.latitude"].value).toBeCloseTo(23.02727, 4);
+    // A search by the project's name leads; the boundary's pin is RERA's own value.
     expect(fields["property.google_maps_url"].value).toMatch(
-      /^https:\/\/www\.google\.com\/maps\?q=23\.0272/,
+      /^https:\/\/www\.google\.com\/maps\/search\/\?api=1&query=/,
     );
   });
 

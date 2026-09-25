@@ -65,6 +65,43 @@ describe("reraFactLines", () => {
     expect(lines["Structural engineer"]).toBe("AMITKUMAR BHIKHUBHAI RAMI");
   });
 
+  it("states the promoter group's declared history, and a stated zero as a zero", () => {
+    const lines = Object.fromEntries(
+      reraFactLines(
+        facts({
+          promoter: {
+            yearsInGujarat: 11,
+            completedProjects: 0,
+            ongoingProjects: 1,
+          },
+        }),
+      ).map((line) => [line.label, line.value]),
+    );
+    expect(lines["Promoter group's experience in Gujarat"]).toBe("11 years");
+    expect(lines["Projects completed by the promoter group"]).toBe("0");
+    expect(lines["Projects ongoing by the promoter group"]).toBe("1");
+
+    const single = Object.fromEntries(
+      reraFactLines(
+        facts({
+          promoter: {
+            yearsInGujarat: 1,
+            completedProjects: null,
+            ongoingProjects: null,
+          },
+        }),
+      ).map((line) => [line.label, line.value]),
+    );
+    expect(single["Promoter group's experience in Gujarat"]).toBe("1 year");
+    // A figure the regulator did not state has no line.
+    expect(single["Projects completed by the promoter group"]).toBeUndefined();
+    expect(
+      reraFactLines(facts({ promoter: null })).some((line) =>
+        line.label.includes("promoter group"),
+      ),
+    ).toBe(false);
+  });
+
   it("has no line for what the regulator does not state", () => {
     const lines = reraFactLines(
       facts({

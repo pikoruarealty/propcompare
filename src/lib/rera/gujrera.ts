@@ -6,6 +6,7 @@ import {
   type RegulatorBlockProgress,
   type RegulatorDetails,
   type RegulatorParty,
+  type RegulatorPromoterHistory,
   type RegulatorPoint,
   type RegulatorPriceRange,
   type RegulatorQuarter,
@@ -342,6 +343,22 @@ export const createGujreraAdapter = (
         )?.data,
       );
 
+      // The promoter's own record, for the group's stated history. Only the three
+      // figures are read; the record also holds contact details, which are not.
+      const promoterId = /^\d{1,12}$/.test(String(summary?.promoterId ?? ""))
+        ? String(summary?.promoterId)
+        : null;
+      const promoterRecord =
+        promoterId === null
+          ? null
+          : asRecord(
+              await optional(
+                gaps,
+                "promoter history",
+                `/user_reg/promoter/promoter${promoterId}`,
+              ),
+            );
+
       // The latest quarterly filing: the form ids the site's own summary and
       // inventory tabs read. The registration summary's ids can be a later draft
       // than the filing the site shows, so these take precedence.
@@ -579,6 +596,7 @@ export const createGujreraAdapter = (
         ),
         boundary,
         centre: boundaryCentre(boundary),
+        promoter: promoterHistory(promoterRecord),
       };
 
       return {
@@ -620,6 +638,29 @@ export const createGujreraAdapter = (
       } satisfies RegulatorRecord;
     },
   };
+};
+
+/** A count or a number of years the promoter's record prints as text ("11"). */
+const wholeCount = (value: unknown): number | null => {
+  const raw = typeof value === "number" ? String(value) : text(value);
+  if (raw === null || !/^\d{1,4}$/.test(raw)) return null;
+  return Number(raw);
+};
+
+/** The group's stated history from the promoter's record; null when it states none
+ * of the three (or the record could not be read). */
+export const promoterHistory = (
+  record: Record<string, unknown> | null,
+): RegulatorPromoterHistory | null => {
+  if (!record) return null;
+  const history = {
+    yearsInGujarat: wholeCount(record.entities_experienceInState),
+    completedProjects: wholeCount(record.entities_noOfProjectsCompleted),
+    ongoingProjects: wholeCount(record.entities_ongoingProjects),
+  };
+  return Object.values(history).some((value) => value !== null)
+    ? history
+    : null;
 };
 
 const yesNo = (value: unknown): "yes" | "no" | null => {

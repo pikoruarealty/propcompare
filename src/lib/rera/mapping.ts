@@ -331,7 +331,12 @@ export const compareWithRecord = (
     nameQuery !== ""
       ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(nameQuery)}`
       : null;
-  const proposedMapUrl = boundaryLink ?? searchLink;
+  // A search by the project's name and place first: it lands where the name is
+  // pinned on Google Maps, which is usually where a buyer looks for it. The
+  // boundary's centre is a computed point that can sit a little off that pin, so it
+  // stays visible as RERA's own value, the alternative when the search is wrong
+  // (owner decision, 2026-09-25).
+  const proposedMapUrl = searchLink ?? boundaryLink;
   if (record.details)
     items.push({
       fieldKey: MAP_URL_KEY,
@@ -341,7 +346,9 @@ export const compareWithRecord = (
       currentValue: heldMapUrl,
       status:
         heldMapUrl !== null
-          ? boundaryLink !== null && heldMapUrl !== boundaryLink
+          ? boundaryLink !== null &&
+            heldMapUrl !== boundaryLink &&
+            heldMapUrl !== searchLink
             ? "differs"
             : "same"
           : proposedMapUrl === null
@@ -349,13 +356,17 @@ export const compareWithRecord = (
             : "not_held",
       note:
         heldMapUrl !== null
-          ? boundaryLink !== null && heldMapUrl !== boundaryLink
+          ? boundaryLink !== null &&
+            heldMapUrl !== boundaryLink &&
+            heldMapUrl !== searchLink
             ? "Kept: a link is already held. RERA's boundary centre is a different place, so check the map."
             : undefined
-          : boundaryLink !== null
-            ? "A pin at the centre of the boundary RERA draws. Check it on the map before publishing."
-            : searchLink !== null
-              ? "RERA drew no boundary for this project, so this is a Google Maps search from its name and place. Check the map: a search can land on the wrong place."
+          : searchLink !== null
+            ? boundaryLink !== null
+              ? "A Google Maps search from the project's name and place. Check the map: if it lands on the wrong place, RERA's value here is a pin at the centre of the boundary it draws."
+              : "RERA drew no boundary for this project, so this is a Google Maps search from its name and place. Check the map: a search can land on the wrong place."
+            : boundaryLink !== null
+              ? "A pin at the centre of the boundary RERA draws. Check it on the map before publishing."
               : undefined,
     });
 

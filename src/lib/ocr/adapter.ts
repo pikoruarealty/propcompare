@@ -1,6 +1,7 @@
 import { AMENITIES_FIELD_KEY, routerEvidenceSnippet } from "./single-facility";
 import { mkdir, rename, writeFile, readFile } from "node:fs/promises";
 import { readMeasurement } from "@/lib/units/measurements";
+import { withKeysFromName } from "@/lib/units/type-from-name";
 import path from "node:path";
 import { PDFDocument } from "pdf-lib";
 import {
@@ -134,7 +135,7 @@ export interface SubmissionFieldCandidate {
   evidence: SubmissionEvidenceCandidate[];
 }
 
-const deduplicateSubmissionEvidence = (
+export const deduplicateSubmissionEvidence = (
   evidence: SubmissionEvidenceCandidate[],
 ): SubmissionEvidenceCandidate[] => {
   const unique = new Map<string, SubmissionEvidenceCandidate>();
@@ -842,6 +843,14 @@ export const validateNewPipelineExtraction = (
 };
 
 const canonicalVariantValue = (
+  scope: OcrUnitVariantScope | OcrRoutingManifest["scopes"][number],
+  candidate: OcrUnitVariantCandidate,
+) =>
+  // A key the model left out is read from the words the unit type's own name
+  // prints ("4 BHK Duplex"), never from the drawing.
+  withKeysFromName(assembledVariantValue(scope, candidate));
+
+const assembledVariantValue = (
   scope: OcrUnitVariantScope | OcrRoutingManifest["scopes"][number],
   candidate: OcrUnitVariantCandidate,
 ) => {

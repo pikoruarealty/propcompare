@@ -16,6 +16,8 @@ import {
   propertySubmissionFieldEvidence,
   propertySubmissionFields,
   sourceDocuments,
+  specificationCatalog,
+  specificationSynonyms,
 } from "@/db/schema/catalog";
 import {
   buildSubmissionFieldCandidates,
@@ -27,6 +29,10 @@ import {
   type OcrProviderExtractionResult,
 } from "./adapter";
 import { parseOcrRoutingManifest } from "./routing";
+import {
+  promoteUnmappedEvidence,
+  type PromotionVocabulary,
+} from "./unmapped-promotion";
 import {
   recordAiUsage,
   splitProviderKey,
@@ -84,6 +90,43 @@ const markJobFailed = async (
     .where(eq(ocrExtractionJobs.id, jobId));
 };
 
+/** The specifications a saved read's unmapped facts can be promoted into today. */
+export const loadPromotionVocabulary = async (
+  tx: Tx,
+): Promise<PromotionVocabulary> => {
+  const fields = await tx
+    .select({ fieldKey: propertySchemaFields.fieldKey })
+    .from(propertySchemaFields)
+    .where(
+      and(
+        eq(propertySchemaFields.isActive, true),
+        eq(propertySchemaFields.dataType, "specification_text"),
+      ),
+    );
+  const catalog = await tx
+    .select({ key: specificationCatalog.key })
+    .from(specificationCatalog);
+  const synonyms = await tx
+    .select({
+      key: specificationCatalog.key,
+      synonym: specificationSynonyms.synonymText,
+    })
+    .from(specificationSynonyms)
+    .innerJoin(
+      specificationCatalog,
+      eq(specificationCatalog.id, specificationSynonyms.specificationCatalogId),
+    );
+  const bySynonym = new Map<string, string>();
+  for (const { key } of catalog) bySynonym.set(key.toLowerCase(), key);
+  for (const { key, synonym } of synonyms) {
+    bySynonym.set(synonym.trim().toLowerCase(), key);
+  }
+  return {
+    activeSpecificationFieldKeys: new Set(fields.map((f) => f.fieldKey)),
+    specificationKeyBySynonym: bySynonym,
+  };
+};
+
 export const persistOcrExtractionResult = async (
   tx: Tx,
   params: {
@@ -94,10 +137,20 @@ export const persistOcrExtractionResult = async (
     result: OcrProviderExtractionResult;
   },
 ): Promise<void> => {
-  const candidates = buildSubmissionFieldCandidates(
+  const read = buildSubmissionFieldCandidates(
     params.result.extraction,
     params.manifest,
   );
+  // What the read found before a field existed for it (`unmappedRawEvidence`),
+  // now that one does. Never replaces a field the read filled.
+  const candidates = [
+    ...read,
+    ...promoteUnmappedEvidence(
+      params.result.unmappedRawEvidence ?? [],
+      new Set(read.map((candidate) => candidate.fieldKey)),
+      await loadPromotionVocabulary(tx),
+    ),
+  ];
 
   for (const candidate of candidates) {
     const [submissionField] = await tx

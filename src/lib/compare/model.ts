@@ -959,6 +959,40 @@ export const buildComparison = (
       row("contractor", "Contractor", (d) =>
         textCell(partyText(d.rera.facts?.contractors ?? []), true),
       ),
+      // The promoter group's own declaration to the regulator.
+      row(
+        "promoter_years",
+        "Promoter group's experience in Gujarat",
+        (d) => {
+          const years = d.rera.facts?.promoter?.yearsInGujarat ?? null;
+          return numberCell(
+            years,
+            years === null
+              ? null
+              : `${years} ${years === 1 ? "year" : "years"}`,
+            true,
+          );
+        },
+        { numeric: true },
+      ),
+      row(
+        "promoter_completed",
+        "Projects completed by the promoter group",
+        (d) => {
+          const count = d.rera.facts?.promoter?.completedProjects ?? null;
+          return numberCell(count, count === null ? null : String(count), true);
+        },
+        { numeric: true },
+      ),
+      row(
+        "promoter_ongoing",
+        "Projects ongoing by the promoter group",
+        (d) => {
+          const count = d.rera.facts?.promoter?.ongoingProjects ?? null;
+          return numberCell(count, count === null ? null : String(count), true);
+        },
+        { numeric: true },
+      ),
       row("locality", "Locality", (d) => textCell(d.location.locality)),
       row("city", "City", (d) => textCell(d.location.city)),
       row("pincode", "Pincode", (d) => textCell(d.location.pincode)),

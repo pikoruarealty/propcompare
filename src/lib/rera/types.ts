@@ -117,6 +117,20 @@ export interface RegulatorParty {
 }
 
 /**
+ * What the promoter's record states about its group (the regulator prints these
+ * "by Group Entity"): years of work experience in Gujarat and how many projects the
+ * group has completed and has ongoing. Counts and years only. The record also holds
+ * the promoter's contact details, PAN and address, which are never read, and the
+ * areas the group has built, which are not kept because the regulator reports an
+ * area for "completed projects" even where the completed count is zero.
+ */
+export interface RegulatorPromoterHistory {
+  yearsInGujarat: number | null;
+  completedProjects: number | null;
+  ongoingProjects: number | null;
+}
+
+/**
  * Facts the regulator states beyond the ones the contract already had a field for.
  * Money never appears here, nor a person's contact detail. Areas are square metres
  * as printed, converted once where they are shown.
@@ -164,6 +178,9 @@ export interface RegulatorDetails {
   /** The drawn project boundary and its centre. */
   boundary: RegulatorPoint[];
   centre: RegulatorPoint | null;
+  /** The promoter group's stated history. Absent in a snapshot stored before it was
+   * read; `null` when the record states none. */
+  promoter?: RegulatorPromoterHistory | null;
 }
 
 export interface RegulatorQuarter {

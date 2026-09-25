@@ -465,7 +465,7 @@ describe("the second-pass items (position, map link, snapshot)", () => {
     },
   };
 
-  it("proposes the boundary's centre and a pin link where none is held", () => {
+  it("proposes the boundary's centre as the position and a search by name as the map link, where none is held", () => {
     const items = byKey(compareWithRecord(withDetails, {}, entities));
 
     expect(items["property.latitude"]).toMatchObject({
@@ -476,13 +476,49 @@ describe("the second-pass items (position, map link, snapshot)", () => {
       status: "not_held",
       proposedValue: 72.4894294,
     });
+    // The name search leads; RERA's own value stays the boundary centre, the
+    // alternative when the search lands on the wrong place.
     expect(items["property.google_maps_url"]).toMatchObject({
       status: "not_held",
-      proposedValue: "https://www.google.com/maps?q=23.0272712,72.4894294",
+      proposedValue:
+        "https://www.google.com/maps/search/?api=1&query=The%20Kimana%20Towers%20Ahmedabad",
+      reraValue: "https://www.google.com/maps?q=23.0272712,72.4894294",
     });
     expect(items["property.google_maps_url"].note).toMatch(
-      /check it on the map/i,
+      /search from the project.s name.*wrong place.*centre of the boundary/i,
     );
+  });
+
+  it("proposes the boundary's pin as the map link only when there is no name to search", () => {
+    const items = byKey(
+      compareWithRecord(
+        { ...withDetails, projectName: "", district: null },
+        { "property.name": null, "property.locality": null },
+        entities,
+      ),
+    );
+    expect(items["property.google_maps_url"].proposedValue).toBe(
+      "https://www.google.com/maps?q=23.0272712,72.4894294",
+    );
+  });
+
+  it("treats a held name search, or a held boundary pin, as the same link", () => {
+    const search =
+      "https://www.google.com/maps/search/?api=1&query=The%20Kimana%20Towers%20Ahmedabad";
+    for (const held of [
+      search,
+      "https://www.google.com/maps?q=23.0272712,72.4894294",
+    ]) {
+      const item = byKey(
+        compareWithRecord(
+          withDetails,
+          { "property.google_maps_url": held },
+          entities,
+        ),
+      )["property.google_maps_url"];
+      expect(item.status).toBe("same");
+      expect(item.proposedValue).toBeNull();
+    }
   });
 
   it("never overwrites a pin or a link an admin already holds, but shows the difference", () => {

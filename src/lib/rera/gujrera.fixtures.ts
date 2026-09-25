@@ -340,3 +340,27 @@ export const latestFilingRoutes = {
   "/formthree/public/get-fromthree-a-details-byid/446362": inventoryResponse,
   "/maplocation/public/getProjectLocations/17929": boundaryResponse,
 };
+
+/** The promoter's own record, as `/user_reg/promoter/promoter{id}` returns it: not
+ * wrapped in `data`, and holding contact details, a PAN and an address beside the
+ * group's history. Only the three history figures may reach a record. */
+export const promoterResponse = {
+  id: 17009,
+  promoterName: "SUN VN DEVELOPERS LLP",
+  promoterType: "LIMITED LIABILITY PARTNERSHIP FIRM",
+  emailId: POISON_TEXT,
+  mobileNo: "0000000000",
+  panNo: "POISON-PAN",
+  address: "POISON ADDRESS",
+  entities_websiteUrl: "https://poison.example.invalid/",
+  entities_groupHistory: "11",
+  entities_experienceGroupEntity: "3",
+  entities_experienceInState: "11",
+  entities_experienceInOtherState: "0",
+  entities_totalProjects: "1",
+  entities_totalAreaConstructed: "0",
+  entities_noOfProjectsCompleted: "0",
+  entities_areaConstructed: "7799",
+  entities_ongoingProjects: "1",
+  entities_proposedAreaConstructed: "0",
+};

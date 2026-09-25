@@ -192,6 +192,14 @@ const initialAmenityCatalog = [
     synonyms: ["open amphitheatre stage"],
   },
   {
+    // Added 2026-09-25 so a unit type that has its own terrace (Maruti 360's
+    // penthouses) can say so; it is a project amenity only when a brochure lists one.
+    key: "terrace",
+    label: "Terrace",
+    category: "Outdoor/family",
+    synonyms: ["private terrace", "sky terrace"],
+  },
+  {
     key: "security",
     label: "24×7 security",
     category: "Access/safety",
@@ -271,7 +279,7 @@ const initialSpecificationCatalog = [
     key: "clubhouse_size",
     label: "Clubhouse size",
     category: "Design & space",
-    synonyms: ["clubhouse_size"],
+    synonyms: ["clubhouse_size", "clubhouse_area"],
   },
   {
     key: "lifts_per_tower",

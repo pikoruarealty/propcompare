@@ -40,3 +40,7 @@ Written only by the publish transaction, from the contract field `property.rera_
 ## 4. Also fixed alongside
 
 `loadLiveValues` now reports `property.pincode`, `property.launch_date` and `property.rera_project_land_area_sqft`, which were published but never read back. A RERA check therefore saw them as not held on a published property and would have proposed them again every quarter.
+
+## Addendum, 2026-09-25: `promoter` (no migration)
+
+The snapshot object gains an optional `promoter`: `{ yearsInGujarat, completedProjects, ongoingProjects }`, each a whole number or `null`, read from the promoter's own record (`/user_reg/promoter/promoter{id}`, the id being the project summary's `promoterId`). RERA prints the counts "by Group Entity". Absent in a snapshot stored before it was read, and `null` when the record states none of the three. A jsonb key inside an existing versioned object, so `version` stays 1 and nothing is migrated; `reraSnapshotProblem` checks the three figures. The promoter's contact details, PAN, address and website are not read, and neither are the areas the group has built (RERA reports an area for "completed projects" even where the completed count is zero). See `DECISIONS.md` 2026-09-25.

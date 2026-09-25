@@ -82,6 +82,29 @@ export const reraSnapshotProblem = (value: unknown): string | null => {
   ]) {
     if (!Array.isArray(value[list])) return `must list ${list}`;
   }
+  // The promoter's stated history, when a snapshot carries it: three whole numbers.
+  if (value.promoter !== undefined && value.promoter !== null) {
+    const promoter = value.promoter;
+    if (!isRecord(promoter)) {
+      return "must state the promoter's history as an object";
+    }
+    for (const figure of [
+      "yearsInGujarat",
+      "completedProjects",
+      "ongoingProjects",
+    ]) {
+      const number = promoter[figure];
+      if (
+        number !== null &&
+        (typeof number !== "number" ||
+          !Number.isInteger(number) ||
+          number < 0 ||
+          number > 9999)
+      ) {
+        return `must state the promoter's ${figure} as a whole number or null`;
+      }
+    }
+  }
   const key = forbiddenKey(value);
   if (key)
     return `may not carry "${key}": no money or contact detail is stored`;

@@ -118,5 +118,27 @@ export const reraFactLines = (facts: ReraSnapshot): ReraFactLine[] => {
   add("Architect", parties(facts.architects));
   add("Structural engineer", parties(facts.engineers));
   add("Contractor", parties(facts.contractors));
+  // The promoter group's own declaration to the regulator, not a finding of ours.
+  const promoter = facts.promoter;
+  if (promoter) {
+    if (promoter.yearsInGujarat !== null) {
+      add(
+        "Promoter group's experience in Gujarat",
+        `${promoter.yearsInGujarat} ${promoter.yearsInGujarat === 1 ? "year" : "years"}`,
+      );
+    }
+    if (promoter.completedProjects !== null) {
+      add(
+        "Projects completed by the promoter group",
+        String(promoter.completedProjects),
+      );
+    }
+    if (promoter.ongoingProjects !== null) {
+      add(
+        "Projects ongoing by the promoter group",
+        String(promoter.ongoingProjects),
+      );
+    }
+  }
   return lines;
 };

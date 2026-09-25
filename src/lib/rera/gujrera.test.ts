@@ -21,6 +21,7 @@ import {
   POISON,
   POISON_TEXT,
   progressResponse,
+  promoterResponse,
   quartersResponse,
   searchResponse,
   summaryResponse,
@@ -36,6 +37,7 @@ const fakeSite = (overrides: Routes = {}) => {
     "/project_reg/public/global-search": searchResponse(),
     "/project_reg/public/getproject-details/17929": detailResponse,
     "/project_reg/public/alldatabyprojectid/17929": summaryResponse,
+    "/user_reg/promoter/promoter17009": promoterResponse,
     "/formone/public/getfrom-one-progs-rept-projectid/17929": progressResponse,
     "/formthree/public/get-fromthree-a-details-byid/417562": inventoryResponse,
     "/quarter/public/getprojectqtrs/17929": quartersResponse,
@@ -175,6 +177,63 @@ describe("GujRERA adapter — a full record", () => {
     });
   });
 
+  it("reads the promoter group's stated history from the promoter's own record, and only that", async () => {
+    const site = fakeSite();
+    const record =
+      await adapterFor(site).lookupByRegistrationNumber(KIMANA_NUMBER);
+
+    // Years in Gujarat, and the completed and ongoing counts "by Group Entity".
+    expect(record.details?.promoter).toEqual({
+      yearsInGujarat: 11,
+      completedProjects: 0,
+      ongoingProjects: 1,
+    });
+    // Asked once, at the id the project's summary names.
+    expect(
+      site.calls.filter((call) =>
+        call.url.endsWith("/user_reg/promoter/promoter17009"),
+      ),
+    ).toHaveLength(1);
+    // Nothing else of that record (contact details, PAN, address, website, the areas
+    // built) is kept.
+    const stored = JSON.stringify(record);
+    for (const kept of [
+      "POISON-PAN",
+      "POISON ADDRESS",
+      "poison.example",
+      "7799",
+    ]) {
+      expect(stored).not.toContain(kept);
+    }
+  });
+
+  it("records a gap, and states no history, when the promoter's record cannot be read", async () => {
+    const record = await adapterFor(
+      fakeSite({
+        "/user_reg/promoter/promoter17009": () =>
+          new Response("no", { status: 500 }),
+      }),
+    ).lookupByRegistrationNumber(KIMANA_NUMBER);
+
+    expect(record.details?.promoter).toBeNull();
+    expect(record.gaps).toContain("promoter history");
+    expect(record.totalUnits).toBe(76);
+  });
+
+  it("states no history when the record prints none of the three figures", async () => {
+    const record = await adapterFor(
+      fakeSite({
+        "/user_reg/promoter/promoter17009": {
+          ...promoterResponse,
+          entities_experienceInState: "",
+          entities_noOfProjectsCompleted: null,
+          entities_ongoingProjects: "many",
+        },
+      }),
+    ).lookupByRegistrationNumber(KIMANA_NUMBER);
+    expect(record.details?.promoter).toBeNull();
+  });
+
   it("lets no price and no contact detail into the record", async () => {
     const record =
       await adapterFor(fakeSite()).lookupByRegistrationNumber(KIMANA_NUMBER);
@@ -212,10 +271,10 @@ describe("GujRERA adapter — a full record", () => {
     });
     await adapter.lookupByRegistrationNumber(KIMANA_NUMBER);
 
-    // Search, detail, summary, the latest filing's form ids, its progress and
-    // blocks, the certified progress, unit count, one flat list per block,
-    // quarterly filings and the boundary.
-    expect(seen.length).toBe(10);
+    // Search, detail, summary, the promoter's record, the latest filing's form ids,
+    // its progress and blocks, the certified progress, unit count, one flat list
+    // per block, quarterly filings and the boundary.
+    expect(seen.length).toBe(11);
     for (const init of seen) {
       const headers = init.headers as Record<string, string>;
       expect(headers["User-Agent"]).toMatch(/^PropCompare-RERA-Check/);
