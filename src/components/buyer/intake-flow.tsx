@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { INTAKE_PRIORITIES_KEY } from "@/lib/compare/focus";
+import { budgetBandOf } from "@/lib/analytics/events";
+import { rememberBudgetBand, trackEvent } from "@/lib/analytics/track";
 import Link from "next/link";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -264,6 +266,22 @@ export function IntakeFlow({ options }: IntakeFlowProps) {
     // but the type says this can be null, and a thrown assertion here would
     // take the buyer's answers down with it.
     if (body === null) return;
+
+    // Analytics (`DECISIONS.md` 2026-09-25): a coarse band of the stated ceiling,
+    // never the figure, remembered so later events can be read by budget band.
+    if (page === 1) {
+      const given = answersOverride ?? answers;
+      if (given.statedRange) {
+        rememberBudgetBand(budgetBandOf(given.statedRange.toLakh));
+      }
+      trackEvent("intake_completed", {
+        detail: {
+          priorities: given.priorities,
+          bhk: given.bhk,
+          city: given.city,
+        },
+      });
+    }
 
     abandonRequest();
     const controller = new AbortController();

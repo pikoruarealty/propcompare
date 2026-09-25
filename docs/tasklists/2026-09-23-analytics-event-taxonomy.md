@@ -1,6 +1,6 @@
 # Tasklist — analytics event taxonomy and capture design (paper only)
 
-**Status:** not started
+**Status:** decided and built 2026-09-25: the owner answered questions 1 to 4 and the event list was checked against the real routes; see `docs/tasklists/2026-09-25-comparison-analytics-slice-4.md`, `docs/schema/schema.v20.md` and `DECISIONS.md` 2026-09-25.
 **Owner:** Bhavarth
 **Branch:** none yet — this is a design tasklist; no code branch until the design below is signed off
 **Depends on:** nothing structurally, but should not start implementation ahead of comparison slice 4 needing it

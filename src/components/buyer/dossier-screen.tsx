@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { identityPicture } from "@/lib/properties/identity-picture";
 import { mapEmbedUrl } from "@/lib/properties/map-url";
+import { DossierTracker } from "@/components/analytics/page-tracker";
 import { densityText } from "@/lib/properties/density";
 import { unitsPerFloorText } from "@/lib/properties/floor-density";
 import { reraFactLines } from "@/lib/properties/rera-facts";
@@ -717,6 +718,7 @@ export function DossierScreen({ dossier }: DossierScreenProps) {
 
   return (
     <PageFrame>
+      <DossierTracker slug={dossier.slug} />
       {/*
        * Structured data describing a residence, never an offer — an offer's
        * purpose is to carry a price. Built by `dossierJsonLd`, which is tested

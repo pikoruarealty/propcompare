@@ -6,6 +6,8 @@ import { useRouter } from "next/navigation";
 import { Dialog } from "radix-ui";
 import { ChevronDown, ChevronLeft, ChevronRight, Link2, X } from "lucide-react";
 import { compareAddress, useCompareSelection } from "@/lib/compare/selection";
+import { trackEvent } from "@/lib/analytics/track";
+import { useEngagedTime, useTrackOnce } from "@/lib/analytics/use-tracking";
 import { buildComparison } from "@/lib/compare/model";
 import {
   FOCUS_OPTIONS,
@@ -482,6 +484,9 @@ function SaveComparisonButton({ columns }: { columns: CompareColumn[] }) {
       });
       if (!response.ok) throw new Error("failed");
       const created = (await response.json()) as { id: string };
+      trackEvent("comparison_saved", {
+        slugs: columns.map((column) => column.slug),
+      });
       setSaved((current) => [
         ...(current ?? []).filter((entry) => entry.id !== created.id),
         { id: created.id, signature },
@@ -1063,11 +1068,22 @@ export function CompareScreen({
   const [chosen, setChosen] = React.useState<Record<string, boolean>>({});
   const isOpen = (key: string) =>
     chosen[key] ?? !(isPhone && LONG_SECTIONS.has(key));
-  const toggleGroup = (key: string) =>
-    setChosen((current) => ({ ...current, [key]: !isOpen(key) }));
-
   const count = model.columns.length;
   const slugs = model.columns.map((column) => column.slug);
+
+  // Analytics (`DECISIONS.md` 2026-09-25): the comparison as opened, and the
+  // time it is in front of the buyer, once per set of properties.
+  const slugKey = slugs.join(",");
+  useTrackOnce("compare_opened", { slugs }, slugKey);
+  useEngagedTime("compare", { slugs }, slugKey);
+
+  const toggleGroup = (key: string) => {
+    const opening = !isOpen(key);
+    setChosen((current) => ({ ...current, [key]: opening }));
+    if (opening) {
+      trackEvent("compare_group_opened", { slugs, detail: { group: key } });
+    }
+  };
 
   // The address is the source of truth: keep the tray in step with it.
   const { replace } = selection;
@@ -1107,6 +1123,11 @@ export function CompareScreen({
   const remove = (slug: string) => {
     selection.remove(slug);
     const rest = slugs.filter((other) => other !== slug);
+    trackEvent("comparison_removed", {
+      slug,
+      slugs: rest,
+      detail: { where: "compare" },
+    });
     if (rest.length < 2) {
       router.push(rest.length === 0 ? "/compare" : address(rest, requested));
       return;
@@ -1121,6 +1142,11 @@ export function CompareScreen({
   const pickVariant = (slug: string, variantId: string) => {
     const next = { ...requested, [slug]: variantId };
     setRequested(next);
+    trackEvent("compare_unit_switched", {
+      slug,
+      slugs,
+      detail: { unitVariantId: variantId },
+    });
     if (!signedIn) {
       router.replace(address(slugs, next));
       return;
@@ -1133,6 +1159,7 @@ export function CompareScreen({
       k === key ? !focus.includes(k) : focus.includes(k),
     );
     setFocus(next);
+    trackEvent("compare_focus_set", { slugs, detail: { focus: next } });
     window.history.replaceState(null, "", address(slugs, requested, next));
   };
 
@@ -1151,6 +1178,7 @@ export function CompareScreen({
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(window.location.href);
+      trackEvent("comparison_shared", { slugs });
       setCopied(true);
       window.setTimeout(() => setCopied(false), 2000);
     } catch {
