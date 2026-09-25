@@ -12,8 +12,8 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * `PATCH /api/v1/admin/enquiries/{id}` with `{ status }`: an admin marks an
- * enquiry `new`, `contacted` or `closed`. Any admin may do it (it publishes
- * nothing). A malformed id is a 404, not a database error.
+ * enquiry `new`, `contacted`, `forwarded` (sent on to the property's developer) or
+ * `closed`. Any admin may do it (it publishes nothing). A malformed id is a 404, not a database error.
  */
 export const PATCH = async (
   request: NextRequest,

@@ -27,6 +27,10 @@ import {
   landAreaText,
   unitsPerAcre,
 } from "@/lib/properties/density";
+import {
+  unitsPerFloorOf,
+  unitsPerFloorShort,
+} from "@/lib/properties/floor-density";
 import { blockNamedIn, groupSqft } from "@/lib/rera/carpet-area";
 import type { ReraSnapshot } from "@/lib/rera/snapshot";
 import { areaToSqft } from "@/lib/units/measurements";
@@ -801,7 +805,7 @@ export const buildComparison = (
     ),
   );
   unitRows.push(
-    row("units_per_floor", "Units per floor", (_d, v) =>
+    row("units_per_floor", "This unit type's units per floor", (_d, v) =>
       numberCell(
         v?.unitsPerFloor ?? null,
         v?.unitsPerFloor == null ? null : String(v.unitsPerFloor),
@@ -1037,6 +1041,20 @@ export const buildComparison = (
             density === null
               ? null
               : `${oneDecimal(density.perAcre)} units per acre${density.fromRera ? " (land area per RERA)" : ""}`,
+          );
+        },
+        { numeric: true },
+      ),
+      // The whole floor, from the project's units, towers and floors; the unit
+      // type's own count on its floor is a separate row in "The unit type".
+      row(
+        "floor_units",
+        "Units per floor (calculated)",
+        (d) => {
+          const found = unitsPerFloorOf(d);
+          return numberCell(
+            found === null ? null : Math.round(found.perFloor * 10) / 10,
+            unitsPerFloorShort(d),
           );
         },
         { numeric: true },

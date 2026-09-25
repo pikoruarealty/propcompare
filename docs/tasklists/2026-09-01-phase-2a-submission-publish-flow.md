@@ -1,6 +1,6 @@
 # Tasklist — Phase 2A submission review and publish flow
 
-**Status:** implementation in progress
+**Status:** done (reconciled 2026-09-25: every checklist box is ticked; the publish transaction and submission flow it describes are in use).
 **Owner:** Bhavarth
 **Branch:** `task/phase-2a-ocr-foundation`
 **Roadmap:** [Phase 2A](../roadmap.md#phase-2a--admin-ingestion--the-trust-boundary)

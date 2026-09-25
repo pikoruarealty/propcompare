@@ -1,13 +1,24 @@
 import { desc, eq } from "drizzle-orm";
 import type { AppDb } from "./types";
 import { users } from "@/db/schema/auth";
-import { enquiries, properties, unitVariants } from "@/db/schema/catalog";
+import {
+  developers,
+  enquiries,
+  properties,
+  unitVariants,
+} from "@/db/schema/catalog";
 
-export type EnquiryStatus = "new" | "contacted" | "closed";
+/**
+ * An enquiry reaches the admin first (`new`). The admin may contact the buyer,
+ * then either forward it to the property's developer or close it themselves;
+ * `DECISIONS.md` 2026-09-25.
+ */
+export type EnquiryStatus = "new" | "contacted" | "forwarded" | "closed";
 
 export const ENQUIRY_STATUSES: readonly EnquiryStatus[] = [
   "new",
   "contacted",
+  "forwarded",
   "closed",
 ];
 
@@ -18,6 +29,10 @@ export interface InboxEnquiry {
   createdAt: string;
   propertyName: string;
   propertySlug: string;
+  /** The developer an enquiry would be (or was) forwarded to. */
+  developerName: string;
+  /** When it was forwarded; null until an admin does. */
+  forwardedAt: string | null;
   unitTypeName: string | null;
   buyerName: string;
   buyerPhone: string | null;
@@ -39,6 +54,8 @@ export const listEnquiryInbox = async (db: AppDb): Promise<InboxEnquiry[]> => {
       createdAt: enquiries.createdAt,
       propertyName: properties.name,
       propertySlug: properties.slug,
+      developerName: developers.name,
+      forwardedAt: enquiries.forwardedAt,
       unitTypeName: unitVariants.variantName,
       buyerName: users.name,
       buyerPhone: users.phoneNumber,
@@ -46,6 +63,7 @@ export const listEnquiryInbox = async (db: AppDb): Promise<InboxEnquiry[]> => {
     })
     .from(enquiries)
     .innerJoin(properties, eq(properties.id, enquiries.propertyId))
+    .innerJoin(developers, eq(developers.id, properties.developerId))
     .innerJoin(users, eq(users.id, enquiries.userId))
     .leftJoin(unitVariants, eq(unitVariants.id, enquiries.unitVariantId))
     .orderBy(desc(enquiries.createdAt));
@@ -53,10 +71,15 @@ export const listEnquiryInbox = async (db: AppDb): Promise<InboxEnquiry[]> => {
   return rows.map((row) => ({
     ...row,
     createdAt: row.createdAt.toISOString(),
+    forwardedAt: row.forwardedAt?.toISOString() ?? null,
   }));
 };
 
-/** Moves an enquiry to another status; `false` when there is no such enquiry. */
+/**
+ * Moves an enquiry to another status; `false` when there is no such enquiry.
+ * Forwarding stamps when it was sent on; moving it anywhere else leaves that
+ * stamp as the record of the last time it was.
+ */
 export const setEnquiryStatus = async (
   db: AppDb,
   id: string,
@@ -64,7 +87,11 @@ export const setEnquiryStatus = async (
 ): Promise<boolean> => {
   const updated = await db
     .update(enquiries)
-    .set({ status, updatedAt: new Date() })
+    .set({
+      status,
+      updatedAt: new Date(),
+      ...(status === "forwarded" ? { forwardedAt: new Date() } : {}),
+    })
     .where(eq(enquiries.id, id))
     .returning({ id: enquiries.id });
   return updated.length > 0;

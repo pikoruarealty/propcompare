@@ -283,6 +283,42 @@ describe("units per floor", () => {
   });
 });
 
+describe("units per floor for the whole floor", () => {
+  it("is worked out from units, towers and floors, apart from a unit type's own count", () => {
+    const a = property("a", {
+      totalUnits: 580,
+      totalTowers: 5,
+      totalFloors: 31,
+      unitVariants: [variant("Typical", "3bhk", 1200, { unitsPerFloor: 2 })],
+    });
+    const b = property("b", {
+      totalUnits: 76,
+      totalTowers: null,
+      totalFloors: null,
+      unitVariants: [variant("Typical", "3bhk", 1200, { unitsPerFloor: 2 })],
+    });
+    const model = buildComparison([a, b]);
+
+    const whole = rowOf(model, "floor_units");
+    expect(whole?.label).toBe("Units per floor (calculated)");
+    expect(whole?.cells.map((c) => c.text)).toEqual(["about 3.7", null]);
+    expect(whole?.cells.map((c) => c.state)).toEqual(["value", "not_stated"]);
+
+    // The unit type's own stated count is a different row, and says so.
+    const own = rowOf(model, "units_per_floor");
+    expect(own?.label).toBe("This unit type's units per floor");
+    expect(own?.cells.map((c) => c.text)).toEqual(["2", "2"]);
+  });
+
+  it("has no row when no property has the three inputs", () => {
+    const model = buildComparison([
+      property("a", { totalUnits: 10, totalTowers: null, totalFloors: 5 }),
+      property("b", { totalUnits: null, totalTowers: 1, totalFloors: 5 }),
+    ]);
+    expect(rowOf(model, "floor_units")).toBeUndefined();
+  });
+});
+
 describe("the developer's completed projects", () => {
   it("shows the count listed here, including none, and says it is only those listed", () => {
     const a = property("a");

@@ -118,6 +118,9 @@ export const enquiryStatus = pgEnum("enquiry_status", [
   "new",
   "contacted",
   "closed",
+  // An admin sent it on to the developer (schema v19). Enquiries reach the admin
+  // first; forwarding is the admin's choice, and so is closing it themselves.
+  "forwarded",
 ]);
 
 export const propertyTypes = pgTable(
@@ -892,6 +895,8 @@ export const enquiries = pgTable(
     }),
     status: enquiryStatus("status").default("new").notNull(),
     message: text("message"),
+    /** When an admin last forwarded it to the developer (schema v19). */
+    forwardedAt: timestamp("forwarded_at", { withTimezone: true }),
     ...timestamps(),
   },
   (table) => [index("enquiries_property_id_idx").on(table.propertyId)],

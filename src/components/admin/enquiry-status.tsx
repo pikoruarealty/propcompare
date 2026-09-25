@@ -8,28 +8,43 @@ import type { EnquiryStatus } from "@/lib/buyer/enquiry-inbox";
 const LABEL: Record<EnquiryStatus, string> = {
   new: "New",
   contacted: "Contacted",
+  forwarded: "Forwarded",
   closed: "Closed",
 };
 
-/** What each status can move to: forward, or back to the one before. */
-const NEXT: Record<EnquiryStatus, { to: EnquiryStatus; label: string }[]> = {
+/**
+ * What each status can move to. An enquiry reaches the admin first; the admin
+ * either sends it on to the developer or closes it themselves, and can take either
+ * back (`DECISIONS.md` 2026-09-25).
+ */
+const NEXT = (
+  developerName: string,
+): Record<EnquiryStatus, { to: EnquiryStatus; label: string }[]> => ({
   new: [
+    { to: "forwarded", label: `Forward to ${developerName}` },
     { to: "contacted", label: "Mark contacted" },
     { to: "closed", label: "Close" },
   ],
   contacted: [
+    { to: "forwarded", label: `Forward to ${developerName}` },
     { to: "closed", label: "Close" },
     { to: "new", label: "Reopen as new" },
   ],
+  forwarded: [
+    { to: "closed", label: "Close" },
+    { to: "new", label: "Take back as new" },
+  ],
   closed: [{ to: "new", label: "Reopen" }],
-};
+});
 
 export function EnquiryStatus({
   id,
   status,
+  developerName,
 }: {
   id: string;
   status: EnquiryStatus;
+  developerName: string;
 }) {
   const router = useRouter();
   const [pending, startTransition] = React.useTransition();
@@ -60,7 +75,7 @@ export function EnquiryStatus({
         {LABEL[status]}
       </span>
       <div className="flex flex-wrap gap-2">
-        {NEXT[status].map((option) => (
+        {NEXT(developerName)[status].map((option) => (
           <Button
             key={option.to}
             type="button"

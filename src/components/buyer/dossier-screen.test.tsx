@@ -130,6 +130,27 @@ describe("DossierScreen — the full property", () => {
   });
 });
 
+describe("DossierScreen — units per floor", () => {
+  it("states the whole floor with its working, not a unit type's own count", () => {
+    const { main } = renderDossier(richDossierFixture);
+    // 184 units over 2 towers of 14 floors.
+    expect(main).toHaveTextContent(
+      "about 6.6 (184 units, 2 towers, 14 floors)",
+    );
+  });
+
+  it("says not stated when the towers or floors are not", () => {
+    const { container } = renderDossier({
+      ...richDossierFixture,
+      totalTowers: null,
+    });
+    const fact = [...container.querySelectorAll("dt")].find(
+      (term) => term.textContent === "Units per floor",
+    )?.parentElement;
+    expect(fact).toHaveTextContent("Not stated");
+  });
+});
+
 describe("DossierScreen — a unit type's private amenities", () => {
   it("lists what the open unit type states, with 'not offered' kept apart", () => {
     const { container } = renderDossier(richDossierFixture);

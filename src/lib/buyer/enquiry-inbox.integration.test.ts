@@ -52,6 +52,9 @@ describe("the enquiry inbox", () => {
     expect(row?.message).toBe("Is a corner unit free?");
     expect(row?.propertyName).not.toBe("");
     expect(row?.buyerEmail).toContain("@example.test");
+    // The developer it could be forwarded to, and nothing forwarded yet.
+    expect(row?.developerName).not.toBe("");
+    expect(row?.forwardedAt).toBeNull();
   });
 
   it("moves an enquiry between statuses, and reports an unknown id", async () => {
@@ -60,5 +63,23 @@ describe("the enquiry inbox", () => {
       (await listEnquiryInbox(db)).find((e) => e.id === enquiryId)?.status,
     ).toBe("contacted");
     expect(await setEnquiryStatus(db, randomUUID(), "closed")).toBe(false);
+  });
+
+  it("stamps when an enquiry is forwarded to the developer, and keeps the stamp when it moves on", async () => {
+    const before = Date.now();
+    expect(await setEnquiryStatus(db, enquiryId, "forwarded")).toBe(true);
+    const forwarded = (await listEnquiryInbox(db)).find(
+      (e) => e.id === enquiryId,
+    );
+    expect(forwarded?.status).toBe("forwarded");
+    expect(new Date(forwarded!.forwardedAt!).getTime()).toBeGreaterThanOrEqual(
+      before - 1000,
+    );
+
+    // The admin can close it themselves; the record of the forwarding stays.
+    expect(await setEnquiryStatus(db, enquiryId, "closed")).toBe(true);
+    const closed = (await listEnquiryInbox(db)).find((e) => e.id === enquiryId);
+    expect(closed?.status).toBe("closed");
+    expect(closed?.forwardedAt).toBe(forwarded?.forwardedAt);
   });
 });

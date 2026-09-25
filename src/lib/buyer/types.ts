@@ -37,7 +37,8 @@ export interface EnquiryResult {
   id: string;
   propertyId: string;
   unitVariantId: string | null;
-  status: "new" | "contacted" | "closed";
+  /** Always `new` when created; triage after that is the admin's. */
+  status: "new" | "contacted" | "forwarded" | "closed";
   message: string | null;
   createdAt: string;
 }

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { identityPicture } from "@/lib/properties/identity-picture";
 import { mapEmbedUrl } from "@/lib/properties/map-url";
 import { densityText } from "@/lib/properties/density";
+import { unitsPerFloorText } from "@/lib/properties/floor-density";
 import { reraFactLines } from "@/lib/properties/rera-facts";
 import {
   MediaGallery,
@@ -961,6 +962,11 @@ export function DossierScreen({ dossier }: DossierScreenProps) {
                  * density specification (schema v18), so it is stated here. */}
                 <Fact label="Density">
                   <FactValue value={densityText(dossier)} tabular />
+                </Fact>
+                {/* The whole floor, worked out from units, towers and floors: not one
+                 * unit type's count on its floor. */}
+                <Fact label="Units per floor">
+                  <FactValue value={unitsPerFloorText(dossier)} tabular />
                 </Fact>
                 <Fact label="Carpet area range">
                   <FactValue value={carpetRange} tabular />

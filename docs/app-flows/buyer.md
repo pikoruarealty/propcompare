@@ -24,7 +24,7 @@ Landing (guided intake is the front door)
 5. The buyer saves properties and/or adds a property or specific unit variant to a comparison.
 6. The comparison presents decision-relevant trade-offs side by side: like for like (unit type against unit type), differences first, an honest summary of what changes between the choices, and missing facts said plainly. **Reaching `/compare` and seeing the column identity and the differences-first summary needs no sign-in and is a shareable address; the detailed row groups beneath them are locked until the buyer signs in with their phone number** (owner direction, `DECISIONS.md` 2026-09-22 — supersedes the earlier "no sign-in at all" statement). Saving a comparison still needs an account regardless. See [the comparison specification](../design/comparison.v1.md).
 7. When a protected dossier action requires identity, the buyer completes phone OTP. This creates a verified unlock tied to the buyer and property. The same phone-OTP flow is what unlocks comparison detail; a session is all comparison's gate checks for, not a per-property unlock record.
-8. The buyer submits an enquiry for a property and optionally a particular unit variant.
+8. The buyer submits an enquiry for a property and optionally a particular unit variant. It reaches the admin first, never the developer directly; the admin contacts the buyer, then forwards it to the developer or closes it (`DECISIONS.md` 2026-09-25).
 
 ## Permissions and boundaries
 
