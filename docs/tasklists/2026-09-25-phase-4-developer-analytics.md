@@ -2,7 +2,7 @@
 
 - **Created:** 2026-09-25 — Deep
 - **Owner:** Deep. This tasklist lists Deep's work only. Bhavarth's reviews are external gates, not checklist items.
-- **Status:** Part 2 approved 2026-09-26 and in progress; the table approach is chosen; blocked on the threshold decision (choice 2) and Bhavarth's gates 1 and 2
+- **Status:** Part 2 in progress. Table approach and threshold decided 2026-09-26; schema v21 proposal written. Blocked on choices 11–13 and Bhavarth's gates 1 and 2.
 - **Branch:** `task/phase-4-developer-analytics`, reset onto `origin/main` at `461060d` in Part 1
 - **Base:** `origin/main` `461060d` (merge of `task/phase-3-completion`)
 - **Working agreement:** Deep approves every numbered part before it begins. Finishing one part never authorises the next. Every documentation change carries `2026-09-25 — Deep` (or its actual date plus Deep), and this tasklist and `PROGRESS.md` are updated in the same part.
@@ -46,7 +46,7 @@ A developer signs in and sees aggregated, privacy-thresholded analytics for thei
 ## Unresolved choices: decide before the part that needs them, never guessed
 
 1. **Developer read access (gate 1, Bhavarth).** How the isolation rule changes: which new modules may read analytics, and that they return only thresholded aggregates. Blocks Part 2.
-2. **Privacy threshold.** Minimum distinct **visitors** (v20's `visitor_id`) or distinct **visits** (`session_id`) per released cell, and the number (the earlier plan said 5). Suppressed cells show as "not enough data", never as zero. Blocks Part 2.
+2. **Privacy threshold.** Minimum distinct **visitors** (v20's `visitor_id`) or distinct **visits** (`session_id`) per released cell, and the number (the earlier plan said 5). Suppressed cells show as "not enough data", never as zero. Blocks Part 2. **Resolved 2026-09-26 — Deep:** the gate is 5 distinct visitors. Visitors are the primary metric (portfolio and per property); visits are secondary (return and intent) under the same visitor gate; enquiry figures are portfolio level only (option c). See `DECISIONS.md` 2026-09-26 (threshold) and `docs/schema/schema.v21.md`.
 3. **Where suppression happens.** Choose one: (a) a developer query service reads v20 raw rows and applies the threshold in code; or (b) a scheduled job writes a release-safe aggregate table (schema v21, migration `0025`) that is the only thing developer code may read. (b) enforces the rule in the database and needs gate 2. **Resolved 2026-09-26 — Deep: (b), the release-safe table.** Gate 2 now applies to Part 2.
 4. **Competitor pairings.** May developer A see that their property is often compared with a named property from developer B? Options: named, anonymised ("a 3 BHK in the same locality"), or counts only. This is the most commercially sensitive figure; owner decision. Blocks the comparison view in Parts 4–5.
 5. **Enquiry metric.** Should a developer's "enquiries" count every `enquiry_submitted` event, or only enquiries the admin forwarded (schema v19)? Blocks Part 4.
@@ -55,6 +55,9 @@ A developer signs in and sees aggregated, privacy-thresholded analytics for thei
 8. **Peer benchmarks.** Keep "your property compared with similar properties" (locality → city cohorts) in Phase 4, or defer? Blocks Part 4.
 9. **Completeness definition.** Reuse the data-quality KPI definition adopted 2026-09-23 (`property_schema_fields`, `not_stated`), or define a developer-facing ruleset? Blocks Part 4.
 10. **Scheduling host** for any aggregation job, which can share the daily `analytics:purge` schedule already listed in production-readiness. Blocks Part 6 sign-off.
+11. **Added 2026-09-26 — Deep. How developer code is kept to the release table.** Every analytics reader today runs as `propcompare_app`, which can read raw v20 events. (a) Static only: the isolation test limits developer modules to the v21 schema file. (b) A new read-only `propcompare_developer_reader` role and connection with `SELECT` on the two v21 tables only, so a slip fails in the database. (b) adds a credential, role provisioning, CI and production setup. Blocks the migration in Part 2; needs gate 2.
+12. **Added 2026-09-26 — Deep. Market-wide figures for developers.** Deep described visitors as the main metric "for the app and also for the particular project". Should a developer see platform-wide totals (all PropCompare unique visitors, and intake demand by BHK/city/band across all buyers), or only figures about their own properties? Platform totals reveal PropCompare's own traffic to every developer. Not in `release-v1` until decided; an additive change later.
+13. **Added 2026-09-26 — Deep. "Year to date" and "quarter to date".** Calendar year (January) or Indian financial year (April)? Blocks the job's window definitions in Part 2.
 
 ## External review gates (Bhavarth; not Deep's items)
 
@@ -91,7 +94,9 @@ Deep requests each gate and records the outcome in the verification table.
 - [x] Carried over from Part 1: make `developer-profile.integration.test.ts` create its own listed property through `publishSubmission` instead of assuming one exists (it fails on a freshly seeded `main`).
 - [ ] Change `analytics-isolation.test.ts` so the named developer modules may read analytics, with their exports limited to thresholded aggregates. Buyer code must still only send events.
 - [ ] Build the aggregate path chosen in choice 3, keyed by developer and property. Raw visitor/session ids and sub-threshold cells never leave it.
-- [ ] If 3b: schema v21 doc, migration `0025`, grants, the scheduled job and its script. The job reads from v20 and writes nothing to the catalog.
+- [x] Write the schema v21 proposal (`docs/schema/schema.v21.md`): run and release tables, `release-v1` metrics, threshold rules, windows, job, grants options and tests. Document only; no migration.
+- [ ] Request gate 1 (developer read access) and gate 2 (the v21 proposal) from Bhavarth; record the outcomes below.
+- [ ] After gates 1–2 and choices 11 and 13: migration `0025`, grants, the scheduled job and its script. The job reads from v20 and writes nothing to the catalog.
 - [ ] Aggregate from `analytics_events` and, beyond 13 months, from `analytics_event_monthly`/`analytics_pair_monthly`. State the tracking start (earliest v20 event).
 - [ ] Tests: threshold boundary (just under, exactly at), suppressed ≠ zero, no raw ids in output, isolation test fails on a planted violation, retention roll-over keeps totals consistent.
 - [ ] Update schema, decisions, production-readiness, progress and this tasklist.

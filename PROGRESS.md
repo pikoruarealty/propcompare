@@ -1,5 +1,15 @@
 # Progress
 
+## 2026-09-26 (2) — Deep — Threshold decided; schema v21 proposed for review
+
+**Decided (`DECISIONS.md` 2026-09-26, threshold):** a developer figure needs at least 5 distinct visitors. Visitors are the primary metric; visits are secondary (return and intent) under the same gate; enquiry figures are portfolio level only.
+
+**Done:** wrote `docs/schema/schema.v21.md`, a proposal only. It covers a run table and a release table (no hidden count, no visitor/visit id, no rival), the `release-v1` metrics, the no-subtraction rule, fixed daily windows in `Asia/Kolkata`, the `analytics:release` job, and the tests. Corrected the 2026-09-26 decision's claim that the table alone makes the rule hold in the database: every analytics reader runs as `propcompare_app`, which can read raw events, so that guarantee needs a separate read-only role (new choice 11).
+
+**Open (tasklist choices 11–13):** a reader role or static enforcement; whether developers see market-wide figures such as platform unique visitors; calendar or financial year for year/quarter to date. No migration or code was written.
+
+**Next:** Deep answers 11–13; Bhavarth reviews gate 1 (developer read access) and gate 2 (the v21 proposal).
+
 ## 2026-09-26 — Deep — Phase 4 Part 2 started: table approach chosen, a pre-existing test fixed; waiting on the threshold and Bhavarth
 
 **Decided:** Deep approved Part 2 and chose the release-safe table for developer analytics (`DECISIONS.md` 2026-09-26). The threshold's unit and value are still open; Deep asked for a fuller explanation first.
