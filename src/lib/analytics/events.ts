@@ -284,6 +284,20 @@ export const isAutomated = (userAgent: string | null): boolean =>
     userAgent,
   );
 
-/** Global Privacy Control or Do Not Track: nothing is recorded. */
+/** Global Privacy Control or Do Not Track. */
 export const optedOut = (headers: Headers): boolean =>
   headers.get("sec-gpc") === "1" || headers.get("dnt") === "1";
+
+/**
+ * How a request's own browser is recorded (owner answer, 2026-09-26):
+ * "identified" with the random visitor cookie; "anonymous" when it sends Global
+ * Privacy Control or Do Not Track (the event is kept, with no id and no cookie, so
+ * nothing links it to any other); "none" for a crawler or preview. The route and
+ * the admin screen's notice both read this, so they cannot disagree.
+ */
+export const recordingMode = (
+  headers: Headers,
+): "identified" | "anonymous" | "none" => {
+  if (isAutomated(headers.get("user-agent"))) return "none";
+  return optedOut(headers) ? "anonymous" : "identified";
+};

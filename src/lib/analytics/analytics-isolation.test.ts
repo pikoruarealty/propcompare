@@ -15,13 +15,33 @@ const ALLOWED = [
   "lib/analytics/",
   "db/schema/analytics.ts",
   "db/analytics-purge.ts",
+  // The release job reads raw events and writes only thresholded aggregates to
+  // the v21 released tables, which is the one path developer code may read
+  // (`DECISIONS.md` 2026-09-26). It runs from the command line, not a surface.
+  "db/analytics-release.ts",
   "app/admin/",
   "components/admin/",
   "app/api/v1/events/",
 ];
 
-const READS =
-  /@\/lib\/analytics\/(dashboard|record|retention)|@\/db\/schema\/analytics|analytics_events|analyticsEvents|analytics_(event|pair)_monthly/;
+/**
+ * What buyer code may import from `lib/analytics`: sending an event, and the
+ * pure helpers that carry no figure. Everything else in that directory reads
+ * events, so it is listed here rather than in `READS` — a module added later is
+ * guarded by default instead of only when someone remembers to add it (the
+ * visitor journeys of 2026-09-26 were not, until this test was made fail-safe).
+ */
+const SEND_ONLY = ["track", "use-tracking", "events", "cookies", "format"];
+
+const READS = new RegExp(
+  [
+    `@/lib/analytics/(?!(?:${SEND_ONLY.join("|")})\\b)[a-z-]+`,
+    "@/db/schema/analytics",
+    "analytics_events",
+    "analyticsEvents",
+    "analytics_(event|pair)_monthly",
+  ].join("|"),
+);
 
 const walk = (dir: string): string[] =>
   readdirSync(dir).flatMap((entry) => {

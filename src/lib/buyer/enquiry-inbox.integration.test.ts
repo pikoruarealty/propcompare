@@ -4,8 +4,11 @@ import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { db } from "@/db";
 import { users } from "@/db/schema/auth";
-import { enquiries, properties } from "@/db/schema/catalog";
-import { isListed } from "@/lib/properties/visibility";
+import { enquiries } from "@/db/schema/catalog";
+import {
+  publishTestPortfolio,
+  type TestPortfolio,
+} from "@/lib/submissions/test-support";
 import { createEnquiry } from "./enquiries";
 import { listEnquiryInbox, setEnquiryStatus } from "./enquiry-inbox";
 import { signUpTestBuyer } from "./test-support";
@@ -18,17 +21,15 @@ import { signUpTestBuyer } from "./test-support";
 let userId = "";
 let propertyId = "";
 let enquiryId = "";
+let portfolio: TestPortfolio | undefined;
 
 beforeAll(async () => {
   const buyer = await signUpTestBuyer(`inbox-${randomUUID()}@example.test`);
   userId = buyer.userId;
-  const [property] = await db
-    .select({ id: properties.id })
-    .from(properties)
-    .where(isListed)
-    .limit(1);
-  if (!property) throw new Error("The seeded database has no listed property.");
-  propertyId = property.id;
+  // Its own listed property, so the test does not depend on what else the
+  // database holds (2026-09-26 — Deep: it failed on a freshly seeded one).
+  portfolio = await publishTestPortfolio("Inbox");
+  propertyId = portfolio.properties[0].id;
   const created = await createEnquiry(db, userId, {
     propertyId,
     message: "Is a corner unit free?",
@@ -40,6 +41,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await db.delete(enquiries).where(eq(enquiries.userId, userId));
   await db.delete(users).where(eq(users.id, userId));
+  await portfolio?.remove();
 });
 
 describe("the enquiry inbox", () => {

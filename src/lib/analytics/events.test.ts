@@ -6,6 +6,7 @@ import {
   isAutomated,
   optedOut,
   readEventInput,
+  recordingMode,
   referrerDomainOf,
 } from "./events";
 
@@ -128,6 +129,19 @@ describe("the request's context", () => {
     expect(optedOut(new Headers({ "sec-gpc": "1" }))).toBe(true);
     expect(optedOut(new Headers({ dnt: "1" }))).toBe(true);
     expect(optedOut(new Headers())).toBe(false);
+    const browser = "Mozilla/5.0 (Windows NT 10.0) Chrome/126.0";
+    expect(recordingMode(new Headers({ "user-agent": browser }))).toBe(
+      "identified",
+    );
+    expect(
+      recordingMode(new Headers({ "user-agent": browser, "sec-gpc": "1" })),
+    ).toBe("anonymous");
+    expect(
+      recordingMode(new Headers({ "user-agent": browser, dnt: "1" })),
+    ).toBe("anonymous");
+    expect(recordingMode(new Headers({ "user-agent": "Googlebot/2.1" }))).toBe(
+      "none",
+    );
   });
 
   it("keeps only the referring domain, and not our own", () => {

@@ -1,5 +1,6 @@
 import { sql, type SQL } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
+import { fillDays } from "./days";
 
 /**
  * Everything the admin Analytics screen shows, read live from the raw events for a
@@ -17,6 +18,8 @@ export interface DashboardRange {
 }
 
 export interface Overview {
+  /** Events from browsers sent with no visitor id (a privacy signal, or older than 13 months). */
+  eventsWithoutVisitor: number;
   visitors: number;
   visits: number;
   signedInVisitors: number;
@@ -66,11 +69,15 @@ export interface PropertyRow {
 
 export interface CountRow {
   label: string;
+  /** The raw value behind the label, for a link to the visitors behind the row. */
+  key?: string;
   count: number;
 }
 
 export interface BreakdownRow {
   label: string;
+  /** The raw value behind the label (the same as the label for these tables). */
+  key: string;
   visitors: number;
   comparers: number;
   enquirers: number;
@@ -120,7 +127,7 @@ export const periodRange = (
   to: now,
 });
 
-const GROUP_LABEL: Record<string, string> = {
+export const GROUP_LABEL: Record<string, string> = {
   timeline: "Possession and timeline",
   unit_type: "The unit type",
   rooms: "Room by room",
@@ -131,12 +138,37 @@ const GROUP_LABEL: Record<string, string> = {
   location: "Location and connectivity",
   trust: "RERA",
 };
-const FOCUS_LABEL: Record<string, string> = {
+export const FOCUS_LABEL: Record<string, string> = {
   space: "Space",
   timeline: "Timeline",
   amenities: "Amenities",
   build: "Build",
   trust: "Trust",
+};
+
+/**
+ * The source of the visit an event belongs to: the session's first event's
+ * campaign tags, else the site that linked to it, else "Direct". Shared with the
+ * visitors list, so a table row and the list it opens cannot define it apart.
+ * `alias` names the analytics events row in the caller's query.
+ */
+export const sourceOfEvent = (alias: string): SQL => {
+  const e = sql.raw(alias);
+  return sql`coalesce(
+    (select coalesce(s.source || coalesce(' / ' || s.medium, ''), s.referrer_domain)
+       from analytics_events s where s.session_id = ${e}.session_id
+       order by s.occurred_at limit 1),
+    'Direct')`;
+};
+
+/** The budget band a visitor last stated, whatever event it rode on. */
+export const bandOfEvent = (alias: string): SQL => {
+  const e = sql.raw(alias);
+  return sql`coalesce(
+    (select s.budget_band from analytics_events s
+       where s.visitor_id = ${e}.visitor_id and s.budget_band is not null
+       order by s.occurred_at desc limit 1),
+    'Not stated')`;
 };
 
 export const loadAnalyticsDashboard = async (
@@ -153,19 +185,23 @@ export const loadAnalyticsDashboard = async (
     with e as (select * from analytics_events e where ${within}),
     compare_time as (
       select session_id, sum(engaged_ms) ms from e
-      where event = 'page_engaged' and detail->>'page' = 'compare' group by 1
+      where event = 'page_engaged' and detail->>'page' = 'compare'
+        and session_id is not null group by 1
     ),
     dossier_time as (
-      select engaged_ms ms from e
+      select session_id, sum(engaged_ms) ms from e
       where event = 'page_engaged' and detail->>'page' = 'dossier'
+        and session_id is not null group by 1
     )
     select
+      count(*) filter (where visitor_id is null) events_without_visitor,
       count(distinct visitor_id) visitors,
       count(distinct session_id) visits,
       count(distinct visitor_id) filter (where signed_in) signed_in_visitors,
       count(*) filter (where event = 'property_viewed') property_views,
       count(*) filter (where event = 'compare_opened') comparisons_opened,
       count(distinct visitor_id) filter (where event = 'compare_opened') comparing_visitors,
+      count(*) filter (where event = 'compare_opened' and visitor_id is not null) identified_comparisons_opened,
       count(*) filter (where event = 'enquiry_submitted') enquiries,
       count(*) filter (where event = 'enquiry_submitted'
         and cardinality(compared_ids) >= 2
@@ -175,6 +211,7 @@ export const loadAnalyticsDashboard = async (
     from e`);
   const comparers = num(overviewRow.comparing_visitors);
   const overview: Overview = {
+    eventsWithoutVisitor: num(overviewRow.events_without_visitor),
     visitors: num(overviewRow.visitors),
     visits: num(overviewRow.visits),
     signedInVisitors: num(overviewRow.signed_in_visitors),
@@ -184,8 +221,9 @@ export const loadAnalyticsDashboard = async (
     comparisonsPerComparer:
       comparers === 0
         ? null
-        : Math.round((num(overviewRow.comparisons_opened) / comparers) * 10) /
-          10,
+        : Math.round(
+            (num(overviewRow.identified_comparisons_opened) / comparers) * 10,
+          ) / 10,
     medianCompareSecondsPerVisit: seconds(overviewRow.median_compare_ms),
     medianDossierSecondsPerView: seconds(overviewRow.median_dossier_ms),
     enquiries: num(overviewRow.enquiries),
@@ -196,7 +234,7 @@ export const loadAnalyticsDashboard = async (
     with e as (select * from analytics_events e where ${within}),
     viewed as (
       select visitor_id, count(distinct property_id) n from e
-      where event = 'property_viewed' group by 1
+      where event = 'property_viewed' and visitor_id is not null group by 1
     )
     select
       count(distinct visitor_id) visited,
@@ -245,7 +283,8 @@ export const loadAnalyticsDashboard = async (
       ),
       time_per_session as (
         select session_id, sum(engaged_ms) ms from e
-        where event = 'page_engaged' and detail->>'page' = 'compare' group by 1
+        where event = 'page_engaged' and detail->>'page' = 'compare'
+        and session_id is not null group by 1
       ),
       counted as (
         select a_id, b_id, count(*) comparisons, count(distinct visitor_id) visitors,
@@ -289,12 +328,21 @@ export const loadAnalyticsDashboard = async (
       top_rival as (
         select distinct on (pid) pid, other, n from rival order by pid, n desc, other
       ),
+      -- Summed per visit (session) before the median, like the overview tile's
+      -- own dossier and compare figures: a visitor's three pings on one visit
+      -- are one data point, not three (2026-09-26, the two disagreed).
+      dossier_time_by_property as (
+        select property_id, session_id, sum(engaged_ms) ms from e
+        where event = 'page_engaged' and detail->>'page' = 'dossier'
+          and session_id is not null
+        group by 1, 2
+      ),
       per as (
         select p.id, p.name,
           count(*) filter (where e.event = 'property_viewed' and e.property_id = p.id) views,
           count(distinct e.visitor_id) filter (where e.event = 'property_viewed' and e.property_id = p.id) viewers,
-          percentile_cont(0.5) within group (order by e.engaged_ms) filter (
-            where e.event = 'page_engaged' and e.detail->>'page' = 'dossier' and e.property_id = p.id) median_ms,
+          (select percentile_cont(0.5) within group (order by dt.ms)
+             from dossier_time_by_property dt where dt.property_id = p.id) median_ms,
           count(*) filter (where e.event = 'comparison_started' and e.property_id = p.id) added,
           count(*) filter (where e.event = 'comparison_removed' and e.property_id = p.id) removed,
           count(*) filter (where e.event = 'compare_opened' and p.id = any(e.compared_ids)) in_comparisons,
@@ -335,6 +383,7 @@ export const loadAnalyticsDashboard = async (
       group by 1 order by 2 desc`)
   ).map((row) => ({
     label: GROUP_LABEL[String(row.k)] ?? String(row.k),
+    key: String(row.k),
     count: num(row.n),
   }));
 
@@ -362,7 +411,8 @@ export const loadAnalyticsDashboard = async (
   const breakdown = async (by: SQL): Promise<BreakdownRow[]> =>
     (
       await rows(sql`
-        with e as (select *, ${by} as k from analytics_events e where ${within})
+        with e as (select *, ${by} as k from analytics_events e
+          where ${within} and visitor_id is not null)
         select k,
           count(distinct visitor_id) visitors,
           count(distinct visitor_id) filter (where event = 'compare_opened') comparers,
@@ -370,23 +420,16 @@ export const loadAnalyticsDashboard = async (
         from e group by k order by visitors desc limit 20`)
     ).map((row) => ({
       label: String(row.k),
+      key: String(row.k),
       visitors: num(row.visitors),
       comparers: num(row.comparers),
       enquirers: num(row.enquirers),
     }));
 
   // A visitor keeps the first source of their visit: the session's earliest event.
-  const sources = await breakdown(sql`coalesce(
-    (select coalesce(s.source || coalesce(' / ' || s.medium, ''), s.referrer_domain)
-       from analytics_events s where s.session_id = e.session_id
-       order by s.occurred_at limit 1),
-    'Direct')`);
+  const sources = await breakdown(sourceOfEvent("e"));
   // A visitor belongs to the band they last stated, whatever event it rode on.
-  const budgetBands = await breakdown(sql`coalesce(
-    (select s.budget_band from analytics_events s
-       where s.visitor_id = e.visitor_id and s.budget_band is not null
-       order by s.occurred_at desc limit 1),
-    'Not stated')`);
+  const budgetBands = await breakdown(bandOfEvent("e"));
   const devices = await breakdown(sql`e.device`);
 
   const intakeBedrooms = (
@@ -408,7 +451,7 @@ export const loadAnalyticsDashboard = async (
     count: num(row.n),
   }));
 
-  const days = (
+  const dayRows = (
     await rows(sql`
       select to_char(date_trunc('day', e.occurred_at at time zone 'Asia/Kolkata'), 'YYYY-MM-DD') d,
         count(distinct visitor_id) visitors,
@@ -422,6 +465,8 @@ export const loadAnalyticsDashboard = async (
     comparisons: num(row.comparisons),
     enquiries: num(row.enquiries),
   }));
+  // Every day of the period, so a quiet day is a short bar and not a missing one.
+  const days = fillDays(dayRows, range);
 
   return {
     range: { from, to },

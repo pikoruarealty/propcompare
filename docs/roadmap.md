@@ -82,15 +82,23 @@ Phases 2A and 2B run in parallel once Phase 1 lands, so both developers are work
 
 **Status update 2026-09-25:** the enquiry flow is now admin-first (the admin forwards an enquiry to the developer or closes it; schema v19), units per floor is the whole floor's, and the price categorization was verified against the live data. Everything in the acceptance below is built. Comparison analytics (slice 4) was then decided and built the same day, with an admin Analytics screen (schema v20). The one remaining Phase 3 item is the landing page's richer content, which needs the owner's scope.
 
+**Status update 2026-09-26: Phase 3 is closed (owner).** The one item left in the 2026-09-25 note, the landing page's richer content, moves to the UI redesign (owner direction, 2026-09-26). The analytics work built after the acceptance below (anonymous events, the visitors screens, table drill-down, the events rate limit) is recorded in `PROGRESS.md`. The database-backed tests now run one file at a time (`DECISIONS.md` 2026-09-26).
+
 **Acceptance:** a buyer can browse, get intake-matched results from the inclusive ±20% private budget-range matcher (no price ever rendered), compare, save, unlock a dossier via OTP, and submit an enquiry — end to end on real data.
 
 ---
 
-## Phase 4 — Developer portfolio/analytics (narrowed 2026-09-18)
+## Phase 4 — Developer analytics over schema v20
 
-> The developer-facing submission screens pulled forward on 2026-09-18 are **on hold** (owner decision 2026-09-20): maintainers upload everything until developers join. Revisit only if the project is ahead of schedule.
+> **Scope set 2026-09-25 — Deep:** Phase 4 is the developer-facing, aggregates-only view of the first-party analytics Bhavarth built in Phase 3 completion (schema v20, `DECISIONS.md` 2026-09-25 "First-party analytics built", item 7). It builds on v20 and does not rebuild capture: no second event table, cookie or events route. A developer sees thresholded aggregates for their own properties only, plus deterministic listing completeness; nothing reaches a buyer or becomes a score. **Execution tasklist:** [2026-09-25 Phase 4 developer analytics](tasklists/2026-09-25-phase-4-developer-analytics.md), in six parts, each approved by Deep before it starts. Ten choices are open there and are not to be guessed.
+>
+> **Area of focus:** Deep builds the vertical slice. Bhavarth reviews analytics read access, any schema/grant change, the event vocabulary, developer auth/ownership, and the merge.
+>
+> The paragraphs below are the earlier record, kept as history.
 
-**Area of focus: Deep** for the portal build; **Bhavarth** defines the auth/permission boundaries and reviews.
+> The developer-facing submission screens pulled forward on 2026-09-18 are **on hold** (owner decision 2026-09-20): maintainers upload everything until developers join. Revisit only if the project is ahead of schedule. _(Still true 2026-09-25 — Deep: Phase 4 does not include them.)_
+
+**Area of focus (2026-09-18, superseded 2026-09-25 above): Deep** for the portal build; **Bhavarth** defines the auth/permission boundaries and reviews.
 
 The submission-creating half of the developer portal (upload, page routing, OCR-draft review, submit) moved to finishing Phase 2A — see the 2026-09-18 `DECISIONS.md` entry. What's left here, once a developer account can already sign in and submit:
 

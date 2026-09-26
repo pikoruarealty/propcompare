@@ -1,5 +1,113 @@
 # Progress
 
+## 2026-09-26 (5) - Two stale readiness lines and one wrong privacy statement corrected; pending items checked against the database
+
+**Done:** (1) `docs/production-readiness.md` said the saved properties and comparisons page and the pre-login intake claim were unbuilt; both are built (`/saved`, `POST /api/v1/buyer/intake-handoff/claim`), lines corrected. (2) `docs/product/privacy-policy-inputs.md` said Google received nothing today; the dossier's embedded map already loads from google.com on page load, corrected. (3) The landmark map was scoped and then set aside by the owner for now; nothing was built and the map is as before.
+
+**Checked against the database, not the docs:** no draft submission exists (all 12 are published), so the Godrej Altus draft and the Maruti 360 edit are done; no unit-type price has been typed (0 staged, 0 history); a RERA snapshot is held for 2 of 5 properties (Anamika, Godrej Altus); nothing schedules `analytics:purge` or `analytics:release`; `POST /api/v1/events` has no rate limit.
+
+## 2026-09-26 (7) - The full suite is reliable; source, budget, device and section rows open their visitors; Phase 3 closed
+
+**Done:** (1) **The flaky suite fixed at its cause** (`DECISIONS.md` 2026-09-26 "Database-backed tests run one file at a time"): the 56 integration files shared one database while running in parallel; they now run one at a time in their own vitest project. Four consecutive full runs were green (2104 tests, about two minutes), against about half failing before. (2) **Drill-down** (`docs/tasklists/2026-09-26-analytics-table-drill-down.md`): each row of "Where visitors come from", "By budget", "By device" and "Sections opened" opens the visitors it counted, through the same filter and the same source and band definitions as the tables (proved row by row against the database). (3) `docs/roadmap.md` and `DECISIONS.md` record Phase 3 as closed; the landing page's richer content went to the UI redesign.
+
+**Verified:** typecheck, lint, format; the full suite four times; the analytics and admin suites for the drill-down. Local database holds only its real rows (6 properties, 10 developers, 9 events). Not looked at in a browser.
+
+## 2026-09-26 (6) - The events route has a rate limit; a test that left events behind on every run is fixed
+
+**Done (`docs/tasklists/2026-09-26-events-rate-limit.md`):** `POST /api/v1/events` now drops a caller's events after 120 in a minute (still `204`, nothing recorded). The caller's address is a key in memory for at most that minute and is never stored (`privacy-policy-inputs.md` updated). It is a floor per server instance; the host's proxy must still set the forwarding header and limit the route (`production-readiness.md`). **Found and fixed:** the analytics integration test recorded two events per run that its cleanup never removed (18 accumulated in the local database); it now registers them, and the 18 were deleted, leaving the 9 real events.
+
+**Verified:** `bun run typecheck`, lint, format; `rate-limit.test.ts`, the analytics integration file and the isolation test. The full suite was not run.
+
+## 2026-09-26 (4) - Developers see forwarded enquiries; the Phase 4 review items finished; ready to hand Parts 4 to 6 to Deep
+
+**Done:** (1) Owner decision: a forwarded enquiry shows its developer the buyer's name, message and phone (`/developers/enquiries`, tasklist `docs/tasklists/2026-09-26-developer-forwarded-enquiries.md`). (2) Gate 1 granted: the isolation test already lets developer code read the released tables and refuses raw events (checked with a throwaway route). (3) Release job: `views` and `comparisons` count anonymous activity under the unchanged 5-identified-visitor gate (migration `0028`); "listed" has a single definition. (4) Admin dossier median now sums pings per visit (proved: 25s became 50s). (5) Privacy inputs record what a developer sees. (6) Deep's `developer-analytics` test cleaned up through the wrong role and left orphaned developers in the local database after my earlier re-runs; the residue was removed and the database holds only its real rows (6 properties, 10 developers, 9 real events).
+
+**Verified:** typecheck, lint, format, and the suites touched (analytics, release job and rules, enquiries, isolation). The full suite is intermittently red (one shared-database integration test, a different one each run); see `DECISIONS.md` 2026-09-26, last entry.
+
+**Not done:** Phase 4 Parts 4 to 6 (Deep), splits for the new metrics, the stable fix for the integration flake.
+
+## 2026-09-26 (3) - Phase 4 reviewed and merged; two of Deep's migrations would never have run on an existing database
+
+**Reviewed** `task/phase-4-developer-analytics` (`745e8cf`) and merged it into `task/analytics-anonymous-events`. **Nothing is built twice:** Deep withdrew his own analytics system and built only the developer-facing release layer on schema v20, with no second events table, cookie, route or capture path. Security checked against a real database: no `sql.raw` with variable input, no write to a live catalog table, and the `propcompare_developer_reader` role can select his two released tables and is refused raw events, catalog, account and `private` tables and every write.
+
+**Found and fixed: both of Deep's migrations would have been silently skipped on every existing database.** `drizzle-kit` applies a migration only when its journal `when` exceeds the newest already recorded. His `0025` and `0026` were stamped 2026-09-26, earlier than `0024`'s 2026-10-04. Proved on a database already at `0024`: `migrate` printed "migrations applied successfully" and created neither table. Fresh databases, the only ones he tested, hide it. All three new migrations are restamped a day apart after `0024`, and the upgrade path is verified in two stages instead of only from empty.
+
+**Merged (`DECISIONS.md` 2026-09-26 "Phase 4 merged into the analytics work"):** Deep's branch was pushed first, so it keeps schema v21 and migrations `0025`/`0026`; mine is renumbered to `docs/schema/schema.v22.md` and regenerated as `0027_analytics_anonymous_events` on his snapshot. Two real conflicts surfaced by running the merged suite: his release-job test deleted events as the application role, which v22 forbids (now tidies up through the owner role), and the isolation test flagged his job runner as an undeclared reader (now declared). The owner's answers on anonymous events, named rivals, enquiries and gate 2 are in the decision entry.
+
+**Also fixed this session:** the dossier's server render failed on every request, because `ReportProblemLink` read `window.location.href` while rendering and a `"use client"` component is still rendered on the server; the address is now read in an effect, with a test that renders it in a node environment. And the isolation test listed analytics readers by name, so the visitor journeys added earlier were never guarded; it now names the send-only modules and guards the rest, so a new module is covered by default.
+
+**Verified:** `bun run typecheck`, lint, format check; the full suite on the merged tree (2090 tests, green on some runs and one intermittent integration failure on others, see below); migrations applied to the local database and to a throwaway one in both the fresh and the already-at-0024 paths, with grants and role boundaries checked in SQL. The local database was repaired rather than reset: its record of my old `0025` was removed and `anonymised_at` rebuilt by `0027`. Repeatedly re-running the merged integration suite while reviewing (including piping `vitest run` through `grep | head`, which can SIGPIPE the process mid-run and skip a test file's `afterAll`) left 12 leftover test properties, their developers and submissions, and 4 stray `property_viewed` events of my own; all were identified by name pattern or timestamp and removed. The database now holds exactly what it held before this session: 6 properties and the owner's own 9 real (anonymous) analytics events from testing the Brave fix.
+
+**Known, not fixed:** the merged suite is not reliably green. About half of full runs fail one integration test, a different one each time (RERA refresh, RERA carpet area, the usage ledger), and each passes on its own and in small groups. Neither branch shows this alone, so it is the two sets of database integration tests running together against one database rather than a product fault; it needs settling before the branch reaches `main`. Listed for Deep with the other follow-ups in the decision entry.
+
+## 2026-09-26 (2) - The Analytics screen can be opened: a chart that draws every day, visitors, journeys, links from every figure, and what stands out
+
+**Done (`DECISIONS.md` 2026-09-26 "The admin Analytics screen can be opened"; `docs/tasklists/2026-09-26-analytics-drill-down.md`; no schema change):** (1) The daily chart drew only days with events, so one active day became one full-width bar; it now draws every Indian calendar day of the period (zeros included), caps a bar's width and labels the scale. (2) `/admin/analytics/visitors`: the visitors behind a figure (last seen, visits, events, time, device and source, what they viewed and did), filterable by funnel step reached or stopped at, the sign-in gate, a property or a compared pair. (3) `/admin/analytics/visitors/{id}`: one browser's events in order, in plain words, grouped by visit; a browser is a random id, and nothing is joined to a person. (4) Every tile, funnel step (who reached it, who stopped there), pair and property row now opens the visitors behind it, or the property or enquiry table. (5) "What stands out": rule-built sentences (where most visitors stop, the pair compared most and its enquiries, a property dropped from comparisons or opened but never compared, the sign-in gate's pass rate, the section opened most), each linking to the visitors behind it; no score, no winner. (6) `docs/product/privacy-policy-inputs.md` records that an admin can now open an individual browser's history.
+
+**Verified:** `bun run typecheck`, lint, format check, and the analytics and admin suites (22 files, 194 tests, including the visitor list, its filters and a journey against the real database, the chart with one day and with thirty, linked tiles and funnel steps, and the sentence builders). Not looked at in a browser by me (the admin screen needs a sign-in). Not committed.
+
+**Found, not fixed:** `ReportProblemLink` (`src/components/buyer/report-problem-link.tsx:72`) reads `window.location.href` while the server renders a dossier, so the dossier's server render errors and falls back to client rendering ("window is not defined"). It predates this work.
+
+**Not done:** drill-down from the source, budget, device, section, focus and intake tables; the developer view; the opt-in for interested buyers.
+
+## 2026-09-26 - Why Analytics was empty; Brave and other privacy-signal browsers are now recorded anonymously; old events are anonymised, not deleted (schema v21)
+
+**Finding:** `analytics_events` had held zero rows since it was created. The capture path works: driven through a real Chrome with an ordinary user agent, a dossier visit and a comparison open were stored with both compared properties. The owner's browser is Brave, which sends Global Privacy Control by default, and the 2026-09-25 rule recorded nothing for such a browser, so neither of the owner's accounts appeared. The screen gave no hint.
+
+**Done (`DECISIONS.md` 2026-09-26, `docs/schema/schema.v21.md`, migration `0025`, applied locally):** (1) a browser that sends Global Privacy Control or Do Not Track is recorded **anonymously**: the event is kept with no visitor id, no visit id and no cookie (none is read or set); crawlers are still not recorded; the browser-side tracker no longer bails on the signal. (2) Raw events are **anonymised at 13 months instead of deleted**: the job first adds the month to the monthly counts (with distinct-visitor figures), then clears the two ids and stamps `anonymised_at`; each row is handled once. The application role can no longer delete an event, and can rewrite only those three columns. (3) The dashboard reads identified rows only for visitors, visits, funnel and breakdowns, includes anonymous rows in event counts, pairs and time on a page, and says how many events had no visitor id; comparisons per comparer no longer count anonymous comparisons. (4) `/admin/analytics` says whether the browser viewing it is recorded anonymously or not at all (`recordingMode`). (5) Identity (phone, name, email) stays out of the events table by decision. (6) **`docs/product/privacy-policy-inputs.md`** lists everything the product collects (buyer data, cookies and browser storage, analytics rules, recipients), what is decided, what is open and what counsel should be asked, so the policy is drafted from it; `AGENTS.md` now requires it to be updated whenever collected data changes. Findings recorded there: a buyer gives only a phone number at sign-in (name and email are placeholders); the sign-in session stores an IP address and user agent; no third-party cookie or tracker exists today.
+
+**Verified:** typecheck (`bun run typecheck`; an earlier claim in this session that typecheck passed had used `npx tsc`, which does not run it), lint and format check on the changed files, the analytics suites (4 files, 19 tests, against the real database: anonymous events with no cookie, the dashboard with anonymous rows, anonymising with a second run adding nothing, and the application role refused a delete and an update). Migration `0025` applied to the local database and its grants checked. The full suite was not run. The admin notice was not looked at in a browser. The three test events used to check the pipeline were removed.
+
+**Not done:** the daily schedule for the job, rate limiting on the endpoint, the developer view, the opt-in consent for interested buyers (wording and what a developer sees are the owner's; `docs/product/privacy-policy-inputs.md` section 8), and the privacy policy itself. Not committed.
+
+## 2026-09-26 (4) — Deep — Part 2 built: the release job, and no enquiry figures for developers
+
+**Decided (`DECISIONS.md` 2026-09-26):** developers see no enquiry figure at all; only listed properties get figures; the 12-month window stands.
+
+**Done:** migration `0026` removes the enquiry metrics so the database refuses them. The release job (`bun run analytics:release`, `src/lib/analytics/release.ts`) counts distinct visitors behind every figure for each window, releases them under the shared rules, keeps the latest 7 runs, and on failure leaves the last good figures in place. Every listed property and portfolio always has a row per unsplit metric. The shared test helper also cleans up later edits to its properties.
+
+**Verified (fresh throwaway PG18 database on port 55432; the shared 5432 database untouched):** migrations `0000`–`0026`; 26 v21 tests including the job against real events (released and withheld figures, the median, the no-subtraction rule, the portfolio, India-time edges, no enquiry/unlisted/other-developer figure, rerun, failure, pruning); lowering the gate to 4 makes them fail; the command runs; format, lint and typecheck clean; full suite 175/175 files, 2071/2071 tests; nothing left behind.
+
+**Waiting on:** Bhavarth's gate 2 review of `0025` and `0026`. Part 3 (capture gaps) needs Deep's approval, or can be skipped if no new events are wanted.
+
+## 2026-09-26 (3) — Deep — Schema v21 built: release tables, a read-only developer role, migration `0025`
+
+**Decided (`DECISIONS.md` 2026-09-26):** developer analytics read through their own role; a developer sees only their own properties (platform-wide figures stay with the admin); quarter and year to date are calendar ones. Deep approved the migration.
+
+**Done:** `src/db/schema/developer-analytics.ts` and migration `0025_developer_analytics_release` (run and release tables, every release rule a check constraint, explicit grants); the `propcompare_developer_reader` role in local/CI provisioning, `.env.example`, CI and `src/db/developer-reader.ts`; the pure release rules (`src/lib/analytics/release-rules.ts`: India-time windows, the 5-visitor gate, the no-subtraction rule). Building the windows showed that a trailing 13-month window would reach raw events v20 has already rolled up, so the longest window is 12 months (Deep to confirm). Three integration tests on `main` that failed depending on timing (`developer-profile`, `analytics`, `enquiry-inbox`) now publish their own properties through a shared helper. Updated schema v21, local database setup, production readiness and the tasklist.
+
+**Verified (fresh throwaway PG18 database on port 55432; the shared 5432 database untouched):** migrations `0000`–`0025` apply and rerun as a no-op; the reader reads v21 and is refused raw analytics, catalog, account and `private` tables and every write; format, lint and typecheck clean; full suite 175/175 files, 2062/2062 tests; nothing left behind.
+
+**Not done:** the release job (waits on choices 5 and 6); Bhavarth's gate 2 review of `0025`, to be recorded before merge or any apply outside tests. An existing local database needs the reader role created before it can migrate (`docs/local-database-setup.md`).
+
+## 2026-09-26 (2) — Deep — Threshold decided; schema v21 proposed for review
+
+**Decided (`DECISIONS.md` 2026-09-26, threshold):** a developer figure needs at least 5 distinct visitors. Visitors are the primary metric; visits are secondary (return and intent) under the same gate; enquiry figures are portfolio level only.
+
+**Done:** wrote `docs/schema/schema.v21.md`, a proposal only. It covers a run table and a release table (no hidden count, no visitor/visit id, no rival), the `release-v1` metrics, the no-subtraction rule, fixed daily windows in `Asia/Kolkata`, the `analytics:release` job, and the tests. Corrected the 2026-09-26 decision's claim that the table alone makes the rule hold in the database: every analytics reader runs as `propcompare_app`, which can read raw events, so that guarantee needs a separate read-only role (new choice 11).
+
+**Open (tasklist choices 11–13):** a reader role or static enforcement; whether developers see market-wide figures such as platform unique visitors; calendar or financial year for year/quarter to date. No migration or code was written.
+
+**Next:** Deep answers 11–13; Bhavarth reviews gate 1 (developer read access) and gate 2 (the v21 proposal).
+
+## 2026-09-26 — Deep — Phase 4 Part 2 started: table approach chosen, a pre-existing test fixed; waiting on the threshold and Bhavarth
+
+**Decided:** Deep approved Part 2 and chose the release-safe table for developer analytics (`DECISIONS.md` 2026-09-26). The threshold's unit and value are still open; Deep asked for a fuller explanation first.
+
+**Done:** `developer-profile.integration.test.ts` publishes its own listed property through `publishSubmission` and removes it afterwards, instead of assuming the database already has one. It failed on any freshly seeded `main`.
+
+**Verified (fresh throwaway PG18 database on port 55432; the shared 5432 database untouched):** that test passes 3/3; the full suite passes 173/173 files and 2026/2026 tests; the test leaves no rows behind; Prettier and ESLint are clean.
+
+**Waiting on:** the threshold decision; Bhavarth's gate 1 (developer read access to analytics) and gate 2 (schema v21 table, grants and job). No schema, migration or analytics code has been written.
+
+## 2026-09-25 (8) — Deep — Phase 4 Part 1: branch reset onto Bhavarth's merge; documentation reconciled; stopped before Part 2
+
+**Done:** reset `task/phase-4-developer-analytics` to `origin/main` `461060d`, discarding the unpushed 2026-09-24 Phase 4 commits (`6bd771b`, `02ad081`) with no backup, by Deep's decision. That work had built a second analytics system (an `analytics` schema as v11, migration `0014`) that collided with Bhavarth's live schema v20 analytics and with `main`'s own v11 and `0014`. Created `docs/tasklists/2026-09-25-phase-4-developer-analytics.md` (Deep's parts only, Bhavarth's reviews as external gates, ten open choices). Replaced the roadmap's narrowed Phase 4 entry, added the dated `DECISIONS.md` entry, and updated the developer flow and the API spec's planned portfolio route. No code, schema or migration changed.
+
+**Verified (throwaway PostgreSQL 18 cluster on port 55432, provisioned from `docker/postgres-init`; the shared 5432 database was not touched):** migrations `0000`–`0024` applied to a fresh database, and a second migrate was a no-op; both seeds ran; format check, lint and typecheck pass; the full suite passed 172 of 173 files and 2025 of 2026 tests. The one failure is already on `main`: `developer-profile.integration.test.ts` throws "The seeded database has no listed property" because it expects a listed property that a freshly seeded database lacks. It is unrelated to analytics and is recorded in the Phase 4 tasklist, not fixed in this docs-only part.
+
+**Stop:** Part 2 needs Deep's approval, open choices 1–3 resolved, and Bhavarth's review of analytics read access.
+
 ## 2026-09-25 (7) - Units per floor and towers read from RERA, prices per unit type with RERA as the fallback, prices in the Units tab
 
 **Done (`DECISIONS.md` 2026-09-25 "Units per floor and towers are read from RERA..."):** (1) **Units per floor** counted per tower from GujRERA's flat numbers (kept in the RERA snapshot), else from a floor plan that is a whole floor, else not stated; no division anywhere. (2) **Towers** from RERA's block names, proposed as `property.total_towers` on each RERA check. (3) **Prices:** typed first, and each unpriced unit type falls back to RERA's project range; the inputs are in the Unit types tab and work on a published property, applying at once. (4) The rate-limit item for the events endpoint was added to `docs/production-readiness.md`, beside the purge schedule and privacy-policy notes already there.

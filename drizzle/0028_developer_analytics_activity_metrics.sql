@@ -1,0 +1,2 @@
+ALTER TABLE "developer_analytics_released" DROP CONSTRAINT "developer_analytics_released_metric";--> statement-breakpoint
+ALTER TABLE "developer_analytics_released" ADD CONSTRAINT "developer_analytics_released_metric" CHECK ("developer_analytics_released"."metric" in ('visitors', 'viewers', 'comparers', 'savers', 'unlockers', 'visits', 'returning_visitors', 'median_dossier_seconds', 'median_compare_seconds', 'views', 'comparisons'));

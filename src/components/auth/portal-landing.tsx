@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import {
   BodyText,
@@ -34,6 +35,14 @@ export function PortalLanding({
           {portal === "admin" ? "submission queue" : "submission flow"} is being
           built and will appear here.
         </BodyText>
+        {portal === "developer" ? (
+          <Link
+            href="/developers/enquiries"
+            className="text-primary mt-4 inline-block text-sm underline underline-offset-4"
+          >
+            Enquiries forwarded to you
+          </Link>
+        ) : null}
         <form action={signOutOfPortal} className="mt-8">
           <input type="hidden" name="to" value={portal} />
           <Button

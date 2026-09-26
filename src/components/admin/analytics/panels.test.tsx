@@ -7,6 +7,7 @@ import {
   duration,
   Funnel,
   percent,
+  StatTiles,
 } from "./panels";
 
 describe("the analytics panels", () => {
@@ -51,6 +52,76 @@ describe("the analytics panels", () => {
     expect(screen.getAllByRole("row")).toHaveLength(3);
   });
 
+  it("draws one active day as one bar of fixed width, with the scale, not a full-width block", () => {
+    const { container } = render(
+      <DailyTrend
+        days={[
+          { day: "2026-09-26", visitors: 1, comparisons: 3, enquiries: 1 },
+        ]}
+      />,
+    );
+    const bar = container.querySelector("rect.fill-primary");
+    expect(Number(bar?.getAttribute("width"))).toBeLessThanOrEqual(28);
+    expect(container).toHaveTextContent("1 visitor");
+  });
+
+  it("keeps a bar narrow among many days and draws a slot for a quiet day", () => {
+    const days = Array.from({ length: 30 }, (_, i) => ({
+      day: `2026-09-${String(i + 1).padStart(2, "0")}`,
+      visitors: i === 25 ? 6 : 0,
+      comparisons: 0,
+      enquiries: 0,
+    }));
+    const { container } = render(<DailyTrend days={days} />);
+    expect(container.querySelectorAll("title")).toHaveLength(30);
+    expect(container.querySelectorAll("rect.fill-primary")).toHaveLength(30);
+    expect(container).toHaveTextContent("6 visitors");
+  });
+
+  it("makes a tile that has somewhere to go a link, and leaves the rest as figures", () => {
+    render(
+      <StatTiles
+        tiles={[
+          {
+            label: "Visitors",
+            value: "12",
+            link: {
+              href: "/admin/analytics/visitors?days=30",
+              label: "See the visitors",
+            },
+          },
+          { label: "Time comparing", value: "14s" },
+        ]}
+      />,
+    );
+    expect(
+      screen.getByRole("link", { name: "See the visitors" }),
+    ).toHaveAttribute("href", "/admin/analytics/visitors?days=30");
+    expect(screen.getAllByRole("link")).toHaveLength(1);
+  });
+
+  it("links a funnel step to who reached it and who stopped there", () => {
+    render(
+      <Funnel
+        days={30}
+        steps={[
+          { key: "visited", label: "Visited", visitors: 10 },
+          { key: "viewed", label: "Viewed a property", visitors: 4 },
+        ]}
+      />,
+    );
+    expect(
+      screen.getByRole("link", { name: "6 stopped here" }),
+    ).toHaveAttribute(
+      "href",
+      "/admin/analytics/visitors?days=30&stopped=visited",
+    );
+    expect(screen.getByRole("link", { name: /^4/ })).toHaveAttribute(
+      "href",
+      "/admin/analytics/visitors?days=30&reached=viewed",
+    );
+  });
+
   it("says so when there is nothing yet", () => {
     render(<DailyTrend days={[]} />);
     expect(
@@ -79,7 +150,13 @@ describe("the analytics panels", () => {
     render(
       <BreakdownTable
         rows={[
-          { label: "google / cpc", visitors: 10, comparers: 4, enquirers: 1 },
+          {
+            label: "google / cpc",
+            key: "google / cpc",
+            visitors: 10,
+            comparers: 4,
+            enquirers: 1,
+          },
         ]}
         what="Source"
         empty=""
@@ -88,6 +165,37 @@ describe("the analytics panels", () => {
     const row = screen.getByRole("row", { name: /google/ });
     expect(within(row).getByText(/40%/)).toBeInTheDocument();
     expect(within(row).getByText(/10%/)).toBeInTheDocument();
+  });
+
+  it("links a row to the visitors behind it only when it is given a link", () => {
+    render(
+      <BreakdownTable
+        rows={[
+          {
+            label: "google / cpc",
+            key: "google / cpc",
+            visitors: 10,
+            comparers: 4,
+            enquirers: 1,
+          },
+        ]}
+        what="Source"
+        empty=""
+        href={(row) => `/x?source=${encodeURIComponent(row.key)}`}
+      />,
+    );
+    expect(screen.getByRole("link", { name: "google / cpc" })).toHaveAttribute(
+      "href",
+      "/x?source=google%20%2F%20cpc",
+    );
+    render(
+      <CountTable
+        rows={[{ label: "Amenities", count: 1 }]}
+        what="Section"
+        empty=""
+      />,
+    );
+    expect(screen.queryByRole("link", { name: "Amenities" })).toBeNull();
   });
 
   it("formats durations and shares", () => {

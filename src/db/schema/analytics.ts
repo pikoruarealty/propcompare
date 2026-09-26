@@ -26,8 +26,11 @@ import { properties } from "./catalog";
  * person anywhere. No price and no typed budget figure: only a coarse public band
  * of the stated ceiling (`budget_band`).
  *
- * Append-only for the application role apart from the retention delete: raw rows
- * live 13 months, then only the monthly counts below remain.
+ * Append-only for the application role apart from the retention job, which may
+ * clear the two ids and stamp `anonymised_at` and nothing else (schema v21): the
+ * events themselves are kept, identified for 13 months and anonymous after. The
+ * monthly counts below keep the distinct-visitor figures the cleared ids would
+ * otherwise take with them.
  */
 export const analyticsEvents = pgTable(
   "analytics_events",
@@ -36,9 +39,16 @@ export const analyticsEvents = pgTable(
     occurredAt: timestamp("occurred_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
-    visitorId: uuid("visitor_id").notNull(),
-    /** A visit: ends after 30 minutes without an event. */
-    sessionId: uuid("session_id").notNull(),
+    /**
+     * The browser's random id. Null for an anonymous event (a browser that sends a
+     * privacy signal is recorded with no id and no cookie) and, once a row is
+     * older than the retention window, for every event (`anonymised_at`).
+     */
+    visitorId: uuid("visitor_id"),
+    /** A visit: ends after 30 minutes without an event. Null as `visitor_id`. */
+    sessionId: uuid("session_id"),
+    /** When the retention job rolled the row's month up and cleared its ids (schema v21). */
+    anonymisedAt: timestamp("anonymised_at", { withTimezone: true }),
     event: text("event").notNull(),
     signedIn: boolean("signed_in").notNull(),
     /** The property the event is about, when there is one. */
@@ -72,7 +82,7 @@ export const analyticsEvents = pgTable(
   ],
 );
 
-/** What remains of raw events after 13 months: counts per month, event and property. */
+/** Counts per month, event and property, written as each month's ids are cleared (they keep the distinct-visitor figure). */
 export const analyticsEventMonthly = pgTable(
   "analytics_event_monthly",
   {

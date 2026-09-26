@@ -35,14 +35,14 @@ describe("trackEvent", () => {
     });
   });
 
-  it("sends nothing when the visitor asks not to be tracked", () => {
+  it("still sends when the browser sends a privacy signal: the server keeps it with no id", () => {
     const { sendBeacon } = beacons();
     Object.defineProperty(navigator, "globalPrivacyControl", {
       value: true,
       configurable: true,
     });
     trackEvent("property_viewed", { slug: "amaris" });
-    expect(sendBeacon).not.toHaveBeenCalled();
+    expect(sendBeacon).toHaveBeenCalledTimes(1);
     Object.defineProperty(navigator, "globalPrivacyControl", {
       value: undefined,
       configurable: true,
