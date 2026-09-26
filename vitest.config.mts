@@ -7,10 +7,16 @@ const alias = {
 };
 
 /**
- * Two projects, split by file extension:
+ * Three projects:
  *
- * - `node` runs the existing data-layer, OCR, and submission tests (`.test.ts`)
- *   in a node environment, exactly as before this split.
+ * - `node` runs the unit tests (`.test.ts`, not `.integration.test.ts`) in a node
+ *   environment, in parallel. None of them touches the database.
+ * - `integration` runs the database-backed tests (`.integration.test.ts`), one
+ *   file at a time. They all share one database, and several read totals across
+ *   whole tables (the usage ledger, RERA refresh counts) or list rows another
+ *   file may be adding, so files running at the same moment failed one test per
+ *   run, a different one each time (`DECISIONS.md` 2026-09-26). One at a time
+ *   is slower and deterministic.
  * - `ui` runs buyer component tests (`.test.tsx`) in jsdom with Testing Library,
  *   so the price-restraint and honest-incompleteness guardrails are asserted on
  *   rendered output. See the 2026-09-02 entry in DECISIONS.md.
@@ -26,6 +32,16 @@ export default defineConfig({
           name: "node",
           environment: "node",
           include: ["src/**/*.test.ts"],
+          exclude: ["src/**/*.integration.test.ts", "**/node_modules/**"],
+        },
+      },
+      {
+        resolve: { alias },
+        test: {
+          name: "integration",
+          environment: "node",
+          include: ["src/**/*.integration.test.ts"],
+          fileParallelism: false,
         },
       },
       {
