@@ -20,6 +20,14 @@ import {
  */
 export function ReportProblemLink({ propertyName }: { propertyName?: string }) {
   const [open, setOpen] = React.useState(false);
+  // The page address is read after the dialog opens, never while rendering: a
+  // client component is still rendered on the server for the HTML, where
+  // `window` does not exist, and reading it there failed the dossier's server
+  // render and dropped the whole page to client rendering.
+  const [pageUrl, setPageUrl] = React.useState<string>();
+  React.useEffect(() => {
+    if (open) setPageUrl(window.location.href);
+  }, [open]);
 
   return (
     <Dialog.Root open={open} onOpenChange={setOpen}>
@@ -63,13 +71,12 @@ export function ReportProblemLink({ propertyName }: { propertyName?: string }) {
           >
             {REPORT_PROBLEM_EMAIL}
           </p>
-          {/* Built only once the dialog is open, in the browser, so the page address is real. */}
           <a
             data-slot="report-problem-mailto"
             href={reportProblemMailto(
-              propertyName === undefined
+              propertyName === undefined || pageUrl === undefined
                 ? undefined
-                : { name: propertyName, url: window.location.href },
+                : { name: propertyName, url: pageUrl },
             )}
             className="border-border text-foreground mt-5 inline-flex items-center rounded-lg border px-4 py-2 text-sm transition-colors hover:border-[var(--color-terracotta)]"
           >

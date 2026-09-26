@@ -20,8 +20,24 @@ const ALLOWED = [
   "app/api/v1/events/",
 ];
 
-const READS =
-  /@\/lib\/analytics\/(dashboard|record|retention)|@\/db\/schema\/analytics|analytics_events|analyticsEvents|analytics_(event|pair)_monthly/;
+/**
+ * What buyer code may import from `lib/analytics`: sending an event, and the
+ * pure helpers that carry no figure. Everything else in that directory reads
+ * events, so it is listed here rather than in `READS` — a module added later is
+ * guarded by default instead of only when someone remembers to add it (the
+ * visitor journeys of 2026-09-26 were not, until this test was made fail-safe).
+ */
+const SEND_ONLY = ["track", "use-tracking", "events", "cookies", "format"];
+
+const READS = new RegExp(
+  [
+    `@/lib/analytics/(?!(?:${SEND_ONLY.join("|")})\\b)[a-z-]+`,
+    "@/db/schema/analytics",
+    "analytics_events",
+    "analyticsEvents",
+    "analytics_(event|pair)_monthly",
+  ].join("|"),
+);
 
 const walk = (dir: string): string[] =>
   readdirSync(dir).flatMap((entry) => {
