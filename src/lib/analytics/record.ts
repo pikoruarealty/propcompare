@@ -15,8 +15,9 @@ export const recordEvent = async (
   db: PostgresJsDatabase,
   input: EventInput,
   context: {
-    visitorId: string;
-    sessionId: string;
+    /** Null for an anonymous event (a browser that sends a privacy signal). */
+    visitorId: string | null;
+    sessionId: string | null;
     signedIn: boolean;
     device: string;
     ownHost: string | null;

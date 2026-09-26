@@ -3,8 +3,10 @@ import type { AnalyticsEvent, BudgetBand } from "./events";
 /**
  * Sending an analytics event from the browser (schema v20). Fire and forget: a
  * beacon, which the browser delivers even as the page closes, and nothing at all
- * where beacons are missing, storage is blocked or the visitor has asked not to be
- * tracked. It can never break the page or delay what the buyer is doing.
+ * where beacons are missing or storage is blocked. A browser that sends a privacy
+ * signal still sends the event: the server keeps it with no id and sets no
+ * cookie (`DECISIONS.md` 2026-09-26). It can never break the page or delay what
+ * the buyer is doing.
  */
 
 export const EVENTS_URL = "/api/v1/events";
@@ -79,8 +81,6 @@ export const trackEvent = (
   try {
     if (typeof window === "undefined") return;
     if (typeof navigator.sendBeacon !== "function") return;
-    const nav = navigator as Navigator & { globalPrivacyControl?: boolean };
-    if (nav.globalPrivacyControl === true || nav.doNotTrack === "1") return;
     const body = JSON.stringify({
       event,
       ...payload,
