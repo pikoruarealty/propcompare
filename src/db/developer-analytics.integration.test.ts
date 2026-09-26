@@ -900,6 +900,7 @@ describe("the developer report services", () => {
   let a: TestPortfolio;
   let b: TestPortfolio;
   let c: TestPortfolio;
+  let d: TestPortfolio;
   let reportRun = "";
   let finishedAt: Date;
   let a1 = "";
@@ -932,6 +933,7 @@ describe("the developer report services", () => {
     a = await publishTestPortfolio("Report A", 2);
     b = await publishTestPortfolio("Report B");
     c = await publishTestPortfolio("Report C");
+    d = await publishTestPortfolio("Report D");
     [a1, a2] = a.properties.map((property) => property.id);
     b1 = b.properties[0].id;
 
@@ -970,6 +972,83 @@ describe("the developer report services", () => {
         fig(b.developerId, null, "visitors", true, 77),
         fig(b.developerId, b1, "visitors", true, 77),
       ]);
+
+    // Rivals: a1 is compared with B's property (12 visitors), its own a2 (7) and
+    // D's property (9), which is unlisted below; B's property is compared with a1.
+    const rivalOfD = d.properties[0].id;
+    const span = {
+      runId: reportRun,
+      window: "30d",
+      windowStart: "2026-08-27",
+      windowEnd: "2026-09-25",
+    };
+    await db.insert(developerAnalyticsPairings).values([
+      {
+        ...span,
+        developerId: a.developerId,
+        propertyId: a1,
+        rivalPropertyId: b1,
+        visitors: 12,
+      },
+      {
+        ...span,
+        developerId: a.developerId,
+        propertyId: a1,
+        rivalPropertyId: a2,
+        visitors: 7,
+      },
+      {
+        ...span,
+        developerId: a.developerId,
+        propertyId: a1,
+        rivalPropertyId: rivalOfD,
+        visitors: 9,
+      },
+      {
+        ...span,
+        developerId: b.developerId,
+        propertyId: b1,
+        rivalPropertyId: a1,
+        visitors: 12,
+      },
+    ]);
+    await db.insert(developerAnalyticsBenchmarks).values([
+      {
+        ...span,
+        developerId: a.developerId,
+        propertyId: a1,
+        metric: "viewers",
+        cohort: "locality",
+        cohortProperties: 6,
+        cohortDevelopers: 4,
+        median: "8.5",
+      },
+      {
+        ...span,
+        developerId: a.developerId,
+        propertyId: a1,
+        metric: "comparers",
+        cohort: "city",
+        cohortProperties: 9,
+        cohortDevelopers: 5,
+        median: "6",
+      },
+      {
+        ...span,
+        developerId: b.developerId,
+        propertyId: b1,
+        metric: "viewers",
+        cohort: "city",
+        cohortProperties: 7,
+        cohortDevelopers: 3,
+        median: "31",
+      },
+    ]);
+    await changeListingStatus(db, {
+      propertyId: rivalOfD,
+      status: "unlisted",
+      actorUserId: d.ownerUserId,
+    });
   });
 
   afterAll(async () => {
@@ -979,6 +1058,7 @@ describe("the developer report services", () => {
     await a.remove();
     await b.remove();
     await c.remove();
+    await d.remove();
   });
 
   it("shows a developer their own portfolio, with withheld figures as no number", async () => {
@@ -1109,6 +1189,105 @@ describe("the developer report services", () => {
     expect(portfolio.properties).toEqual([]);
   });
 
+  it("names the rivals a property is compared with, most compared first", async () => {
+    const report = await getPropertyReport(
+      connections,
+      a.developerId,
+      a1,
+      "30d",
+    );
+    // D's property is unlisted, so it is not named at all.
+    expect(
+      report?.rivals.map((rival) => ({
+        name: rival.property.name,
+        own: rival.own,
+        visitors: rival.visitors,
+      })),
+    ).toEqual([
+      { name: b.properties[0].name, own: false, visitors: 12 },
+      { name: a.properties[1].name, own: true, visitors: 7 },
+    ]);
+    expect(report?.rivals[0].developerName).toContain("Report B developer");
+    // A rival is only the pairing: its name, developer and the count, and none of
+    // its own figures.
+    for (const rival of report?.rivals ?? []) {
+      expect(Object.keys(rival).sort()).toEqual([
+        "developerName",
+        "own",
+        "property",
+        "visitors",
+      ]);
+    }
+  });
+
+  it("keeps rivals and benchmarks to the developer's own property and window", async () => {
+    const mine = await getPropertyReport(connections, a.developerId, a1, "30d");
+    expect(mine?.benchmarks.some((row) => row.median === 31)).toBe(false);
+    const week = await getPropertyReport(connections, a.developerId, a1, "7d");
+    expect(week?.rivals).toEqual([]);
+    expect(week?.benchmarks).toEqual([]);
+    const theirs = await getPropertyReport(
+      connections,
+      b.developerId,
+      b1,
+      "30d",
+    );
+    expect(theirs?.rivals.map((rival) => rival.property.id)).toEqual([a1]);
+    expect(theirs?.rivals[0].own).toBe(false);
+    expect(theirs?.benchmarks.map((row) => row.median)).toEqual([31]);
+  });
+
+  it("gives the benchmarks with what each is a median of", async () => {
+    const report = await getPropertyReport(
+      connections,
+      a.developerId,
+      a1,
+      "30d",
+    );
+    expect(report?.benchmarks).toEqual([
+      {
+        figure: "viewers",
+        cohort: "locality",
+        cohortProperties: 6,
+        cohortDevelopers: 4,
+        median: 8.5,
+      },
+      {
+        figure: "comparers",
+        cohort: "city",
+        cohortProperties: 9,
+        cohortDevelopers: 5,
+        median: 6,
+      },
+    ]);
+  });
+
+  it("exports the rivals and the nearby medians after the figures", async () => {
+    const result = await getExportRows(connections, a.developerId, "30d", a1);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const tail = result.rows.slice(-4);
+    expect(tail.map((row) => row.split)).toEqual([
+      "Property",
+      "Property",
+      "Cohort",
+      "Cohort",
+    ]);
+    expect(tail[0]).toMatchObject({ figure: "Compared with", value: 12 });
+    expect(tail[0].splitValue).toContain(b.properties[0].name);
+    expect(tail[1]).toMatchObject({ figure: "Compared with", value: 7 });
+    expect(tail[2]).toMatchObject({
+      figure: "Nearby median: viewers",
+      splitValue: "locality (6 properties, 4 developers)",
+      value: 8.5,
+    });
+    expect(tail[3]).toMatchObject({
+      figure: "Nearby median: comparers",
+      splitValue: "city (9 properties, 5 developers)",
+      value: 6,
+    });
+  });
+
   it("exports the same figures as rows, portfolio first, withheld with no value", async () => {
     const result = await getExportRows(connections, a.developerId, "30d");
     expect(result.ok).toBe(true);
@@ -1129,7 +1308,12 @@ describe("the developer report services", () => {
         (row) => row.split === "Device" && row.splitValue === "tablet",
       ),
     ).toMatchObject({ status: "not enough data", value: null });
-    expect(JSON.stringify(result.rows)).not.toContain(b.properties[0].name);
+    // B's property may be named as a rival, and only there.
+    expect(
+      JSON.stringify(
+        result.rows.filter((row) => row.figure !== "Compared with"),
+      ),
+    ).not.toContain(b.properties[0].name);
   });
 
   it("exports one property when asked", async () => {

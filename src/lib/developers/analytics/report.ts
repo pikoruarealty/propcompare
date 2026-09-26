@@ -1,9 +1,12 @@
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
-import { properties } from "@/db/schema/catalog";
+import { developers, properties } from "@/db/schema/catalog";
 import {
+  RELEASE_BENCHMARK_METRICS,
   RELEASE_BUDGET_BANDS,
   RELEASE_DEVICES,
+  developerAnalyticsBenchmarks,
+  developerAnalyticsPairings,
   developerAnalyticsReleased,
   developerAnalyticsRuns,
 } from "@/db/schema/developer-analytics";
@@ -121,11 +124,41 @@ export interface PortfolioReport {
   })[];
 }
 
+/**
+ * A listed property that buyers opened a comparison of alongside this one, named
+ * (owner decision, `DECISIONS.md` 2026-09-26). Only the pairing and how many
+ * distinct visitors made it: never the rival's own figures.
+ */
+export interface Rival {
+  property: PropertyRef;
+  developerName: string;
+  /** The rival is another of this developer's own properties. */
+  own: boolean;
+  visitors: number;
+}
+
+/**
+ * This property's count set against the median of the same count across other
+ * developers' listed properties nearby. `cohort` says how near (its locality, or
+ * its city) and the two sizes say what the median is of.
+ */
+export interface Benchmark {
+  figure: "visitors" | "viewers" | "comparers" | "savers";
+  cohort: "locality" | "city";
+  cohortProperties: number;
+  cohortDevelopers: number;
+  median: number;
+}
+
 export interface PropertyReport {
   meta: ReportMeta | null;
   property: PropertyRef;
   figures: PropertyFigures;
   splits: Split[];
+  /** At most five, most compared first; none when no pairing met the gate. */
+  rivals: Rival[];
+  /** None when no cohort was large enough or its median was under the gate. */
+  benchmarks: Benchmark[];
   completeness: Completeness;
 }
 
@@ -317,6 +350,134 @@ export const propertySplits = (
   return splits;
 };
 
+interface PairingRow {
+  propertyId: string;
+  rivalPropertyId: string;
+  visitors: number;
+}
+
+interface BenchmarkRow {
+  propertyId: string;
+  metric: Benchmark["figure"];
+  cohort: Benchmark["cohort"];
+  cohortProperties: number;
+  cohortDevelopers: number;
+  median: number;
+}
+
+const loadPairings = async (
+  reader: ReaderDb,
+  runId: string,
+  developerId: string,
+  key: ReportWindowKey,
+  propertyId?: string,
+): Promise<PairingRow[]> =>
+  reader
+    .select({
+      propertyId: developerAnalyticsPairings.propertyId,
+      rivalPropertyId: developerAnalyticsPairings.rivalPropertyId,
+      visitors: developerAnalyticsPairings.visitors,
+    })
+    .from(developerAnalyticsPairings)
+    .where(
+      and(
+        eq(developerAnalyticsPairings.runId, runId),
+        eq(developerAnalyticsPairings.window, key),
+        eq(developerAnalyticsPairings.developerId, developerId),
+        propertyId === undefined
+          ? undefined
+          : eq(developerAnalyticsPairings.propertyId, propertyId),
+      ),
+    )
+    .orderBy(
+      asc(developerAnalyticsPairings.propertyId),
+      desc(developerAnalyticsPairings.visitors),
+      asc(developerAnalyticsPairings.rivalPropertyId),
+    );
+
+const loadBenchmarks = async (
+  reader: ReaderDb,
+  runId: string,
+  developerId: string,
+  key: ReportWindowKey,
+  propertyId?: string,
+): Promise<BenchmarkRow[]> => {
+  const rows = await reader
+    .select({
+      propertyId: developerAnalyticsBenchmarks.propertyId,
+      metric: developerAnalyticsBenchmarks.metric,
+      cohort: developerAnalyticsBenchmarks.cohort,
+      cohortProperties: developerAnalyticsBenchmarks.cohortProperties,
+      cohortDevelopers: developerAnalyticsBenchmarks.cohortDevelopers,
+      median: developerAnalyticsBenchmarks.median,
+    })
+    .from(developerAnalyticsBenchmarks)
+    .where(
+      and(
+        eq(developerAnalyticsBenchmarks.runId, runId),
+        eq(developerAnalyticsBenchmarks.window, key),
+        eq(developerAnalyticsBenchmarks.developerId, developerId),
+        propertyId === undefined
+          ? undefined
+          : eq(developerAnalyticsBenchmarks.propertyId, propertyId),
+      ),
+    );
+  return rows
+    .map((row) => ({
+      ...row,
+      metric: row.metric as Benchmark["figure"],
+      cohort: row.cohort as Benchmark["cohort"],
+      median: Number(row.median),
+    }))
+    .sort(
+      (a, b) =>
+        RELEASE_BENCHMARK_METRICS.indexOf(a.metric) -
+        RELEASE_BENCHMARK_METRICS.indexOf(b.metric),
+    );
+};
+
+/**
+ * The named rivals for the pairings, from the catalog: a rival that is no longer
+ * listed is dropped, so an unlisted property is never named.
+ */
+const nameRivals = async (
+  catalog: CatalogDb,
+  developerId: string,
+  pairings: PairingRow[],
+): Promise<
+  Map<string, Rival["property"] & { developerName: string; own: boolean }>
+> => {
+  const ids = [...new Set(pairings.map((row) => row.rivalPropertyId))];
+  if (ids.length === 0) return new Map();
+  const rows = await catalog
+    .select({
+      id: properties.id,
+      slug: properties.slug,
+      name: properties.name,
+      city: properties.city,
+      locality: properties.locality,
+      developerId: properties.developerId,
+      developerName: developers.name,
+    })
+    .from(properties)
+    .innerJoin(developers, eq(developers.id, properties.developerId))
+    .where(and(inArray(properties.id, ids), isListed));
+  return new Map(
+    rows.map((row) => [
+      row.id,
+      {
+        id: row.id,
+        slug: row.slug,
+        name: row.name,
+        city: row.city,
+        locality: row.locality,
+        developerName: row.developerName,
+        own: row.developerId === developerId,
+      },
+    ]),
+  );
+};
+
 /** The developer's own listed properties, by name. Nobody else's. */
 export const listOwnProperties = async (
   catalog: CatalogDb,
@@ -406,18 +567,42 @@ export const getPropertyReport = async (
   if (!property) return null;
 
   const run = await latestRun(reader);
-  const [rows, meta, completeness] = await Promise.all([
-    run
-      ? loadRows(reader, run.id, developerId, key, property.id)
-      : Promise.resolve([]),
-    run ? buildMeta(reader, run, key, now) : Promise.resolve(null),
-    propertyCompleteness(catalog, property.slug),
-  ]);
+  const [rows, meta, completeness, pairings, benchmarkRows] = await Promise.all(
+    [
+      run
+        ? loadRows(reader, run.id, developerId, key, property.id)
+        : Promise.resolve([]),
+      run ? buildMeta(reader, run, key, now) : Promise.resolve(null),
+      propertyCompleteness(catalog, property.slug),
+      run
+        ? loadPairings(reader, run.id, developerId, key, property.id)
+        : Promise.resolve([]),
+      run
+        ? loadBenchmarks(reader, run.id, developerId, key, property.id)
+        : Promise.resolve([]),
+    ],
+  );
+  const named = await nameRivals(catalog, developerId, pairings);
   return {
     meta,
     property,
     figures: propertyFigures(rows, property.id),
     splits: propertySplits(rows, property.id),
+    rivals: pairings.flatMap((pairing) => {
+      const rival = named.get(pairing.rivalPropertyId);
+      if (!rival) return [];
+      const { developerName, own, ...ref } = rival;
+      return [
+        { property: ref, developerName, own, visitors: pairing.visitors },
+      ];
+    }),
+    benchmarks: benchmarkRows.map((row) => ({
+      figure: row.metric,
+      cohort: row.cohort,
+      cohortProperties: row.cohortProperties,
+      cohortDevelopers: row.cohortDevelopers,
+      median: row.median,
+    })),
     completeness,
   };
 };
@@ -469,6 +654,11 @@ export const getExportRows = async (
   if (rows.length > MAX_EXPORT_ROWS) return { ok: false, reason: "too_large" };
 
   const names = new Map(own.map((p) => [p.id, p.name]));
+  const [pairings, benchmarkRows] = await Promise.all([
+    loadPairings(reader, run.id, developerId, key, propertyId),
+    loadBenchmarks(reader, run.id, developerId, key, propertyId),
+  ]);
+  const named = await nameRivals(catalog, developerId, pairings);
   const figureOrder = Object.keys(FIGURE_LABELS);
   const out: ExportRow[] = [];
   for (const row of rows) {
@@ -491,16 +681,52 @@ export const getExportRows = async (
       value: row.value,
     });
   }
+  for (const pairing of pairings) {
+    const rival = named.get(pairing.rivalPropertyId);
+    const name = names.get(pairing.propertyId);
+    if (!rival || name === undefined) continue;
+    out.push({
+      property: name,
+      figure: "Compared with",
+      unit: "people",
+      split: "Property",
+      splitValue: `${rival.name}, ${rival.developerName}`,
+      status: "released",
+      value: pairing.visitors,
+    });
+  }
+  for (const row of benchmarkRows) {
+    const name = names.get(row.propertyId);
+    if (name === undefined) continue;
+    out.push({
+      property: name,
+      figure: `Nearby median: ${FIGURE_LABELS[row.metric].toLowerCase()}`,
+      unit: FIGURE_UNITS[row.metric],
+      split: "Cohort",
+      splitValue: `${row.cohort} (${row.cohortProperties} properties, ${row.cohortDevelopers} developers)`,
+      status: "released",
+      value: row.median,
+    });
+  }
+  // The figures in their usual order, then the rivals and the nearby medians.
+  const rank = (figure: string) => {
+    const index = figureOrder.findIndex(
+      (k) => FIGURE_LABELS[k as FigureKey] === figure,
+    );
+    if (index !== -1) return index;
+    return figure.startsWith("Nearby median")
+      ? figureOrder.length + 1
+      : figureOrder.length;
+  };
   out.sort(
     (a, b) =>
       (a.property === "All properties" ? 0 : 1) -
         (b.property === "All properties" ? 0 : 1) ||
       a.property.localeCompare(b.property) ||
-      figureOrder.findIndex((k) => FIGURE_LABELS[k as FigureKey] === a.figure) -
-        figureOrder.findIndex(
-          (k) => FIGURE_LABELS[k as FigureKey] === b.figure,
-        ) ||
+      rank(a.figure) - rank(b.figure) ||
       a.split.localeCompare(b.split),
+    // Ties keep the order they were read in: splits as stored, rivals by how
+    // often they were compared.
   );
   return { ok: true, meta: await buildMeta(reader, run, key, now), rows: out };
 };
