@@ -1,5 +1,27 @@
 # Progress
 
+## 2026-09-26 — Codex — Phase 4 Parts 5 and 6 built and verified; PR open
+
+**Done:** owner approved gates 2, 4 and 5 and confirmed the cohort/rival limits. On `task/phase-4-portal-completion`, the developer portal now has its own shell, overview and property reports with the five fixed windows, withheld/stale/empty/error states, CSV links, named rivals, peer medians and completeness. The owner added BHK and city demand from an identified visitor's earlier intake choice followed by a later view or comparison of that property: schema v24, migration `0030`, `release-v3`, with the unchanged five-visitor and no-subtraction gates. The app host scheduler is documented for purge then release, but both schedulers remain off until hosting by owner direction. Tasklist: `docs/tasklists/2026-09-26-phase-4-portal-completion.md`.
+
+**Verified:** existing PG17 at `0029` upgraded to `0030`; a fresh PG17 database applied all 31 migrations and both seeds; the release/reader integration file passed 45 tests on each. The full suite on the upgraded database passed 189 files and 2193 tests. The new event-to-service-to-rendered-HTML and CSV assertions passed with two developers and figures above and below the gate. Format, lint and typecheck passed; a Turbopack production build passed with required throwaway database URLs and a temporary root that includes this worktree's sibling `node_modules` junction (removed afterward). The build still reports pre-existing PDF ESM and dynamic filesystem-tracing warnings. The shared port 5432 database was untouched.
+
+**PR:** [#2](https://github.com/pikoruarealty/propcompare/pull/2) into `main`, from `task/phase-4-portal-completion`. `origin/main` at `138295c` is an ancestor of the branch, so Bhavarth's merged work is included. No scheduler has been activated. The PR awaits review and merge.
+
+## 2026-09-26 — Codex — Phase 4 branch reconciled with the new main baseline
+
+**Done:** fetched `origin/main` at `138295c` and integrated its admin analytics drill-down, event rate limit and sequential integration-test runner into the Phase 4 branch. The overlapping decision and progress entries were kept in full; the privacy inputs now describe the built developer API, named rivals, peer benchmarks and forwarded enquiry contact alongside `main`'s Google Maps and rate-limit corrections. No developer code or schema conflicted.
+
+**Verified so far:** format, lint and typecheck passed on the reconciled tree; the database-independent unit/UI suites passed (131 files, 1743 tests). The full suite could not validate integration tests because the shared database refused port 5432 and the developer-reader URL was absent. Turbopack refused this worktree's `node_modules` junction; webpack reached blocked Google Fonts requests and PDF ESM imports. The full Part 6 verification and merge to `main` remain pending Part 5, the external gates and the scheduling-host choice in the Phase 4 tasklist.
+
+## 2026-09-26 (5) — Deep — Phase 4 Part 4 built: developer queries, routes, CSV, named rivals, peer benchmarks; handed to Codex for the bookkeeping and Part 5
+
+**Done:** the developer analytics services and three routes (`/api/v1/developer/portfolio`, `/properties/{id}`, `/export`) over the released tables through the read-only reader connection, with a developer id taken only from an active link; schema v23 (`docs/schema/schema.v23.md`, migration `0029`) so the job also releases named rival pairings (5 visitors, at most 5 per property) and peer benchmarks (cohort of 5 properties from 3 other developers, median at the gate); completeness reuses the dossier's "facts stated"; a journal-order test so a mis-stamped migration can no longer be skipped silently. Decisions: `DECISIONS.md` 2026-09-26 "Part 4 built".
+
+**Verified:** throwaway PG17 on 55432; `0029` applied to a database already at `0028`; format, lint, typecheck; full suite 187 files, 2178 tests green in one run; lowering the gate to 4 fails 6 tests.
+
+**Not done:** Part 5 (portal UI) and Part 6; gates 2 (v23) and 4 (auth) from Bhavarth; owner confirmation of the cohort sizes and rival cap; choice 7 (no new events needed). Handoff: the end of `docs/tasklists/2026-09-25-phase-4-developer-analytics.md`.
+
 ## 2026-09-26 (5) - Two stale readiness lines and one wrong privacy statement corrected; pending items checked against the database
 
 **Done:** (1) `docs/production-readiness.md` said the saved properties and comparisons page and the pre-login intake claim were unbuilt; both are built (`/saved`, `POST /api/v1/buyer/intake-handoff/claim`), lines corrected. (2) `docs/product/privacy-policy-inputs.md` said Google received nothing today; the dossier's embedded map already loads from google.com on page load, corrected. (3) The landmark map was scoped and then set aside by the owner for now; nothing was built and the map is as before.

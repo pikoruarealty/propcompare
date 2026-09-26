@@ -29,6 +29,12 @@ export interface TestPortfolio {
 export const publishTestPortfolio = async (
   label: string,
   count = 1,
+  /**
+   * Where the properties are. The default is a locality named for the label in
+   * Ahmedabad; a test that counts properties near one another passes its own
+   * city, so it does not depend on what else the database holds there.
+   */
+  where: { city?: string; locality?: string } = {},
 ): Promise<TestPortfolio> => {
   const suffix = randomUUID();
   const userId = `${label}-owner-${suffix}`;
@@ -59,8 +65,8 @@ export const publishTestPortfolio = async (
       Object.entries({
         "property.name": `${label} Tower ${index + 1} ${suffix}`,
         "property.type": "apartment",
-        "property.city": "Ahmedabad",
-        "property.locality": `${label} Locality`,
+        "property.city": where.city ?? "Ahmedabad",
+        "property.locality": where.locality ?? `${label} Locality`,
       }).map(([fieldKey, value]) => ({
         submissionId: submission.id,
         fieldKey,

@@ -50,6 +50,76 @@ const walk = (dir: string): string[] =>
     return /\.(ts|tsx)$/.test(entry) ? [full] : [];
   });
 
+const sourceFiles = () =>
+  walk(root)
+    .map((file) => path.relative(root, file).replaceAll("\\", "/"))
+    .filter((file) => !/\.test\.tsx?$/.test(file));
+
+/**
+ * Developer analytics (schema v21, `DECISIONS.md` 2026-09-26) reads only the
+ * released tables, through the read-only reader connection. Its modules live
+ * outside `lib/analytics/`, so the rule above already guards them like any other
+ * non-admin code: they may not import raw-event modules or the v20 schema. The
+ * reader connection is then kept to the developer analytics code, so nothing else
+ * can borrow a role that may select every developer's released rows.
+ */
+const READER_USERS = [
+  "db/developer-reader",
+  "lib/developers/analytics/",
+  "app/api/v1/developer/",
+  "app/developers/",
+];
+
+describe("developer analytics isolation", () => {
+  it("catches a raw event read planted in developer code", () => {
+    for (const planted of [
+      'import { analyticsEvents } from "@/db/schema/analytics";',
+      'import { visitorJourney } from "@/lib/analytics/visitors";',
+      'import { windowBounds } from "@/lib/analytics/release-rules";',
+      "select count(*) from analytics_events",
+      "select * from analytics_event_monthly",
+      "select * from analytics_pair_monthly",
+    ]) {
+      expect(READS.test(planted), planted).toBe(true);
+    }
+  });
+
+  it("lets developer code read the released tables and its own reader", () => {
+    for (const fine of [
+      'import { developerAnalyticsReleased } from "@/db/schema/developer-analytics";',
+      'import { developerReaderDb } from "@/db/developer-reader";',
+      'import { toCsv } from "@/lib/developers/analytics/csv";',
+      'import { formatCount } from "@/lib/analytics/format";',
+    ]) {
+      expect(READS.test(fine), fine).toBe(false);
+    }
+  });
+
+  it("keeps developer analytics code off raw events", () => {
+    const offenders = sourceFiles()
+      .filter((file) =>
+        READER_USERS.slice(1).some((dir) => file.startsWith(dir)),
+      )
+      .filter((file) =>
+        READS.test(readFileSync(path.join(root, file), "utf8")),
+      );
+    expect(offenders).toEqual([]);
+  });
+
+  it("uses the developer reader connection only from developer analytics", () => {
+    const offenders = sourceFiles()
+      .filter(
+        (file) => !READER_USERS.some((allowed) => file.startsWith(allowed)),
+      )
+      .filter((file) =>
+        readFileSync(path.join(root, file), "utf8").includes(
+          "@/db/developer-reader",
+        ),
+      );
+    expect(offenders).toEqual([]);
+  });
+});
+
 describe("analytics isolation", () => {
   it("is read only by the admin console, the recorder and the retention job", () => {
     const offenders = walk(root)

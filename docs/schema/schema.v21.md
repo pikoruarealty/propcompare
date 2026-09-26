@@ -87,8 +87,8 @@ The monthly v20 tables hold distinct visitors per month, which cannot be added a
 
 ### Not in `release-v1` (waiting on open choices)
 
-- Competitor pairings, "compared most with" (choice 4).
-- Peer benchmarks (choice 8).
+- Competitor pairings, "compared most with" (choice 4): built as [schema v23](schema.v23.md).
+- Peer benchmarks (choice 8): built as [schema v23](schema.v23.md).
 - Market-wide figures (platform unique visitors, intake demand by BHK and city): admin only, never a developer's (choice 12, decided 2026-09-26).
 - Daily or weekly trend series. At 5 visitors per cell most daily cells would be suppressed; the series shape is decided in Part 4/5 as an additive change.
 - Listing completeness. It is deterministic catalog data with no threshold and is computed from the catalog, not stored here (choice 9).
