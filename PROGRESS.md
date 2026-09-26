@@ -1,5 +1,13 @@
 # Progress
 
+## 2026-09-26 (5) — Deep — Phase 4 Part 4 built: developer queries, routes, CSV, named rivals, peer benchmarks; handed to Codex for the bookkeeping and Part 5
+
+**Done:** the developer analytics services and three routes (`/api/v1/developer/portfolio`, `/properties/{id}`, `/export`) over the released tables through the read-only reader connection, with a developer id taken only from an active link; schema v23 (`docs/schema/schema.v23.md`, migration `0029`) so the job also releases named rival pairings (5 visitors, at most 5 per property) and peer benchmarks (cohort of 5 properties from 3 other developers, median at the gate); completeness reuses the dossier's "facts stated"; a journal-order test so a mis-stamped migration can no longer be skipped silently. Decisions: `DECISIONS.md` 2026-09-26 "Part 4 built".
+
+**Verified:** throwaway PG17 on 55432; `0029` applied to a database already at `0028`; format, lint, typecheck; full suite 187 files, 2178 tests green in one run; lowering the gate to 4 fails 6 tests.
+
+**Not done:** Part 5 (portal UI) and Part 6; gates 2 (v23) and 4 (auth) from Bhavarth; owner confirmation of the cohort sizes and rival cap; the privacy-policy inputs for the developer layer; choice 7 (no new events needed). Handoff: the end of `docs/tasklists/2026-09-25-phase-4-developer-analytics.md`.
+
 ## 2026-09-26 (4) - Developers see forwarded enquiries; the Phase 4 review items finished; ready to hand Parts 4 to 6 to Deep
 
 **Done:** (1) Owner decision: a forwarded enquiry shows its developer the buyer's name, message and phone (`/developers/enquiries`, tasklist `docs/tasklists/2026-09-26-developer-forwarded-enquiries.md`). (2) Gate 1 granted: the isolation test already lets developer code read the released tables and refuses raw events (checked with a throwaway route). (3) Release job: `views` and `comparisons` count anonymous activity under the unchanged 5-identified-visitor gate (migration `0028`); "listed" has a single definition. (4) Admin dossier median now sums pings per visit (proved: 25s became 50s). (5) Privacy inputs record what a developer sees. (6) Deep's `developer-analytics` test cleaned up through the wrong role and left orphaned developers in the local database after my earlier re-runs; the residue was removed and the database holds only its real rows (6 properties, 10 developers, 9 real events).

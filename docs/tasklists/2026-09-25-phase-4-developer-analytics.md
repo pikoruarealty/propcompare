@@ -2,8 +2,8 @@
 
 - **Created:** 2026-09-25 — Deep
 - **Owner:** Deep. This tasklist lists Deep's work only. Bhavarth's reviews are external gates, not checklist items.
-- **Status:** Part 2 built and verified 2026-09-26: schema v21 (migrations `0025`, `0026`), the reader role, the release rules and the release job. Waiting on Bhavarth's gate 2 review; stopped for Deep before Part 3.
-- **Branch:** `task/phase-4-developer-analytics`, reset onto `origin/main` at `461060d` in Part 1
+- **Status:** Part 4 built and verified 2026-09-26 (queries, routes, CSV, named rivals, peer benchmarks, completeness; schema v23, migration `0029`). Waiting on Deep's approval of Part 5, and on Bhavarth's gates 2 (the two v23 tables) and 4 (auth and ownership). Earlier: Part 2 built and verified 2026-09-26: schema v21 (migrations `0025`, `0026`), the reader role, the release rules and the release job. Waiting on Bhavarth's gate 2 review; stopped for Deep before Part 3.
+- **Branch:** Parts 1 and 2 on `task/phase-4-developer-analytics` (reset onto `origin/main` at `461060d` in Part 1); Parts 4 to 6 on `task/phase-4-developer-analytics-portal`, started from Bhavarth's `task/analytics-anonymous-events` (`ffbfd26`), which already contains Parts 1 and 2 and the migration renumbering
 - **Base:** `origin/main` `461060d` (merge of `task/phase-3-completion`)
 - **Working agreement:** Deep approves every numbered part before it begins. Finishing one part never authorises the next. Every documentation change carries `2026-09-25 — Deep` (or its actual date plus Deep), and this tasklist and `PROGRESS.md` are updated in the same part.
 - **Replaces:** `2026-09-24-phase-4-developer-analytics.md` and its schema v11 analytics design. That work collided with Bhavarth's merged analytics (schema v11 number, migration `0014`, `src/db/schema/analytics.ts`) and is dropped, with no backup branch or tag, by Deep's decision.
@@ -48,12 +48,12 @@ A developer signs in and sees aggregated, privacy-thresholded analytics for thei
 1. **Developer read access (gate 1, Bhavarth).** How the isolation rule changes: which new modules may read analytics, and that they return only thresholded aggregates. Blocks Part 2.
 2. **Privacy threshold.** Minimum distinct **visitors** (v20's `visitor_id`) or distinct **visits** (`session_id`) per released cell, and the number (the earlier plan said 5). Suppressed cells show as "not enough data", never as zero. Blocks Part 2. **Resolved 2026-09-26 — Deep:** the gate is 5 distinct visitors. Visitors are the primary metric (portfolio and per property); visits are secondary (return and intent) under the same visitor gate; enquiry figures are portfolio level only (option c). See `DECISIONS.md` 2026-09-26 (threshold) and `docs/schema/schema.v21.md`.
 3. **Where suppression happens.** Choose one: (a) a developer query service reads v20 raw rows and applies the threshold in code; or (b) a scheduled job writes a release-safe aggregate table (schema v21, migration `0025`) that is the only thing developer code may read. (b) enforces the rule in the database and needs gate 2. **Resolved 2026-09-26 — Deep: (b), the release-safe table.** Gate 2 now applies to Part 2.
-4. **Competitor pairings.** May developer A see that their property is often compared with a named property from developer B? Options: named, anonymised ("a 3 BHK in the same locality"), or counts only. This is the most commercially sensitive figure; owner decision. Blocks the comparison view in Parts 4–5.
+4. **Competitor pairings.** May developer A see that their property is often compared with a named property from developer B? Options: named, anonymised ("a 3 BHK in the same locality"), or counts only. This is the most commercially sensitive figure; owner decision. Blocks the comparison view in Parts 4–5. **Resolved 2026-09-26 — owner: named** (`DECISIONS.md` 2026-09-26 "Phase 4 merged into the analytics work", point 2), each pairing released only at the 5-visitor gate and carrying only the pairing and its count. Built as schema v23.
 5. **Enquiry metric.** Should a developer's "enquiries" count every `enquiry_submitted` event, or only enquiries the admin forwarded (schema v19)? Blocks the release job (Part 2), since `enquirers` is computed there. **Resolved 2026-09-26 — Deep: developers see no enquiry figure at all** (migration `0026`).
 6. **Property eligibility.** Include only listed properties, or listed plus unlisted with soft-deleted excluded? The recorder already keeps only listed properties at capture time. Blocks the release job (Part 2), which decides which properties get figures. **Resolved 2026-09-26 — Deep: listed only.**
-7. **New capture events.** Card impressions (seen in a list, not opened) do not exist in v20. Adding them extends Bhavarth's vocabulary and the privacy-policy list. Decide whether Phase 4 needs them. Blocks Part 3; if the answer is no, skip Part 3.
-8. **Peer benchmarks.** Keep "your property compared with similar properties" (locality → city cohorts) in Phase 4, or defer? Blocks Part 4.
-9. **Completeness definition.** Reuse the data-quality KPI definition adopted 2026-09-23 (`property_schema_fields`, `not_stated`), or define a developer-facing ruleset? Blocks Part 4.
+7. **New capture events.** Card impressions (seen in a list, not opened) do not exist in v20. Adding them extends Bhavarth's vocabulary and the privacy-policy list. Decide whether Phase 4 needs them. Blocks Part 3; if the answer is no, skip Part 3. **2026-09-26 — Deep, Part 4:** nothing built in Part 4 needs a new event (every figure comes from v20 events that exist), so Part 3 stays unstarted and is not a dependency of Parts 5 and 6. The owner has not asked for card impressions; this stays open, not decided.
+8. **Peer benchmarks.** Keep "your property compared with similar properties" (locality → city cohorts) in Phase 4, or defer? Blocks Part 4. **Resolved 2026-09-26 — Deep: keep.** Built as released tables (schema v23, migration `0029`): cohort of at least 5 other developers' properties from at least 3 developers in the locality, else the city, median at the 5-visitor gate. The sizes are proposals awaiting confirmation (`DECISIONS.md` 2026-09-26 "Part 4 built").
+9. **Completeness definition.** Reuse the data-quality KPI definition adopted 2026-09-23 (`property_schema_fields`, `not_stated`), or define a developer-facing ruleset? Blocks Part 4. **Resolved 2026-09-26 — Deep: reuse.** Implemented as the dossier's own `dossierFactCount` ("facts stated"), read for the developer's own property.
 10. **Scheduling host** for any aggregation job, which can share the daily `analytics:purge` schedule already listed in production-readiness. Blocks Part 6 sign-off.
 11. **Added 2026-09-26 — Deep. How developer code is kept to the release table.** Every analytics reader today runs as `propcompare_app`, which can read raw v20 events. (a) Static only: the isolation test limits developer modules to the v21 schema file. (b) A new read-only `propcompare_developer_reader` role and connection with `SELECT` on the two v21 tables only, so a slip fails in the database. (b) adds a credential, role provisioning, CI and production setup. Blocks the migration in Part 2; needs gate 2. **Resolved 2026-09-26 — Deep: (b), the reader role.** Built in migration `0025`.
 12. **Added 2026-09-26 — Deep. Market-wide figures for developers.** Deep described visitors as the main metric "for the app and also for the particular project". Should a developer see platform-wide totals (all PropCompare unique visitors, and intake demand by BHK/city/band across all buyers), or only figures about their own properties? Platform totals reveal PropCompare's own traffic to every developer. Not in `release-v1` until decided; an additive change later. **Resolved 2026-09-26 — Deep: own properties only; platform-wide figures are admin only.**
@@ -119,14 +119,16 @@ Deep requests each gate and records the outcome in the verification table.
 
 **Precondition:** Deep approves Part 4; choices 4, 5, 6, 8, 9 resolved; gate 4 passed.
 
-- [ ] Read the installed Next.js 16 route, auth and caching docs before code changes.
-- [ ] Moved from Part 2 (2026-09-26 — Deep): request gate 1, then change `analytics-isolation.test.ts` so developer analytics modules may import only `@/db/developer-reader` and `@/db/schema/developer-analytics`, never v20 raw data. Buyer code must still only send events.
-- [ ] Typed services that take `developerId` only from `requirePortalRole("developer", …)`, never from input: portfolio overview (views, comparisons, saves, unlocks, enquiries, engaged time, funnel), per-property detail, comparison view (per choice 4), demand by BHK/city/budget band, completeness, benchmarks (per choice 8).
-- [ ] `GET /api/v1/developer/portfolio` and the per-property/export routes, `no-store`, standard errors, fixed windows, report metadata (tracking start, generated at).
-- [ ] CSV export with formula-injection protection, the same threshold and bounded size.
-- [ ] Tests: two-developer isolation, revoked session, malformed ids, windows, threshold, export, no price or private data.
-- [ ] Update the API spec, developer flow, decisions, progress and this tasklist.
-- [ ] Report Part 4 and stop.
+- [x] Read the installed Next.js 16 route, auth and caching docs before code changes (route handlers are uncached by default; `RouteContext` is the documented context type).
+- [x] Moved from Part 2 (2026-09-26 — Deep): request gate 1 (granted by Bhavarth; the test needed no change to allow developer code, and now also proves the reader connection is used only by developer analytics code), then change `analytics-isolation.test.ts` so developer analytics modules may import only `@/db/developer-reader` and `@/db/schema/developer-analytics`, never v20 raw data. Buyer code must still only send events.
+- [x] Typed services that take `developerId` only from `requirePortalRole("developer", …)`, never from input: portfolio overview (views, comparisons, saves, unlocks, enquiries, engaged time, funnel), per-property detail, comparison view (per choice 4), demand by BHK/city/budget band, completeness, benchmarks (per choice 8).
+- [x] `GET /api/v1/developer/portfolio` and the per-property/export routes, `no-store`, standard errors, fixed windows, report metadata (tracking start, generated at).
+- [x] CSV export with formula-injection protection, the same threshold and bounded size.
+- [x] Tests: two-developer isolation, revoked session, malformed ids, windows, threshold, export, no price or private data.
+- [x] Update the API spec, developer flow, decisions, progress and this tasklist.
+- [x] Report Part 4 and stop.
+- [ ] Gate 4 (auth and ownership: `requireDeveloperRequest` and the three routes) and gate 2 for the two v23 tables: request from Bhavarth and record the outcome.
+- [ ] Confirm or change the benchmark cohort sizes (5 properties, 3 developers) and the cap of 5 rivals.
 
 **Acceptance:** two developers cannot see each other's properties, figures or CSV rows.
 
@@ -177,6 +179,29 @@ Add a row at the end of every part; never replace earlier rows.
 | 2026-09-26 | Deep | 2 | `bun run analytics:release` on the seeded database | Ran and reported through 2026-09-25 (no listed properties, so 0 figures) |
 | 2026-09-26 | Deep | 2 | `format:check`, `lint`, `typecheck`, full `bun run test`; leftover-row query | All clean; 175/175 files, 2071/2071 tests; nothing left behind |
 
+| 2026-09-26 | Deep | 4 | Throwaway PG17 cluster (port 55432, four roles from `docker/postgres-init`); `db:migrate` from a database already at `0028`; both seeds | `0029` applied (its journal `when` set by hand after `0028`'s); shared 5432 database untouched |
+| 2026-09-26 | Deep | 4 | `developer-analytics.integration.test.ts` (3 runs), `release-rules.test.ts`, `src/lib/developers/analytics/*`, the route tests, `developer-request.integration.test.ts`, the isolation and journal tests | All green; lowering the gate to 4 made 6 tests fail, as it should |
+| 2026-09-26 | Deep | 4 | `format:check`, `lint`, `typecheck`, full `bun run test` | Clean; 187/187 files, 2178/2178 tests (one full run) |
+
 ## Completion record
 
 **2026-09-25 — Deep:** Part 1 complete. The branch is `main` plus documentation: this tasklist, the roadmap's Phase 4 entry, a `DECISIONS.md` entry, the developer flow, the API spec's portfolio row and `PROGRESS.md`. Part 2 has not been authorised.
+
+## Handoff to Codex (2026-09-26 — Deep, end of Part 4)
+
+Branch `task/phase-4-developer-analytics-portal`, from Bhavarth's `task/analytics-anonymous-events`. Read `AGENTS.md`, this tasklist and `DECISIONS.md` 2026-09-26 "Part 4 built" first.
+
+**Built and verified (Part 4):** `src/lib/developers/analytics/` (`report.ts` services, `metrics.ts` labels, `windows.ts`, `csv.ts`, `http.ts`); `requireDeveloperRequest` in `src/lib/accounts/api-session.ts`; routes `GET /api/v1/developer/portfolio`, `/properties/{id}`, `/export`; schema v23 (`developer_analytics_pairings`, `developer_analytics_benchmarks`, migration `0029`, `rules_version` `release-v2`); the release job writes both; `src/db/migration-journal.test.ts`.
+
+**Choices 8 (benchmarks) and 9 (completeness) are decided and built** (see the resolved text above). What is left of them is bookkeeping and confirmation, for Codex:
+
+1. Ask Deep to confirm or change the benchmark cohort sizes (5 properties, 3 developers) and the cap of 5 rivals (`release-rules.ts`; a change is a constant plus a `rules_version` bump and a rerun of the job).
+2. Request gate 2 (the two v23 tables and grants) and gate 4 (auth and ownership) from Bhavarth and record the outcomes here and in `DECISIONS.md`.
+3. Add the developer layer to `docs/product/privacy-policy-inputs.md`: what a developer sees, the 5-visitor gate, **named rivals**, benchmarks, the reader role, and that a forwarded enquiry shows a buyer's phone.
+4. Choice 7 (new capture events) is undecided and nothing built needs it; Part 3 stays unstarted.
+
+**Part 5 (needs Deep's approval first):** replace the holding page at `src/app/developers/(portal)/page.tsx` with a developer shell (the forwarded-enquiries page at `/developers/enquiries` is a standalone page ahead of it). Server Components call `getPortfolioReport` and `getPropertyReport` with `{ reader: developerReaderDb, catalog: db }` and `session.role.developerId` from `requirePortalRole("developer", …)`. Reuse `src/components/admin/analytics/panels.tsx` (stat tiles, funnel, daily chart, count tables with table equivalents) rather than build a second set. Show: `meta.generatedAt`, `trackingSince`, `coverage`, `stale`; withheld figures as "not enough data", never zero; label the median "time per visitor" (the admin's is per visit); say `views` and `comparisons` include browsers that asked not to be tracked; no score, rank or winner wording; printed-dossier rules (`docs/design/no-vibecoded-tells.v1.md`). States to build: empty, tracking just started, suppressed, stale, revoked, error. Rivals are named with `own` flagged; benchmarks say what they are a median of; no benchmark today is normal (the catalogue is too small). CSV links point at `/api/v1/developer/export`.
+
+**Part 6:** format, lint, typecheck, migrate a fresh database and one already at `0028`, full suite (the shared-database integration flake in `DECISIONS.md` 2026-09-26 is unsolved), production build, confirm no price, private bucket, visitor or session id in any developer response or CSV, list `analytics:release` and `analytics:purge` with their host in `docs/production-readiness.md` (choice 10), gate 5 before merge.
+
+**Local setup notes:** the tests need `DATABASE_DEVELOPER_READER_URL` and the `propcompare_developer_reader` role. The shared 5432 database was not reachable from this machine, so verification used a throwaway PG17 cluster on 55432; set the four `DATABASE_*_URL` variables to it, and `BETTER_AUTH_SECRET`/`BETTER_AUTH_URL` for the session tests. Do not `git checkout` a file with uncommitted work (it cost this session a rebuild of `release-rules.ts`).
