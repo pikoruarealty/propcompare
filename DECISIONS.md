@@ -1276,3 +1276,15 @@ Review of `task/phase-4-developer-analytics` (`745e8cf`) against `task/analytics
 4. **Part 4 edits `analytics-isolation.test.ts`, which changed here.** It no longer lists readers by name; it names the few send-only modules buyer code may import (`track`, `use-tracking`, `events`, `cookies`, `format`) and guards everything else in `lib/analytics`, so a module added later is covered by default. Widening it for developer modules should keep that shape.
 5. **Part 5 would rebuild the analytics panels.** `src/components/admin/analytics/panels.tsx` already has the stat tiles, funnel, daily chart and the count and breakdown tables, each with a table equivalent and no chart library. The developer portal should share those presentational pieces, passing already-released figures, rather than grow a second set.
 6. **`docs/product/privacy-policy-inputs.md` needs the developer layer**: what a developer sees, the 5-visitor gate, named rivals, and the reader role.
+
+---
+
+**2026-09-26 — A forwarded enquiry is visible to its developer, with the buyer's name, message and phone number. Owner direction, in chat. Resolves the "owner's to decide" item left open in the 2026-09-25 enquiry-flow entry.**
+
+Context: the enquiry flow (2026-09-25) built the admin side only — the inbox, forward and close — and left "what a developer sees of a forwarded enquiry" explicitly open, naming it a privacy decision for the owner. The developer portal has held nothing but a sign-in landing page since 2026-09-20; forwarding an enquiry produced only a status and a date, visible to nobody on the developer's side.
+
+**Decision.** Once the admin forwards an enquiry, the developer who owns that property can see it: the buyer's name, their message, and their phone number, plus the property and unit type asked about and when it was forwarded. This is the first time a buyer's phone number reaches a developer-facing surface in this product. The admin's own triage (`new`/`contacted`) and any enquiry not forwarded stay invisible to a developer, exactly as before. Scoped to `requirePortalRole("developer", …)`'s own `developerId`, never from request input, matching every other developer-scoped read in the codebase.
+
+**Why this over the alternatives considered:** a reveal-on-request step or an admin-relayed contact were both weighed, but a forwarded enquiry a developer cannot act on is functionally the same as one never forwarded, and the admin's forward action is already the deliberate release point — there is no second gate to add without making "forwarded" mean two different things depending on the screen. The number is real personal data reaching a new surface, which is exactly the kind of decision this project's contract asks to be recorded rather than inferred, so it is dated here.
+
+**Not Phase 4.** This is unrelated to Deep's Phase 4 tasklist, which explicitly excludes it (`docs/app-flows/developer.md`, 2026-09-25: "The developer's view of a forwarded enquiry (schema v19) is not part of it"). Tasklist: `docs/tasklists/2026-09-26-developer-forwarded-enquiries.md`.
