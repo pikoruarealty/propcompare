@@ -21,7 +21,7 @@
 - [x] Run format, lint, typecheck, unit/UI and full integration suites, fresh and existing-at-0029 migrations, and production build; record local build conditions honestly.
 - [x] Review rendered HTML, API and CSV for price, private bucket, visitor/session IDs and personal detail.
 - [x] Check the branch against the current `origin/main` for overlap and document consistency. `origin/main` at `138295c` is already an ancestor of this branch; the Phase 4 schema and privacy documentation now include the new intake demand dimensions.
-- [x] Commit the steps, push the new branch, and open [PR #2](https://github.com/pikoruarealty/propcompare/pull/2) to `main` with verification and remaining limitations. The PR awaits review and merge.
+- [x] Commit the steps, push the new branch, and open [PR #2](https://github.com/pikoruarealty/propcompare/pull/2) to `main` with verification and remaining limitations. The PR was merged into `main` as `e3f0d9a` on 2026-09-26.
 
 ## Verification record
 

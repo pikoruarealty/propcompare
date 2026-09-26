@@ -90,7 +90,7 @@ Phases 2A and 2B run in parallel once Phase 1 lands, so both developers are work
 
 ## Phase 4 — Developer analytics over schema v20
 
-> **Scope set 2026-09-25 — Deep:** Phase 4 is the developer-facing, aggregates-only view of the first-party analytics Bhavarth built in Phase 3 completion (schema v20, `DECISIONS.md` 2026-09-25 "First-party analytics built", item 7). It builds on v20 and does not rebuild capture: no second event table, cookie or events route. A developer sees thresholded aggregates for their own properties only, plus deterministic listing completeness; nothing reaches a buyer or becomes a score. **Execution tasklists:** [2026-09-25 Phase 4 developer analytics](tasklists/2026-09-25-phase-4-developer-analytics.md) and [portal completion](tasklists/2026-09-26-phase-4-portal-completion.md). Parts 1, 2, 4 and 5 are built; Part 3 needed no new event. On 2026-09-26 the owner approved gates 2, 4 and 5, confirmed the benchmark and rival limits, added property-scoped intake BHK/city demand (schema v24), and authorised Part 6 and a PR to `main`. The app host analytics schedulers stay off until hosting.
+> **Scope set 2026-09-25 — Deep:** Phase 4 is the developer-facing, aggregates-only view of the first-party analytics Bhavarth built in Phase 3 completion (schema v20, `DECISIONS.md` 2026-09-25 "First-party analytics built", item 7). It builds on v20 and does not rebuild capture: no second event table, cookie or events route. A developer sees thresholded aggregates for their own properties only, plus deterministic listing completeness; nothing reaches a buyer or becomes a score. **Execution tasklists:** [2026-09-25 Phase 4 developer analytics](tasklists/2026-09-25-phase-4-developer-analytics.md) and [portal completion](tasklists/2026-09-26-phase-4-portal-completion.md). **Status: complete and merged 2026-09-26** (PR #2, `e3f0d9a`). Parts 1, 2, 4, 5 and 6 are built; Part 3 needed no new event. The owner confirmed the benchmark and rival limits and added property-scoped intake BHK/city demand (schema v24). The app host analytics schedulers stay off until hosting (`docs/production-readiness.md`). The submission screens in the note below remain on hold.
 >
 > **Area of focus:** Deep builds the vertical slice. Bhavarth reviews analytics read access, any schema/grant change, the event vocabulary, developer auth/ownership, and the merge.
 >
@@ -110,11 +110,18 @@ The submission-creating half of the developer portal (upload, page routing, OCR-
 
 ---
 
+## UI redesign
+
+**Status: not started, not scoped (owner direction 2026-09-26).** Phase 3 closed with the landing page's richer content unbuilt; the owner moved it here. No tasklist exists yet, and none should be written from a guess: the owner sets the scope first. Constraints that already stand and carry over: comparison stays the product (`AGENTS.md`, `docs/design/comparison.v1.md`); the buyer UI follows [no-vibecoded-tells](design/no-vibecoded-tells.v1.md) and [design tokens](design/design-tokens.md); `--color-verified-gold` only on trust badges; no price and no score anywhere; the sign-in gates on comparison depth and the dossier (`DECISIONS.md` 2026-09-22, 2026-09-24, 2026-09-25) are unchanged. Deferred out of Phase 2B and still open for it: dark mode. (Media delivery has since been built. `PropScoreDial` was deferred because no calculation for it is defined, `DECISIONS.md` 2026-09-07, and the no-score rule now stands against it.)
+
+---
+
 ## Phase 5 — Polish & production readiness
 
 **Area of focus: Bhavarth.**
 
 - Admin MFA enforcement flip (`admin_users.mfa_enforced`), observability/monitoring, SEO/ISR tuning on property pages, deployment hardening, backups.
+- **The full launch checklist is [`docs/production-readiness.md`](production-readiness.md)** and is longer than the line above. Items that block a real launch: an SMS provider for buyer OTP (`sendOTP` throws in production, so no buyer can sign in on a live site; DLT registration has a lead time of days), the hosting decision and production secrets and database roles, auth and events rate limiting behind the host's proxy, HTTPS and cookie flags, content security policy, password reset for developer and admin accounts, backups and a restore test, monitoring, and the terms and privacy policy written with counsel (`docs/product/privacy-policy-inputs.md`). Scheduling the two analytics jobs (`analytics:purge`, then `analytics:release`) is part of hosting.
 
 ---
 

@@ -13,12 +13,12 @@ The four connections exist to enforce the privilege split described in
 [`ARCHITECTURE.md`](../ARCHITECTURE.md). Keep them distinct even locally, because a
 local setup that collapses them cannot catch a permission bug that production would:
 
-| Variable                        | Role                           | May read `private`?                                                                         |
-| ------------------------------- | ------------------------------ | ------------------------------------------------------------------------------------------- |
-| `DATABASE_URL`                  | `propcompare_app`              | **No** — the application role.                                                              |
-| `DATABASE_ADMIN_URL`            | `propcompare`                  | Owner; migrations only.                                                                     |
-| `DATABASE_SERVICE_URL`          | `propcompare_service`          | Yes — Phase 3 matching service.                                                             |
-| `DATABASE_DEVELOPER_READER_URL` | `propcompare_developer_reader` | **No** — selects the two released developer-analytics tables and nothing else (schema v21). |
+| Variable                        | Role                           | May read `private`?                                                                                  |
+| ------------------------------- | ------------------------------ | ---------------------------------------------------------------------------------------------------- |
+| `DATABASE_URL`                  | `propcompare_app`              | **No** — the application role.                                                                       |
+| `DATABASE_ADMIN_URL`            | `propcompare`                  | Owner; migrations only.                                                                              |
+| `DATABASE_SERVICE_URL`          | `propcompare_service`          | Yes — Phase 3 matching service.                                                                      |
+| `DATABASE_DEVELOPER_READER_URL` | `propcompare_developer_reader` | **No** — selects the four released developer-analytics tables and nothing else (schema v21 and v23). |
 
 ## Option A — Docker (the documented default)
 

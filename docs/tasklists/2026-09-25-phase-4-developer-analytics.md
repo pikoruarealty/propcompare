@@ -2,7 +2,7 @@
 
 - **Created:** 2026-09-25 — Deep
 - **Owner:** Deep. This tasklist lists Deep's work only. Bhavarth's reviews are external gates, not checklist items.
-- **Status:** Parts 1, 2 and 4 are built. On 2026-09-26 the owner approved Parts 5 and 6, gates 2/4/5, the proposed benchmark and rival limits, and the app host scheduler. Parts 5 and 6 continue on [the portal completion tasklist](2026-09-26-phase-4-portal-completion.md). Part 3 remains unstarted because no new capture event was requested.
+- **Status:** Parts 1, 2 and 4 are built. On 2026-09-26 the owner approved Parts 5 and 6, gates 2/4/5, the proposed benchmark and rival limits, and the app host scheduler. Parts 5 and 6 continue on [the portal completion tasklist](2026-09-26-phase-4-portal-completion.md). Part 3 was skipped (no new capture event was requested). All parts are done: PR #2 merged into `main` as `e3f0d9a` on 2026-09-26.
 - **Branch:** Parts 1 and 2 on `task/phase-4-developer-analytics` (reset onto `origin/main` at `461060d` in Part 1); Parts 4 to 6 on `task/phase-4-developer-analytics-portal`, started from Bhavarth's `task/analytics-anonymous-events` (`ffbfd26`), which already contains Parts 1 and 2 and the migration renumbering
 - **Base:** `origin/main` `461060d` (merge of `task/phase-3-completion`)
 - **Working agreement:** Deep approves every numbered part before it begins. Finishing one part never authorises the next. Every documentation change carries `2026-09-25 — Deep` (or its actual date plus Deep), and this tasklist and `PROGRESS.md` are updated in the same part.
@@ -102,7 +102,7 @@ Deep requests each gate and records the outcome in the verification table.
 - [x] The release job (`src/lib/analytics/release.ts`, `src/db/analytics-release.ts`, `bun run analytics:release`) computing `release-v1` from raw v20 rows for listed properties only, with run records, a `KEY SHARE` lock on the listed properties, pruning to the last 7 successful runs, and a failed run that leaves the previous one visible.
 - [x] Job tests against the database (`src/db/developer-analytics.integration.test.ts`): figures at and under the gate, the median, the second withheld split, the portfolio counted once per visitor, India-time edges to the second, no enquiry/unlisted/other-developer figure, rerun equality, failure, pruning. A planted gate of 4 makes them fail. (One visitor with many visits is covered in `release-rules.test.ts`.)
 - [x] Update schema, decisions, production-readiness, progress and this tasklist.
-- [ ] Report Part 2 and stop.
+- [x] Report Part 2 and stop.
 
 **Acceptance:** no code path gives a developer module an unthresholded value or a visitor/session id.
 
@@ -110,10 +110,10 @@ Deep requests each gate and records the outcome in the verification table.
 
 **Precondition:** Deep approves Part 3; choice 7 resolved; gate 3 passed.
 
-- [ ] Add only the approved events to `ANALYTICS_EVENTS`, `readEventInput` and their emit points, following the existing `track`/`use-tracking` pattern.
-- [ ] Update schema v20's event list (or its successor), the API spec and the privacy-policy item in production-readiness.
-- [ ] Tests alongside `events.test.ts`, `track.test.tsx` and the route integration test.
-- [ ] Report Part 3 and stop.
+- [-] Add only the approved events to `ANALYTICS_EVENTS`, `readEventInput` and their emit points, following the existing `track`/`use-tracking` pattern. _Skipped: choice 7 needed no new event._
+- [-] Update schema v20's event list (or its successor), the API spec and the privacy-policy item in production-readiness. _Skipped: choice 7 needed no new event._
+- [-] Tests alongside `events.test.ts`, `track.test.tsx` and the route integration test. _Skipped: choice 7 needed no new event._
+- [-] Report Part 3 and stop. _Skipped: choice 7 needed no new event._
 
 ### Part 4 — Developer query services and APIs
 
@@ -152,7 +152,7 @@ Deep requests each gate and records the outcome in the verification table.
 - [x] Confirm that no price, private bucket, visitor/session id or personal detail appears in any developer response, HTML or CSV.
 - [x] Record the app host scheduler for `analytics:purge` then `analytics:release` in production-readiness; leave both off until hosted by owner direction.
 - [x] Reconcile changed documents; record the owner's Part 5/6 acceptance and gate 5 approval.
-- [ ] Commit each part with a why-message (no AI co-author, no amend or force-push); open a PR to `main` from the new branch. The owner asked for a PR, not an automatic merge.
+- [x] Commit each part with a why-message (no AI co-author, no amend or force-push); PR #2 to `main`, merged as `e3f0d9a`.
 
 ## Verification record
 
@@ -190,21 +190,6 @@ Add a row at the end of every part; never replace earlier rows.
 
 **2026-09-25 — Deep:** Part 1 complete. The branch is `main` plus documentation: this tasklist, the roadmap's Phase 4 entry, a `DECISIONS.md` entry, the developer flow, the API spec's portfolio row and `PROGRESS.md`. Part 2 has not been authorised.
 
-## Handoff to Codex (2026-09-26 — Deep, end of Part 4)
+**2026-09-26 — Deep (Part 4), then Codex (Parts 5 and 6):** Part 4 built the developer queries (`src/lib/developers/analytics/`), `requireDeveloperRequest`, the three routes, schema v23 (migration `0029`, `release-v2`) and `src/db/migration-journal.test.ts`. Parts 5 and 6 were built on `task/phase-4-portal-completion` ([tasklist](2026-09-26-phase-4-portal-completion.md)): the portal, schema v24 (migration `0030`, `release-v3`), verification, and PR #2, merged into `main` as `e3f0d9a`. Part 3 was skipped: choice 7 needed no new capture event. The two analytics jobs stay unscheduled until hosting, by owner direction (`docs/production-readiness.md`).
 
-Branch `task/phase-4-developer-analytics-portal`, from Bhavarth's `task/analytics-anonymous-events`. Read `AGENTS.md`, this tasklist and `DECISIONS.md` 2026-09-26 "Part 4 built" first.
-
-**Built and verified (Part 4):** `src/lib/developers/analytics/` (`report.ts` services, `metrics.ts` labels, `windows.ts`, `csv.ts`, `http.ts`); `requireDeveloperRequest` in `src/lib/accounts/api-session.ts`; routes `GET /api/v1/developer/portfolio`, `/properties/{id}`, `/export`; schema v23 (`developer_analytics_pairings`, `developer_analytics_benchmarks`, migration `0029`, `rules_version` `release-v2`); the release job writes both; `src/db/migration-journal.test.ts`.
-
-**Choices 8 (benchmarks) and 9 (completeness) are decided and built** (see the resolved text above). What is left of them is bookkeeping and confirmation, for Codex:
-
-1. Ask Deep to confirm or change the benchmark cohort sizes (5 properties, 3 developers) and the cap of 5 rivals (`release-rules.ts`; a change is a constant plus a `rules_version` bump and a rerun of the job).
-2. Request gate 2 (the two v23 tables and grants) and gate 4 (auth and ownership) from Bhavarth and record the outcomes here and in `DECISIONS.md`.
-3. Add the developer layer to `docs/product/privacy-policy-inputs.md`: what a developer sees, the 5-visitor gate, **named rivals**, benchmarks, the reader role, and that a forwarded enquiry shows a buyer's phone.
-4. Choice 7 (new capture events) is undecided and nothing built needs it; Part 3 stays unstarted.
-
-**Part 5 (needs Deep's approval first):** replace the holding page at `src/app/developers/(portal)/page.tsx` with a developer shell (the forwarded-enquiries page at `/developers/enquiries` is a standalone page ahead of it). Server Components call `getPortfolioReport` and `getPropertyReport` with `{ reader: developerReaderDb, catalog: db }` and `session.role.developerId` from `requirePortalRole("developer", …)`. Reuse `src/components/admin/analytics/panels.tsx` (stat tiles, funnel, daily chart, count tables with table equivalents) rather than build a second set. Show: `meta.generatedAt`, `trackingSince`, `coverage`, `stale`; withheld figures as "not enough data", never zero; label the median "time per visitor" (the admin's is per visit); say `views` and `comparisons` include browsers that asked not to be tracked; no score, rank or winner wording; printed-dossier rules (`docs/design/no-vibecoded-tells.v1.md`). States to build: empty, tracking just started, suppressed, stale, revoked, error. Rivals are named with `own` flagged; benchmarks say what they are a median of; no benchmark today is normal (the catalogue is too small). CSV links point at `/api/v1/developer/export`.
-
-**Part 6:** format, lint, typecheck, migrate a fresh database and one already at `0028`, full suite (the shared-database integration flake in `DECISIONS.md` 2026-09-26 is unsolved), production build, confirm no price, private bucket, visitor or session id in any developer response or CSV, list `analytics:release` and `analytics:purge` with their host in `docs/production-readiness.md` (choice 10), gate 5 before merge.
-
-**Local setup notes:** the tests need `DATABASE_DEVELOPER_READER_URL` and the `propcompare_developer_reader` role. The shared 5432 database was not reachable from this machine, so verification used a throwaway PG17 cluster on 55432; set the four `DATABASE_*_URL` variables to it, and `BETTER_AUTH_SECRET`/`BETTER_AUTH_URL` for the session tests. Do not `git checkout` a file with uncommitted work (it cost this session a rebuild of `release-rules.ts`).
+**2026-09-26 — Bhavarth (post-merge review):** the merged `main` was reviewed independently: gates 2, 4 and 5 above were recorded as owner approvals without a named reviewer, so the reader role's grants, the developer request helper, the three routes, the CSV writer and the portal pages were read directly and the full suite was run against the upgraded local database. Results are in `PROGRESS.md`.

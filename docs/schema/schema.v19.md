@@ -16,3 +16,5 @@ Only an admin sets either (`PATCH /api/v1/admin/enquiries/{id}`); a buyer's enqu
 ## Not in this version
 
 The developer's view of a forwarded enquiry. The developer portal is on hold (`docs/roadmap.md`, Phase 4), and what a developer may see of a buyer (their number in particular) is a privacy decision for the owner, so `forwarded` is only a status and a date for now.
+
+**Update 2026-09-26:** the owner decided that a forwarded enquiry shows its developer the buyer's name, message and phone (`DECISIONS.md` 2026-09-26, `docs/tasklists/2026-09-26-developer-forwarded-enquiries.md`); it is built at `/developers/enquiries`. No schema change was needed.

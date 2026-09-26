@@ -22,8 +22,8 @@ const dateTime = new Intl.DateTimeFormat("en-IN", {
 /**
  * A developer's own forwarded enquiries (`DECISIONS.md` 2026-09-26). Only what
  * the admin has released to this developer appears: an enquiry still with the
- * admin, or closed without forwarding, is never shown. This is a standalone
- * page now shares the Phase 4 developer shell while keeping its own role check.
+ * admin, or closed without forwarding, is never shown. The page shares the
+ * Phase 4 developer shell and keeps its own role check.
  */
 export default async function DeveloperEnquiriesPage() {
   const session = await requirePortalRole("developer", "/developers/enquiries");

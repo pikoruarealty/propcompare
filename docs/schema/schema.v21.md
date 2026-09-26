@@ -81,6 +81,8 @@ There is no column for a hidden count, a visitor id, a visit id, a slug list, a 
 
 No enquiry metric exists (`0026`).
 
+**Added by migration `0028` (2026-09-26, `DECISIONS.md` 2026-09-26 "Anonymous activity counts"):** two unsplit property-level metrics, `views` and `comparisons`. They count every event, including those from a browser that sent a privacy signal and so has no visitor id, and are released only when the same property's identified visitors meet the 5-visitor gate. `viewers` and `comparers` stay identified-only counts of people.
+
 `returning_visitors` is released only if it meets the gate itself, not just its parent. Every listed property and every portfolio has a row for each unsplit metric in each window, withheld when nothing was counted, so "not enough data" is always a row and never a gap. Splits are written only where something was counted; events with no stated band are left out of the band split, so band splits need not add up to the total.
 
 The monthly v20 tables hold distinct visitors per month, which cannot be added across months, so `release-v1` counts from raw rows only, and every window fits inside raw retention (see "Why 12 months").

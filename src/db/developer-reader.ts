@@ -4,7 +4,7 @@ import postgres from "postgres";
 /**
  * The read-only connection for developer analytics (schema v21, `DECISIONS.md`
  * 2026-09-26). It is bound to `propcompare_developer_reader`, which can select
- * the two released-analytics tables and nothing else: no raw event, no catalog
+ * the four released-analytics tables (v21 and v23) and nothing else: no raw event, no catalog
  * or account table, no `private` schema. So a developer query that reaches for
  * anything else fails in the database instead of leaking.
  *

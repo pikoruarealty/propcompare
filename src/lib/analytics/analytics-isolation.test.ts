@@ -3,11 +3,13 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 /**
- * What analytics reads is admin-only (`DECISIONS.md` 2026-09-25): no buyer or
- * developer surface may show a count, a pairing or a "most compared", and the
- * data must never become a score of a property. Buyer code may only send events
- * (`track`, `use-tracking`, `events`); reading them is for the admin console, the
- * retention job and the recorder.
+ * Reading raw events is admin-only (`DECISIONS.md` 2026-09-25): no buyer surface
+ * may show a count, a pairing or a "most compared", and the data must never
+ * become a score of a property. Buyer code may only send events (`track`,
+ * `use-tracking`, `events`); reading them is for the admin console, the
+ * retention and release jobs and the recorder. A developer surface sees only the
+ * thresholded aggregates the release job wrote (`DECISIONS.md` 2026-09-26), never
+ * a raw event; the developer block below guards that.
  */
 const root = path.resolve(__dirname, "../..");
 

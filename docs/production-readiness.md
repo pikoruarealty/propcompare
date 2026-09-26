@@ -26,7 +26,7 @@ Last updated: 2026-09-23 (analytics taxonomy tasklist opened, data-coverage/qual
 - [ ] **Native image libraries on the host.** `sharp` and `@napi-rs/canvas` (brochure page rendering) ship platform-specific binaries; install with the host's OS and CPU, keep them in `serverExternalPackages`, and check memory use when rendering large brochures (each request re-reads the whole PDF).
 
 - [ ] **Raw extraction answers on durable storage.** Each paid answer is saved before it is checked (`OCR_CHECKPOINT_DIR`, local disk today), and retries reuse it. On a host with an ephemeral disk that saving is lost on redeploy; move the checkpoint files to the storage adapter (or a table) and back them up.
-- [ ] **Buyer pages after publish.** Publishing refreshes `/`, `/properties` and the property page (`revalidatePath`); confirm this on the chosen host, including behind any CDN.
+- [ ] **Buyer pages after publish.** Publishing refreshes `/`, `/properties` and the property page (`revalidatePath`); confirm this on the chosen host, including behind any CDN. Note (2026-09-26): the dossier, browse, landing and compare pages are all rendered per request (`next build` lists each as dynamic), so nothing is cached as HTML today; the `revalidatePath` calls matter only if caching is added back. Decide during SEO/ISR tuning whether the signed-out dossier render (the open top) should be cached, and how a cache can never serve the signed-in render.
 
 ## Should be done before or soon after launch
 

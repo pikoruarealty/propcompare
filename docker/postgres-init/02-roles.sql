@@ -6,8 +6,8 @@
 --   required because private tables deliberately have RLS enabled with zero
 --   policies.
 -- - propcompare_developer_reader: developer analytics code's connection; migration
---   0025 grants it SELECT on the two released-analytics tables and nothing else
---   (schema v21, DECISIONS.md 2026-09-26). No default privileges, so no future
+--   0025 and 0029 grant it SELECT on the four released-analytics tables and nothing
+--   else (schema v21 and v23, DECISIONS.md 2026-09-26). No default privileges, so no future
 --   table reaches it by accident.
 
 DO $$
