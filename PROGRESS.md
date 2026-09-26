@@ -1,5 +1,23 @@
 # Progress
 
+## 2026-09-26 (5) - Two stale readiness lines and one wrong privacy statement corrected; pending items checked against the database
+
+**Done:** (1) `docs/production-readiness.md` said the saved properties and comparisons page and the pre-login intake claim were unbuilt; both are built (`/saved`, `POST /api/v1/buyer/intake-handoff/claim`), lines corrected. (2) `docs/product/privacy-policy-inputs.md` said Google received nothing today; the dossier's embedded map already loads from google.com on page load, corrected. (3) The landmark map was scoped and then set aside by the owner for now; nothing was built and the map is as before.
+
+**Checked against the database, not the docs:** no draft submission exists (all 12 are published), so the Godrej Altus draft and the Maruti 360 edit are done; no unit-type price has been typed (0 staged, 0 history); a RERA snapshot is held for 2 of 5 properties (Anamika, Godrej Altus); nothing schedules `analytics:purge` or `analytics:release`; `POST /api/v1/events` has no rate limit.
+
+## 2026-09-26 (7) - The full suite is reliable; source, budget, device and section rows open their visitors; Phase 3 closed
+
+**Done:** (1) **The flaky suite fixed at its cause** (`DECISIONS.md` 2026-09-26 "Database-backed tests run one file at a time"): the 56 integration files shared one database while running in parallel; they now run one at a time in their own vitest project. Four consecutive full runs were green (2104 tests, about two minutes), against about half failing before. (2) **Drill-down** (`docs/tasklists/2026-09-26-analytics-table-drill-down.md`): each row of "Where visitors come from", "By budget", "By device" and "Sections opened" opens the visitors it counted, through the same filter and the same source and band definitions as the tables (proved row by row against the database). (3) `docs/roadmap.md` and `DECISIONS.md` record Phase 3 as closed; the landing page's richer content went to the UI redesign.
+
+**Verified:** typecheck, lint, format; the full suite four times; the analytics and admin suites for the drill-down. Local database holds only its real rows (6 properties, 10 developers, 9 events). Not looked at in a browser.
+
+## 2026-09-26 (6) - The events route has a rate limit; a test that left events behind on every run is fixed
+
+**Done (`docs/tasklists/2026-09-26-events-rate-limit.md`):** `POST /api/v1/events` now drops a caller's events after 120 in a minute (still `204`, nothing recorded). The caller's address is a key in memory for at most that minute and is never stored (`privacy-policy-inputs.md` updated). It is a floor per server instance; the host's proxy must still set the forwarding header and limit the route (`production-readiness.md`). **Found and fixed:** the analytics integration test recorded two events per run that its cleanup never removed (18 accumulated in the local database); it now registers them, and the 18 were deleted, leaving the 9 real events.
+
+**Verified:** `bun run typecheck`, lint, format; `rate-limit.test.ts`, the analytics integration file and the isolation test. The full suite was not run.
+
 ## 2026-09-26 (4) - Developers see forwarded enquiries; the Phase 4 review items finished; ready to hand Parts 4 to 6 to Deep
 
 **Done:** (1) Owner decision: a forwarded enquiry shows its developer the buyer's name, message and phone (`/developers/enquiries`, tasklist `docs/tasklists/2026-09-26-developer-forwarded-enquiries.md`). (2) Gate 1 granted: the isolation test already lets developer code read the released tables and refuses raw events (checked with a throwaway route). (3) Release job: `views` and `comparisons` count anonymous activity under the unchanged 5-identified-visitor gate (migration `0028`); "listed" has a single definition. (4) Admin dossier median now sums pings per visit (proved: 25s became 50s). (5) Privacy inputs record what a developer sees. (6) Deep's `developer-analytics` test cleaned up through the wrong role and left orphaned developers in the local database after my earlier re-runs; the residue was removed and the database holds only its real rows (6 properties, 10 developers, 9 real events).

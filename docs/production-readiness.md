@@ -31,15 +31,14 @@ Last updated: 2026-09-23 (analytics taxonomy tasklist opened, data-coverage/qual
 ## Should be done before or soon after launch
 
 - [ ] **Admin MFA** (`admin_users.mfa_enforced` is a placeholder; Phase 5). Admins can publish to the live catalog, so this should not wait long.
-- [ ] **Buyer retention screens** — saved properties and saved comparisons pages so returning buyers see their activity (backend done; UI is Deep's Phase 3). Also buyer email verification once an email provider exists (emails are stored unverified today).
+- [ ] **Buyer email verification** once an email provider exists (emails are stored unverified today). The saved properties and saved comparisons page (`/saved`) is built (`docs/tasklists/2026-09-21-phase-3-buyer-flows.md`; this line was stale until 2026-09-26).
 - [ ] **"Report a problem" inbox.** The dialog shows a placeholder address (`src/lib/buyer/report-contact.ts`); the real reporting address replaces that one constant.
 - [ ] **Analytics event capture (beta deadline).** The paid developer analytics platform is future scope, but raw event history cannot be rebuilt: capture must exist by the start of beta. Design tasklist opened 2026-09-23: `docs/tasklists/2026-09-23-analytics-event-taxonomy.md` (event taxonomy, anonymous vs signed-in identity, retention, consent, declared trackers, and the `activated user`/`completed comparison` definitions) — paper only so far, capture code not yet built. See `DECISIONS.md` 2026-09-19 and 2026-09-23.
 - [ ] **Data coverage and data quality KPIs** (adopted `DECISIONS.md` 2026-09-23): "% of active RERA-registered Ahmedabad projects indexed" (denominator from `reraFetchJobs`) and "% RERA-verified / % fields stated vs `not_stated` / % refreshed in the last 30 days" (from `property_schema_fields` and fetch-job timestamps) as an admin panel. Uses only existing data; not yet scheduled as a tasklist.
 - [ ] **"Last checked" dates and a re-check rhythm** for properties nobody else maintains; "Verified" copy says checked by PropCompare.
 - [ ] **Developer analytics release job** scheduled daily after `analytics:purge` (`bun run analytics:release`, schema v21, Phase 4 Part 2). Without it developers see no figures, and a stale run must show as stale (2026-09-26 — Deep).
-- [ ] **Rate limit `POST /api/v1/events`** (per IP at the proxy, not stored): the endpoint is unauthenticated by design, so without a limit anyone can add noise to the analytics counts (`DECISIONS.md` 2026-09-25).
+- [ ] **Rate limit `POST /api/v1/events` at the proxy.** An in-app floor is built (120 per caller per minute, held in memory, per instance; `src/lib/analytics/rate-limit.ts`, 2026-09-26). It keys on `x-forwarded-for` / `x-real-ip`, so the host must set that header from the real client address and strip any a caller sends, and should still limit this route itself because the in-app count is per server instance.
 - [ ] **Analytics retention job** scheduled daily (`bun run analytics:purge`): events older than 13 whole months are added to the monthly counts and then made anonymous (visitor and visit ids cleared, the event kept; `DECISIONS.md` 2026-09-26). Without the schedule, events stay tied to a browser longer than the privacy policy will say.
-- [ ] **Pre-login intake cookie claim** (`docs/tasklists/2026-09-18-pre-login-intake-cookie.md`) — direction agreed, not built.
 - [ ] **Password reset** for developer and admin accounts (invite links cover first-time setup only).
 - [ ] **Audit trail review:** confirm admin actions (approve, publish, request changes) are attributable to a user and cannot be edited after the fact.
 - [ ] **Backups and restore test** for Postgres and the storage bucket; retention policy for source documents and OCR checkpoints (`OCR_CHECKPOINT_DIR` is local disk today).
@@ -62,4 +61,4 @@ Last updated: 2026-09-23 (analytics taxonomy tasklist opened, data-coverage/qual
 
 ## Resolved
 
-_(none yet)_
+- **Pre-login intake cookie claim**: built and verified 2026-09-22 (`docs/tasklists/2026-09-18-pre-login-intake-cookie.md`, `POST /api/v1/buyer/intake-handoff/claim`). The line here said "not built" until 2026-09-26.

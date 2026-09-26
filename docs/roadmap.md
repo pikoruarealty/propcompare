@@ -82,6 +82,8 @@ Phases 2A and 2B run in parallel once Phase 1 lands, so both developers are work
 
 **Status update 2026-09-25:** the enquiry flow is now admin-first (the admin forwards an enquiry to the developer or closes it; schema v19), units per floor is the whole floor's, and the price categorization was verified against the live data. Everything in the acceptance below is built. Comparison analytics (slice 4) was then decided and built the same day, with an admin Analytics screen (schema v20). The one remaining Phase 3 item is the landing page's richer content, which needs the owner's scope.
 
+**Status update 2026-09-26: Phase 3 is closed (owner).** The one item left in the 2026-09-25 note, the landing page's richer content, moves to the UI redesign (owner direction, 2026-09-26). The analytics work built after the acceptance below (anonymous events, the visitors screens, table drill-down, the events rate limit) is recorded in `PROGRESS.md`. The database-backed tests now run one file at a time (`DECISIONS.md` 2026-09-26).
+
 **Acceptance:** a buyer can browse, get intake-matched results from the inclusive ±20% private budget-range matcher (no price ever rendered), compare, save, unlock a dossier via OTP, and submit an enquiry — end to end on real data.
 
 ---
