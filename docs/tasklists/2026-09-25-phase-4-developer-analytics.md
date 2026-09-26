@@ -183,6 +183,7 @@ Add a row at the end of every part; never replace earlier rows.
 | 2026-09-26 | Deep | 4 | `developer-analytics.integration.test.ts` (3 runs), `release-rules.test.ts`, `src/lib/developers/analytics/*`, the route tests, `developer-request.integration.test.ts`, the isolation and journal tests | All green; lowering the gate to 4 made 6 tests fail, as it should |
 | 2026-09-26 | Deep | 4 | `format:check`, `lint`, `typecheck`, full `bun run test` | Clean; 187/187 files, 2178/2178 tests (one full run) |
 | 2026-09-26 | Codex | 4/6 preparation | Fetched `origin/main` (`138295c`), merged into the Phase 4 branch; reconciled `DECISIONS.md`, `PROGRESS.md` and privacy inputs | Kept the admin drill-down, event rate limit and sequential database-test runner from `main`; no developer code or schema overlap. Format, lint and typecheck passed after reconciliation. Gates 2, 4 and 5, Part 5 approval, and choice 10 remain open. |
+| 2026-09-26 | Codex | 6 preparation | `bunx vitest run --project node --project ui`; full suite attempt; Turbopack and webpack build attempts | Unit/UI: 131 files, 1743 tests passed. The full suite could not validate integration tests: local 5432 refused connections and `DATABASE_DEVELOPER_READER_URL` was absent. Turbopack refused the `node_modules` junction outside this worktree; webpack then stopped on blocked Google Fonts requests and existing PDF ESM imports. Fresh and upgrade-path migrations remain to be rerun with a database. |
 
 ## Completion record
 

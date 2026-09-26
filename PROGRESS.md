@@ -4,7 +4,7 @@
 
 **Done:** fetched `origin/main` at `138295c` and integrated its admin analytics drill-down, event rate limit and sequential integration-test runner into the Phase 4 branch. The overlapping decision and progress entries were kept in full; the privacy inputs now describe the built developer API, named rivals, peer benchmarks and forwarded enquiry contact alongside `main`'s Google Maps and rate-limit corrections. No developer code or schema conflicted.
 
-**Verified so far:** format, lint and typecheck passed on the reconciled tree. The full Part 6 verification and merge to `main` remain pending Part 5, the external gates and the scheduling-host choice in the Phase 4 tasklist.
+**Verified so far:** format, lint and typecheck passed on the reconciled tree; the database-independent unit/UI suites passed (131 files, 1743 tests). The full suite could not validate integration tests because the shared database refused port 5432 and the developer-reader URL was absent. Turbopack refused this worktree's `node_modules` junction; webpack reached blocked Google Fonts requests and PDF ESM imports. The full Part 6 verification and merge to `main` remain pending Part 5, the external gates and the scheduling-host choice in the Phase 4 tasklist.
 
 ## 2026-09-26 (5) — Deep — Phase 4 Part 4 built: developer queries, routes, CSV, named rivals, peer benchmarks; handed to Codex for the bookkeeping and Part 5
 
