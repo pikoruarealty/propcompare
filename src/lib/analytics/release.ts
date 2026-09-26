@@ -63,6 +63,14 @@ const ALLOWED_SPLITS: Record<string, ReadonlySet<string>> = {
   device: new Set(RELEASE_DEVICES),
 };
 
+const allowedSplit = (dimension: string, value: string | null): boolean => {
+  if (!value) return false;
+  if (dimension === "intake_bhk") return /^[a-z0-9_]{1,40}$/.test(value);
+  if (dimension === "intake_city")
+    return value.length <= 60 && !/[\x00-\x1f\x7f]/.test(value);
+  return ALLOWED_SPLITS[dimension]?.has(value) ?? false;
+};
+
 interface CandidateRow {
   developer_id: string;
   property_id: string | null;
@@ -103,7 +111,7 @@ const candidatesFor = async (
       )}
     ),
     about as (
-      select e.visitor_id, e.session_id, e.event, e.engaged_ms,
+      select e.visitor_id, e.session_id, e.event, e.occurred_at, e.engaged_ms,
              e.detail ->> 'page' as page, e.device, e.budget_band,
              x.property_id, el.developer_id,
              e.property_id is not distinct from x.property_id as direct
@@ -137,6 +145,31 @@ const candidatesFor = async (
       from about
       where event = 'page_engaged' and page = 'compare'
       group by 1, 2, 3
+    ),
+    intake_choices as (
+      select visitor_id, occurred_at, id, detail
+      from analytics_events
+      where event = 'intake_completed'
+        and visitor_id is not null
+        and occurred_at < ${until.toISOString()}::timestamptz
+    ),
+    intake_demand as (
+      -- One intake choice per identified visitor and listed property: the
+      -- latest intake preceding their first later view or comparison in this
+      -- window. No account join, no intake row or visitor id is released.
+      select distinct on (b.developer_id, b.property_id, b.visitor_id)
+             b.developer_id, b.property_id, b.visitor_id,
+             bhk.key as bhk,
+             initcap(lower(btrim(i.detail ->> 'city'))) as city
+      from about b
+      join intake_choices i on i.visitor_id = b.visitor_id
+        and i.occurred_at <= b.occurred_at
+      left join bhk_types bhk on bhk.key = lower(i.detail ->> 'bhk')
+      where b.visitor_id is not null
+        and ((b.event = 'property_viewed' and b.direct)
+          or b.event = 'compare_opened')
+      order by b.developer_id, b.property_id, b.visitor_id,
+               b.occurred_at, i.occurred_at desc, i.id desc
     )
     select developer_id, property_id, 'visitors' as metric, 'none' as dimension,
            null::text as dimension_value,
@@ -152,6 +185,16 @@ const candidatesFor = async (
     select developer_id, property_id, 'visitors', 'device', device,
            count(distinct visitor_id)::int, count(distinct visitor_id)::int
     from about group by developer_id, property_id, device
+    union all
+    select developer_id, property_id, 'visitors', 'intake_bhk', bhk,
+           count(distinct visitor_id)::int, count(distinct visitor_id)::int
+    from intake_demand where bhk is not null
+    group by developer_id, property_id, bhk
+    union all
+    select developer_id, property_id, 'visitors', 'intake_city', city,
+           count(distinct visitor_id)::int, count(distinct visitor_id)::int
+    from intake_demand where city is not null and city <> ''
+    group by developer_id, property_id, city
     union all
     select developer_id, property_id, 'viewers', 'none', null,
            count(distinct visitor_id)::int, count(distinct visitor_id)::int
@@ -411,12 +454,7 @@ export const figuresFor = (
 
   for (const row of candidates) {
     if (row.dimension !== "none") {
-      const allowed = ALLOWED_SPLITS[row.dimension];
-      if (
-        !allowed ||
-        !row.dimension_value ||
-        !allowed.has(row.dimension_value)
-      ) {
+      if (!allowedSplit(row.dimension, row.dimension_value)) {
         continue;
       }
     }

@@ -71,15 +71,22 @@ export const PORTFOLIO_FIGURES = [
 
 /** The figures split by budget band or device, and by which. */
 export const SPLIT_FIGURES = [
-  { figure: "visitors", dimensions: ["budget_band", "device"] },
+  {
+    figure: "visitors",
+    dimensions: ["budget_band", "device", "intake_bhk", "intake_city"],
+  },
   { figure: "viewers", dimensions: ["budget_band", "device"] },
   { figure: "comparers", dimensions: ["budget_band"] },
 ] as const satisfies readonly {
   figure: FigureKey;
-  dimensions: readonly ("budget_band" | "device")[];
+  dimensions: readonly (
+    "budget_band" | "device" | "intake_bhk" | "intake_city"
+  )[];
 }[];
 
 export const DIMENSION_LABELS = {
   budget_band: "Budget band",
   device: "Device",
+  intake_bhk: "BHK wanted",
+  intake_city: "City searched",
 } as const;

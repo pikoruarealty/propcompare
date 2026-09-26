@@ -6,6 +6,8 @@
 
 **2026-09-26 — Deep (Part 4):** the queries and API behind step 4 are built (`GET /api/v1/developer/portfolio`, `/properties/{id}` and `/export`; `src/lib/developers/analytics/`). What a developer can see: their own listed properties' released figures for one of five fixed windows, each with when it was made and how far tracking reaches; the properties buyers most often compare theirs with, **named**, each with only how many people did (owner decision, `DECISIONS.md` 2026-09-26); their figure against the median of other developers' properties nearby, only when enough exist; and how much of the property's record is stated. The portal screens are Part 5. Open choices 4, 8 and 9 in the tasklist are resolved (`DECISIONS.md` 2026-09-26, "Part 4 built").
 
+**2026-09-26 — Part 5:** `/developers` shows portfolio figures, listed properties and the five fixed report windows; `/developers/properties/{id}` shows released engagement and funnel counts, budget/device and intake BHK/city demand, named rival pairings, peer medians and facts stated. An intake choice counts only when the same identified visitor later views or compares the property. Every split is gated at five distinct identified visitors and an under-gate cell says "Not enough data", never zero. The report explains partial tracking and stale runs and links to the same scoped CSV. The forwarded enquiries page shares the developer shell but remains separately guarded; its buyer contact detail is not part of analytics. The app host jobs remain unscheduled until hosting, by owner direction.
+
 ## Purpose
 
 Let authorized developer staff maintain a portfolio through accountable submissions without gaining editorial or publishing authority.

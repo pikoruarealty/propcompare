@@ -2,7 +2,7 @@
 
 - **Created:** 2026-09-25 — Deep
 - **Owner:** Deep. This tasklist lists Deep's work only. Bhavarth's reviews are external gates, not checklist items.
-- **Status:** Part 4 built and verified 2026-09-26 (queries, routes, CSV, named rivals, peer benchmarks, completeness; schema v23, migration `0029`). Waiting on Deep's approval of Part 5, and on Bhavarth's gates 2 (the two v23 tables) and 4 (auth and ownership). Earlier: Part 2 built and verified 2026-09-26: schema v21 (migrations `0025`, `0026`), the reader role, the release rules and the release job. Waiting on Bhavarth's gate 2 review; stopped for Deep before Part 3.
+- **Status:** Parts 1, 2 and 4 are built. On 2026-09-26 the owner approved Parts 5 and 6, gates 2/4/5, the proposed benchmark and rival limits, and the app host scheduler. Parts 5 and 6 continue on [the portal completion tasklist](2026-09-26-phase-4-portal-completion.md). Part 3 remains unstarted because no new capture event was requested.
 - **Branch:** Parts 1 and 2 on `task/phase-4-developer-analytics` (reset onto `origin/main` at `461060d` in Part 1); Parts 4 to 6 on `task/phase-4-developer-analytics-portal`, started from Bhavarth's `task/analytics-anonymous-events` (`ffbfd26`), which already contains Parts 1 and 2 and the migration renumbering
 - **Base:** `origin/main` `461060d` (merge of `task/phase-3-completion`)
 - **Working agreement:** Deep approves every numbered part before it begins. Finishing one part never authorises the next. Every documentation change carries `2026-09-25 — Deep` (or its actual date plus Deep), and this tasklist and `PROGRESS.md` are updated in the same part.
@@ -52,9 +52,9 @@ A developer signs in and sees aggregated, privacy-thresholded analytics for thei
 5. **Enquiry metric.** Should a developer's "enquiries" count every `enquiry_submitted` event, or only enquiries the admin forwarded (schema v19)? Blocks the release job (Part 2), since `enquirers` is computed there. **Resolved 2026-09-26 — Deep: developers see no enquiry figure at all** (migration `0026`).
 6. **Property eligibility.** Include only listed properties, or listed plus unlisted with soft-deleted excluded? The recorder already keeps only listed properties at capture time. Blocks the release job (Part 2), which decides which properties get figures. **Resolved 2026-09-26 — Deep: listed only.**
 7. **New capture events.** Card impressions (seen in a list, not opened) do not exist in v20. Adding them extends Bhavarth's vocabulary and the privacy-policy list. Decide whether Phase 4 needs them. Blocks Part 3; if the answer is no, skip Part 3. **2026-09-26 — Deep, Part 4:** nothing built in Part 4 needs a new event (every figure comes from v20 events that exist), so Part 3 stays unstarted and is not a dependency of Parts 5 and 6. The owner has not asked for card impressions; this stays open, not decided.
-8. **Peer benchmarks.** Keep "your property compared with similar properties" (locality → city cohorts) in Phase 4, or defer? Blocks Part 4. **Resolved 2026-09-26 — Deep: keep.** Built as released tables (schema v23, migration `0029`): cohort of at least 5 other developers' properties from at least 3 developers in the locality, else the city, median at the 5-visitor gate. The sizes are proposals awaiting confirmation (`DECISIONS.md` 2026-09-26 "Part 4 built").
+8. **Peer benchmarks.** Keep "your property compared with similar properties" (locality → city cohorts) in Phase 4, or defer? Blocks Part 4. **Resolved 2026-09-26 — Deep: keep; owner later confirmed the limits.** Built as released tables (schema v23, migration `0029`): cohort of at least 5 other developers' properties from at least 3 developers in the locality, else the city, median at the 5-visitor gate. The owner confirmed these sizes and the cap of 5 named rivals (`DECISIONS.md` 2026-09-26 "Owner approval for Phase 4 portal completion").
 9. **Completeness definition.** Reuse the data-quality KPI definition adopted 2026-09-23 (`property_schema_fields`, `not_stated`), or define a developer-facing ruleset? Blocks Part 4. **Resolved 2026-09-26 — Deep: reuse.** Implemented as the dossier's own `dossierFactCount` ("facts stated"), read for the developer's own property.
-10. **Scheduling host** for any aggregation job, which can share the daily `analytics:purge` schedule already listed in production-readiness. Blocks Part 6 sign-off.
+10. **Scheduling host** for any aggregation job, which can share the daily `analytics:purge` schedule already listed in production-readiness. **Resolved 2026-09-26 — owner: app host scheduler, purge before release, one invocation rather than one per web replica.** Provisioning remains a production-readiness item.
 11. **Added 2026-09-26 — Deep. How developer code is kept to the release table.** Every analytics reader today runs as `propcompare_app`, which can read raw v20 events. (a) Static only: the isolation test limits developer modules to the v21 schema file. (b) A new read-only `propcompare_developer_reader` role and connection with `SELECT` on the two v21 tables only, so a slip fails in the database. (b) adds a credential, role provisioning, CI and production setup. Blocks the migration in Part 2; needs gate 2. **Resolved 2026-09-26 — Deep: (b), the reader role.** Built in migration `0025`.
 12. **Added 2026-09-26 — Deep. Market-wide figures for developers.** Deep described visitors as the main metric "for the app and also for the particular project". Should a developer see platform-wide totals (all PropCompare unique visitors, and intake demand by BHK/city/band across all buyers), or only figures about their own properties? Platform totals reveal PropCompare's own traffic to every developer. Not in `release-v1` until decided; an additive change later. **Resolved 2026-09-26 — Deep: own properties only; platform-wide figures are admin only.**
 13. **Added 2026-09-26 — Deep. "Year to date" and "quarter to date".** Calendar year (January) or Indian financial year (April)? Blocks the job's window definitions in Part 2. **Resolved 2026-09-26 — Deep: calendar year.** Building the windows also showed the longest must be trailing 12 months, not 13, to stay inside v20's raw retention (`DECISIONS.md` 2026-09-26); Confirmed by Deep 2026-09-26.
@@ -97,7 +97,7 @@ Deep requests each gate and records the outcome in the verification table.
 - [x] Migration `0025_developer_analytics_release` from `src/db/schema/developer-analytics.ts`: the run and release tables with every rule as a check constraint, explicit grants, and the `propcompare_developer_reader` role (local/CI provisioning, `.env.example`, CI env, `src/db/developer-reader.ts` with URL guards).
 - [x] Database tests (`src/db/developer-analytics.integration.test.ts`): the reader reads v21 only and is refused raw analytics, catalog, account and `private` tables and all writes; its exact grants and attributes; every check constraint; one running job.
 - [x] Fixed three integration tests on `main` that borrowed "any listed property" and failed by timing (`developer-profile`, Bhavarth's `analytics`, `enquiry-inbox`), with a shared `publishTestPortfolio` helper (`src/lib/submissions/test-support.ts`).
-- [ ] Request gate 2 (the v21 tables, grants and role as built) from Bhavarth and record the outcome.
+- [x] Gate 2 for the v21 tables, grants and role: owner approved 2026-09-26 (reviewer details were not supplied).
 - [x] Migration `0026_developer_analytics_no_enquiries`: the two enquiry metrics leave the allowed list (choice 5).
 - [x] The release job (`src/lib/analytics/release.ts`, `src/db/analytics-release.ts`, `bun run analytics:release`) computing `release-v1` from raw v20 rows for listed properties only, with run records, a `KEY SHARE` lock on the listed properties, pruning to the last 7 successful runs, and a failed run that leaves the previous one visible.
 - [x] Job tests against the database (`src/db/developer-analytics.integration.test.ts`): figures at and under the gate, the median, the second withheld split, the portfolio counted once per visitor, India-time edges to the second, no enquiry/unlisted/other-developer figure, rerun equality, failure, pruning. A planted gate of 4 makes them fail. (One visitor with many visits is covered in `release-rules.test.ts`.)
@@ -127,8 +127,8 @@ Deep requests each gate and records the outcome in the verification table.
 - [x] Tests: two-developer isolation, revoked session, malformed ids, windows, threshold, export, no price or private data.
 - [x] Update the API spec, developer flow, decisions, progress and this tasklist.
 - [x] Report Part 4 and stop.
-- [ ] Gate 4 (auth and ownership: `requireDeveloperRequest` and the three routes) and gate 2 for the two v23 tables: request from Bhavarth and record the outcome.
-- [ ] Confirm or change the benchmark cohort sizes (5 properties, 3 developers) and the cap of 5 rivals.
+- [x] Gate 4 (auth and ownership: `requireDeveloperRequest` and the three routes) and gate 2 for the two v23 tables: owner approved 2026-09-26 (reviewer details were not supplied).
+- [x] Owner confirmed the benchmark cohort of 5 other properties from 3 other developers and the cap of 5 rivals on 2026-09-26.
 
 **Acceptance:** two developers cannot see each other's properties, figures or CSV rows.
 
@@ -136,23 +136,23 @@ Deep requests each gate and records the outcome in the verification table.
 
 **Precondition:** Deep approves Part 5.
 
-- [ ] Replace the holding page at `src/app/developers/(portal)` with a developer shell (not the admin shell). Server Components call the Part 4 services directly.
-- [ ] Overview, property table and detail, comparison, demand, completeness, benchmarks, CSV actions.
-- [ ] Empty, tracking-just-started, suppressed, stale, revoked and error states.
-- [ ] Accessible SVG/CSS charts with table equivalents; no chart or tracker SDK; printed-dossier rules; Soft Gold only on verified badges; no winner or score wording.
-- [ ] Component, accessibility and responsive tests; an end-to-end run with two developers and enough visitors to cross the threshold.
-- [ ] Update design, flow, progress and this tasklist.
-- [ ] Report Part 5 and stop.
+- [x] Replace the holding page at `src/app/developers/(portal)` with a developer shell (not the admin shell). Server Components call the Part 4 services directly.
+- [x] Overview, property table and detail, comparison, demand, completeness, benchmarks, CSV actions. Owner added intake BHK/city demand in schema v24.
+- [x] Empty, tracking-just-started, suppressed, stale, revoked and error states.
+- [x] Accessible CSS bars beside a table equivalent; no chart or tracker SDK; printed-dossier rules; Soft Gold only on verified badges; no winner or score wording.
+- [x] Component and accessibility tests plus a database-backed two-developer event-to-rendered-HTML check. Responsive classes were checked in the rendered components; no browser screenshot was taken.
+- [x] Update schema, API spec, privacy inputs, flow, progress and this tasklist.
+- [x] Report Part 5 together with Part 6 as the owner requested continuous work and a PR.
 
 ### Part 6 — Verification and merge
 
 **Precondition:** Deep approves Part 6; gate 5 passes before merge.
 
-- [ ] Format, lint, typecheck, migrations on a fresh database, full test suite, production build.
-- [ ] Confirm that no price, private bucket, visitor/session id or personal detail appears in any developer response, HTML or CSV.
-- [ ] Confirm the aggregation schedule (if any) and `analytics:purge` are listed in production-readiness with their host (choice 10).
-- [ ] Reconcile every changed document; record Deep's acceptance and the gate 5 outcome.
-- [ ] Commit each part with a why-message (no AI co-author, no amend or force-push); merge to `main` only after all gates.
+- [x] Format, lint, typecheck, migrations on a fresh database and one already at `0029`, full test suite, production build (local junction root override only for the build check).
+- [x] Confirm that no price, private bucket, visitor/session id or personal detail appears in any developer response, HTML or CSV.
+- [x] Record the app host scheduler for `analytics:purge` then `analytics:release` in production-readiness; leave both off until hosted by owner direction.
+- [x] Reconcile changed documents; record the owner's Part 5/6 acceptance and gate 5 approval.
+- [ ] Commit each part with a why-message (no AI co-author, no amend or force-push); open a PR to `main` from the new branch. The owner asked for a PR, not an automatic merge.
 
 ## Verification record
 
@@ -184,6 +184,7 @@ Add a row at the end of every part; never replace earlier rows.
 | 2026-09-26 | Deep | 4 | `format:check`, `lint`, `typecheck`, full `bun run test` | Clean; 187/187 files, 2178/2178 tests (one full run) |
 | 2026-09-26 | Codex | 4/6 preparation | Fetched `origin/main` (`138295c`), merged into the Phase 4 branch; reconciled `DECISIONS.md`, `PROGRESS.md` and privacy inputs | Kept the admin drill-down, event rate limit and sequential database-test runner from `main`; no developer code or schema overlap. Format, lint and typecheck passed after reconciliation. Gates 2, 4 and 5, Part 5 approval, and choice 10 remain open. |
 | 2026-09-26 | Codex | 6 preparation | `bunx vitest run --project node --project ui`; full suite attempt; Turbopack and webpack build attempts | Unit/UI: 131 files, 1743 tests passed. The full suite could not validate integration tests: local 5432 refused connections and `DATABASE_DEVELOPER_READER_URL` was absent. Turbopack refused the `node_modules` junction outside this worktree; webpack then stopped on blocked Google Fonts requests and existing PDF ESM imports. Fresh and upgrade-path migrations remain to be rerun with a database. |
+| 2026-09-26 | Owner | 5/6 authorization | Approved Parts 5 and 6 on a new branch; gates 2, 4 and 5; limits of 5 peer properties, 3 other developers and 5 rivals; app host scheduler | Recorded in `DECISIONS.md`. These approvals supersede the pending requests above; no reviewer name beyond the owner was supplied. |
 
 ## Completion record
 

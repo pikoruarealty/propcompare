@@ -15,7 +15,7 @@ import { RELEASE_WINDOWS } from "@/db/schema/developer-analytics";
 export const MIN_VISITORS = 5;
 
 /** Bumped whenever a metric's definition or a rule here changes. */
-export const RULES_VERSION = "release-v2";
+export const RULES_VERSION = "release-v3";
 
 /** Reports are in India time; its offset has no daylight saving. */
 export const REPORTING_TIME_ZONE = "Asia/Kolkata";

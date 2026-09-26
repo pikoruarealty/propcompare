@@ -95,7 +95,7 @@ export interface SplitCell {
 
 export interface Split {
   figure: FigureKey;
-  dimension: "budget_band" | "device";
+  dimension: "budget_band" | "device" | "intake_bhk" | "intake_city";
   cells: SplitCell[];
 }
 
@@ -319,6 +319,8 @@ const portfolioFigures = (rows: ReleasedRow[]) => {
 const SPLIT_ORDER: Record<string, readonly string[]> = {
   budget_band: RELEASE_BUDGET_BANDS,
   device: RELEASE_DEVICES,
+  intake_bhk: [],
+  intake_city: [],
 };
 
 /** The counted splits of one property, in a fixed order; none are invented. */
@@ -343,7 +345,11 @@ export const propertySplits = (
           key: row.dimensionValue as string,
           figure: figureFrom(row),
         }))
-        .sort((a, b) => order.indexOf(a.key) - order.indexOf(b.key));
+        .sort((a, b) =>
+          order.length > 0
+            ? order.indexOf(a.key) - order.indexOf(b.key)
+            : a.key.localeCompare(b.key),
+        );
       if (cells.length > 0) splits.push({ figure, dimension, cells });
     }
   }

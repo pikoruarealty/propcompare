@@ -56,7 +56,13 @@ export const RELEASE_METRICS = [
 // schema v21 migration 0026): they receive forwarded enquiries, so even a
 // portfolio count could be tied to named buyers. The metric check refuses one.
 
-export const RELEASE_DIMENSIONS = ["none", "budget_band", "device"] as const;
+export const RELEASE_DIMENSIONS = [
+  "none",
+  "budget_band",
+  "device",
+  "intake_bhk",
+  "intake_city",
+] as const;
 
 export const RELEASE_DEVICES = ["mobile", "tablet", "desktop"] as const;
 
@@ -184,7 +190,10 @@ export const developerAnalyticsReleased = pgTable(
       "developer_analytics_released_dimension",
       sql`(${table.dimension} = 'none' and ${table.dimensionValue} is null)
         or (${table.dimension} = 'device' and ${table.dimensionValue} in (${listOf(RELEASE_DEVICES)}))
-        or (${table.dimension} = 'budget_band' and ${table.dimensionValue} in (${listOf(RELEASE_BUDGET_BANDS)}))`,
+        or (${table.dimension} = 'budget_band' and ${table.dimensionValue} in (${listOf(RELEASE_BUDGET_BANDS)}))
+        or (${table.dimension} = 'intake_bhk' and ${table.dimensionValue} ~ '^[a-z0-9_]{1,40}$')
+        or (${table.dimension} = 'intake_city' and length(${table.dimensionValue}) between 1 and 60
+          and ${table.dimensionValue} !~ '[[:cntrl:]]')`,
     ),
     check(
       "developer_analytics_released_value",

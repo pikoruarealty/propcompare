@@ -1,6 +1,6 @@
 # Schema v23 — named rival properties and peer benchmarks for developers
 
-**Date:** 2026-09-26 — Deep. **Migration:** `0029_developer_analytics_pairings_benchmarks`. **Builds on:** [schema v21](schema.v21.md) (released developer analytics), whose two tables, grants and role are unchanged, and [schema v22](schema.v22.md) (anonymous events), whose rules it respects. **Decisions:** `DECISIONS.md` 2026-09-26 "Named rivals and peer benchmarks". **Tasklist:** [2026-09-25 Phase 4 developer analytics](../tasklists/2026-09-25-phase-4-developer-analytics.md), Part 4. **Review:** tasklist gate 2 (schema and grants) for these two tables is still to be recorded with Bhavarth before the branch merges.
+**Date:** 2026-09-26 — Deep. **Migration:** `0029_developer_analytics_pairings_benchmarks`. **Builds on:** [schema v21](schema.v21.md) (released developer analytics), whose two tables, grants and role are unchanged, and [schema v22](schema.v22.md) (anonymous events), whose rules it respects. **Decisions:** `DECISIONS.md` 2026-09-26 "Named rivals and peer benchmarks" and "Owner approval for Phase 4 portal completion". **Tasklist:** [2026-09-25 Phase 4 developer analytics](../tasklists/2026-09-25-phase-4-developer-analytics.md), Part 4. **Review:** the owner approved tasklist gate 2 for these tables and grants on 2026-09-26.
 
 Two new tables in `public`, the same grants pattern as v21, and `rules_version` `release-v2`. No v20, v21 or catalog table changes, and no catalog table is written.
 
@@ -15,7 +15,7 @@ Two new tables in `public`, the same grants pattern as v21, and `rules_version` 
 | A pairing   | At least **5 distinct identified visitors** (`visitor_id` not null) opened a comparison (`compare_opened`) holding both properties, both listed. A browser sending a privacy signal has no id and does not count. A developer sees at most **5** pairings per property, the most compared first. |
 | A benchmark | The cohort holds at least **5** listed properties from at least **3** developers, **none of them the property's own developer**, and the **median itself is at least 5** (it is a count of visitors). The narrowest cohort that is large enough is the one used, with no fallback past it.       |
 
-The constants are `MIN_VISITORS`, `MAX_RIVALS`, `MIN_COHORT_PROPERTIES` and `MIN_COHORT_DEVELOPERS` in `src/lib/analytics/release-rules.ts`. **The cohort sizes (5 properties, 3 developers) and the cap of 5 rivals are Deep's proposals, not owner decisions;** they are cheap to change (a constant and a `rules_version` bump) and are listed in `DECISIONS.md` for confirmation. With the current catalogue (a handful of projects) no benchmark cohort is large enough, so no benchmark will appear until more properties are listed; that is the gate working, not a fault.
+The constants are `MIN_VISITORS`, `MAX_RIVALS`, `MIN_COHORT_PROPERTIES` and `MIN_COHORT_DEVELOPERS` in `src/lib/analytics/release-rules.ts`. **The owner confirmed the cohort sizes (5 other properties, 3 other developers) and the cap of 5 rivals on 2026-09-26.** With the current catalogue (a handful of projects) no benchmark cohort is large enough, so no benchmark will appear until more properties are listed; that is the gate working, not a fault.
 
 ## 1. `developer_analytics_pairings`
 

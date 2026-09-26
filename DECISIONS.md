@@ -1331,3 +1331,13 @@ Decision: `vitest.config.mts` has a third project, `integration` (`*.integration
 The 2026-09-26 entry above that called this "a separate task, not a Phase 4 blocker" is resolved by this one. Also fixed: an analytics test left two events behind on every run (18 had accumulated locally).
 
 **Phase 3 closed.** The last open item was the landing page's richer content, which the owner moved to the UI redesign. The interested-buyer opt-in, the landmark map (considered and set aside for now) and the analytics job scheduling are not Phase 3 acceptance items.
+
+---
+
+**2026-09-26 — Owner approval for Phase 4 portal completion and release review.** The owner approved Parts 5 and 6 on a new branch (`task/phase-4-portal-completion`) and approved the Phase 4 review gates 2 (schema and grants), 4 (auth and ownership) and 5 (merge review). The benchmark cohort proposed in the Part 4 decision is confirmed: at least **5 other properties from at least 3 other developers**, with a median that also passes the 5-visitor gate. The cap is **5 named rivals per property**. These are now owner decisions, not provisional limits; `release-v2` needs no rule change.
+
+The owner chose the **app host scheduler** for the daily analytics jobs. When hosted, it must run `bun run analytics:purge` before `bun run analytics:release` after the India-time day closes, with a single scheduled invocation rather than one per web replica. The owner explicitly directed that neither scheduler start before hosting. Scheduler provisioning remains deployment work in `docs/production-readiness.md`; nothing in the application starts these jobs automatically.
+
+---
+
+**2026-09-26 — Intake demand on a developer's property (owner).** The owner chose to add BHK and city demand now, using a buyer's recorded intake choices only when the same identified visitor later viewed or compared that developer's listed property. This is a property-scoped released split, not a market-wide figure. Schema v24 and migration `0030` extend the existing released table's dimension check; the release job links the latest earlier intake to the first later qualifying property interaction in the report window, then releases only grouped counts under the unchanged five-distinct-visitor and no-subtraction gates. It never releases an intake row or a visitor/visit id. This requires `rules_version` `release-v3`, because the set of figures changes. The alternative of showing the property's own BHK types and city as buyer demand was rejected: those are inventory facts, not buyer choices. No new capture event is needed.

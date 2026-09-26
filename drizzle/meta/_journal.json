@@ -211,6 +211,13 @@
       "when": 1791504000000,
       "tag": "0029_developer_analytics_pairings_benchmarks",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1791590400000,
+      "tag": "0030_developer_intake_demand",
+      "breakpoints": true
     }
   ]
 }

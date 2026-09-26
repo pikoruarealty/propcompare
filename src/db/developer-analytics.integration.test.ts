@@ -1,5 +1,7 @@
 import "dotenv/config";
 import { randomUUID } from "node:crypto";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { and, desc, eq } from "drizzle-orm";
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -9,6 +11,7 @@ import {
   developerReaderDbClient,
 } from "@/db/developer-reader";
 import { analyticsEvents } from "@/db/schema/analytics";
+import { PropertyView } from "@/components/developers/analytics-report";
 import {
   developerAnalyticsBenchmarks,
   developerAnalyticsPairings,
@@ -206,6 +209,19 @@ describe("the released table's rules", () => {
         dimension_value: "x",
       }),
     ).rejects.toMatchObject({ code: CHECK });
+    await insertFigure({
+      dimension: "intake_bhk",
+      dimension_value: "2bhk",
+      value: 6,
+    });
+    await insertFigure({
+      dimension: "intake_city",
+      dimension_value: "Ahmedabad",
+      value: 6,
+    });
+    await expect(
+      insertFigure({ dimension: "intake_city", dimension_value: "A\nB" }),
+    ).rejects.toMatchObject({ code: CHECK });
   });
 
   it("accepts only known windows and metrics", async () => {
@@ -334,6 +350,23 @@ describe("the release job", () => {
       visitorId: randomUUID(),
       sessionId: randomUUID(),
     }));
+    // A stated intake choice is attributed only to the same identified browser
+    // after it later views or compares this property. Twelve visitors make two
+    // released groups of six; the thirteenth answers after their only view.
+    viewers.slice(0, 12).forEach(({ visitorId, sessionId }, index) =>
+      event(visitorId, sessionId, "intake_completed", {
+        occurredAt: new Date("2031-06-13T06:00:00Z"),
+        detail: {
+          bhk: index < 6 ? "2bhk" : "3bhk",
+          city: index < 6 ? "Ahmedabad" : "Surat",
+          priorities: [],
+        },
+      }),
+    );
+    event(viewers[12].visitorId, viewers[12].sessionId, "intake_completed", {
+      occurredAt: new Date("2031-06-15T06:00:00Z"),
+      detail: { bhk: "2bhk", city: "Ahmedabad", priorities: [] },
+    });
     viewers.forEach(({ visitorId, sessionId }, index) =>
       event(visitorId, sessionId, "property_viewed", {
         propertyId: p1,
@@ -412,7 +445,13 @@ describe("the release job", () => {
     // p2: window edges. Four inside; one at the 7-day window's first instant;
     // one a second before it (30-day only); one just after the last day.
     for (let index = 0; index < 4; index += 1) {
-      event(randomUUID(), randomUUID(), "property_viewed", { propertyId: p2 });
+      const visitorId = randomUUID();
+      const sessionId = randomUUID();
+      event(visitorId, sessionId, "intake_completed", {
+        occurredAt: new Date("2031-06-13T06:00:00Z"),
+        detail: { bhk: "2bhk", city: "Ahmedabad", priorities: [] },
+      });
+      event(visitorId, sessionId, "property_viewed", { propertyId: p2 });
     }
     event(randomUUID(), randomUUID(), "property_viewed", {
       propertyId: p2,
@@ -465,7 +504,7 @@ describe("the release job", () => {
       status: "succeeded",
       dataThrough: "2031-06-15",
       minVisitors: 5,
-      rulesVersion: "release-v2",
+      rulesVersion: "release-v3",
       errorCode: null,
     });
     expect(run.finishedAt).not.toBeNull();
@@ -514,6 +553,98 @@ describe("the release job", () => {
         "₹1–1.5 crore",
       ),
     ).toEqual(shown(6));
+  });
+
+  it("releases BHK and city demand only for intake choices followed by property interest", async () => {
+    for (const [dimension, values] of [
+      ["intake_bhk", ["2bhk", "3bhk"]],
+      ["intake_city", ["Ahmedabad", "Surat"]],
+    ] as const) {
+      for (const value of values) {
+        expect(
+          await figure(
+            firstRun,
+            "7d",
+            ours.developerId,
+            p1,
+            "visitors",
+            dimension,
+            value,
+          ),
+        ).toEqual(shown(6));
+      }
+    }
+    expect(
+      await figure(
+        firstRun,
+        "7d",
+        theirs.developerId,
+        rival,
+        "visitors",
+        "intake_bhk",
+        "2bhk",
+      ),
+    ).toBeUndefined();
+    expect(
+      await figure(
+        firstRun,
+        "7d",
+        ours.developerId,
+        p2,
+        "visitors",
+        "intake_bhk",
+        "2bhk",
+      ),
+    ).toEqual(withheld);
+    const report = await getPropertyReport(
+      { reader: developerReaderDb, catalog: db },
+      ours.developerId,
+      p1,
+      "7d",
+    );
+    expect(report?.splits).toContainEqual({
+      figure: "visitors",
+      dimension: "intake_bhk",
+      cells: [
+        { key: "2bhk", figure: shown(6) },
+        { key: "3bhk", figure: shown(6) },
+      ],
+    });
+    const csv = await getExportRows(
+      { reader: developerReaderDb, catalog: db },
+      ours.developerId,
+      "7d",
+      p1,
+    );
+    expect(csv.ok).toBe(true);
+    if (csv.ok) {
+      expect(csv.rows).toContainEqual(
+        expect.objectContaining({
+          split: "BHK wanted",
+          splitValue: "2bhk",
+          value: 6,
+        }),
+      );
+    }
+    expect(
+      await getPropertyReport(
+        { reader: developerReaderDb, catalog: db },
+        theirs.developerId,
+        p1,
+        "7d",
+      ),
+    ).toBeNull();
+    expect(report).not.toBeNull();
+    if (report) {
+      const html = renderToStaticMarkup(
+        createElement(PropertyView, { report, window: "7d" }),
+      );
+      expect(html).toContain("2 BHK");
+      expect(html).toContain("Ahmedabad");
+      expect(html).not.toMatch(
+        /visitor_id|session_id|private\.budget|buyer phone/i,
+      );
+    }
   });
 
   it("counts the portfolio once per visitor", async () => {
