@@ -1,6 +1,6 @@
 {
-  "id": "68651d57-fd85-4614-ae57-bc814c3620a0",
-  "prevId": "95cb3bdf-f6f8-4b41-b3fe-dac8fc7d962c",
+  "id": "756a6276-e247-47e7-883e-8fc307552421",
+  "prevId": "47291176-0d7c-47bc-84aa-c64b13117e67",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -106,13 +106,19 @@
           "name": "visitor_id",
           "type": "uuid",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "session_id": {
           "name": "session_id",
           "type": "uuid",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
+        },
+        "anonymised_at": {
+          "name": "anonymised_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
         },
         "event": {
           "name": "event",
@@ -5085,11 +5091,7 @@
         },
         "developer_analytics_released_metric": {
           "name": "developer_analytics_released_metric",
-          "value": "\"developer_analytics_released\".\"metric\" in ('visitors', 'viewers', 'comparers', 'savers', 'unlockers', 'visits', 'returning_visitors', 'median_dossier_seconds', 'median_compare_seconds', 'enquirers', 'enquirers_comparing')"
-        },
-        "developer_analytics_released_portfolio_only": {
-          "name": "developer_analytics_released_portfolio_only",
-          "value": "\"developer_analytics_released\".\"metric\" not in ('enquirers', 'enquirers_comparing')\n        or (\"developer_analytics_released\".\"property_id\" is null and \"developer_analytics_released\".\"dimension\" = 'none')"
+          "value": "\"developer_analytics_released\".\"metric\" in ('visitors', 'viewers', 'comparers', 'savers', 'unlockers', 'visits', 'returning_visitors', 'median_dossier_seconds', 'median_compare_seconds')"
         },
         "developer_analytics_released_dimension": {
           "name": "developer_analytics_released_dimension",

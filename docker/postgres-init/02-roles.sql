@@ -5,6 +5,10 @@
 -- - propcompare_service: the future matching-service connection; BYPASSRLS is
 --   required because private tables deliberately have RLS enabled with zero
 --   policies.
+-- - propcompare_developer_reader: developer analytics code's connection; migration
+--   0025 grants it SELECT on the two released-analytics tables and nothing else
+--   (schema v21, DECISIONS.md 2026-09-26). No default privileges, so no future
+--   table reaches it by accident.
 
 DO $$
 BEGIN
@@ -17,6 +21,11 @@ BEGIN
     CREATE ROLE propcompare_service LOGIN PASSWORD 'propcompare_service_dev_only'
       NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT BYPASSRLS;
   END IF;
+
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'propcompare_developer_reader') THEN
+    CREATE ROLE propcompare_developer_reader LOGIN PASSWORD 'propcompare_developer_reader_dev_only'
+      NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT;
+  END IF;
 END
 $$;
 
@@ -24,8 +33,10 @@ REVOKE CREATE ON SCHEMA public FROM PUBLIC;
 REVOKE ALL ON SCHEMA private FROM PUBLIC;
 REVOKE ALL ON SCHEMA private FROM propcompare_app;
 
-GRANT CONNECT ON DATABASE propcompare TO propcompare_app, propcompare_service;
-GRANT USAGE ON SCHEMA public TO propcompare_app, propcompare_service;
+REVOKE ALL ON SCHEMA private FROM propcompare_developer_reader;
+
+GRANT CONNECT ON DATABASE propcompare TO propcompare_app, propcompare_service, propcompare_developer_reader;
+GRANT USAGE ON SCHEMA public TO propcompare_app, propcompare_service, propcompare_developer_reader;
 GRANT USAGE ON SCHEMA private TO propcompare_service;
 
 -- `propcompare` is the Docker bootstrap/admin role and runs Drizzle migrations.

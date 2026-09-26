@@ -6,8 +6,10 @@ import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { db } from "@/db";
 import { analyticsEvents } from "@/db/schema/analytics";
-import { properties } from "@/db/schema/catalog";
-import { isListed } from "@/lib/properties/visibility";
+import {
+  publishTestPortfolio,
+  type TestPortfolio,
+} from "@/lib/submissions/test-support";
 import { POST } from "@/app/api/v1/events/route";
 import { VISITOR_COOKIE } from "./cookies";
 import { loadAnalyticsDashboard } from "./dashboard";
@@ -31,15 +33,14 @@ let b = { id: "", slug: "", name: "" };
 const visitorIds: string[] = [];
 const ANON_SOURCE = "test-anonymous-" + randomUUID().slice(0, 8);
 
+// Two listed properties of this file's own, so the test does not depend on
+// other files' fixtures existing at the same moment (2026-09-26 — Deep: it
+// failed whenever it ran alone).
+let portfolio: TestPortfolio | undefined;
+
 beforeAll(async () => {
-  const listed = await db
-    .select({ id: properties.id, slug: properties.slug, name: properties.name })
-    .from(properties)
-    .where(isListed)
-    .orderBy(properties.id)
-    .limit(2);
-  if (listed.length < 2) throw new Error("Needs two listed properties.");
-  [a, b] = listed;
+  portfolio = await publishTestPortfolio("Analytics", 2);
+  [a, b] = portfolio.properties;
 });
 
 afterAll(async () => {
@@ -52,6 +53,7 @@ afterAll(async () => {
   await owner`delete from analytics_event_monthly where month < '2002-01-01'`;
   await owner`delete from analytics_pair_monthly where month < '2002-01-01'`;
   await owner.end();
+  await portfolio?.remove();
 });
 
 const post = (body: unknown, headers: Record<string, string> = {}) =>

@@ -15,6 +15,10 @@ const ALLOWED = [
   "lib/analytics/",
   "db/schema/analytics.ts",
   "db/analytics-purge.ts",
+  // The release job reads raw events and writes only thresholded aggregates to
+  // the v21 released tables, which is the one path developer code may read
+  // (`DECISIONS.md` 2026-09-26). It runs from the command line, not a surface.
+  "db/analytics-release.ts",
   "app/admin/",
   "components/admin/",
   "app/api/v1/events/",

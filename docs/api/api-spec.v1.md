@@ -382,11 +382,11 @@ This is enforced in running code, not by convention: every successful buyer resp
 
 ## Developer API
 
-| Method and route                           | Status            | Access                 | Contract                                                    |
-| ------------------------------------------ | ----------------- | ---------------------- | ----------------------------------------------------------- |
-| `GET /api/v1/developer/portfolio`          | Planned (Phase 4) | Developer staff        | Returns only linked developer portfolio/analytics.          |
-| `POST /api/v1/developer/submissions`       | Planned (Phase 4) | Developer staff        | Creates a draft/submission; it cannot publish.              |
-| `PATCH /api/v1/developer/submissions/{id}` | Planned (Phase 4) | Owning developer staff | Updates an eligible draft or responds to requested changes. |
+| Method and route                           | Status            | Access                 | Contract                                                                                                                                                                                                                                                                                                                    |
+| ------------------------------------------ | ----------------- | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/v1/developer/portfolio`          | Planned (Phase 4) | Developer staff        | Returns only linked developer portfolio/analytics: thresholded aggregates over schema v20 plus listing completeness; no visitor/session id, price or buyer detail. Per-property, comparison, demand and CSV routes are defined in Part 4 of `docs/tasklists/2026-09-25-phase-4-developer-analytics.md` (2026-09-25 — Deep). |
+| `POST /api/v1/developer/submissions`       | Planned (Phase 4) | Developer staff        | Creates a draft/submission; it cannot publish.                                                                                                                                                                                                                                                                              |
+| `PATCH /api/v1/developer/submissions/{id}` | Planned (Phase 4) | Owning developer staff | Updates an eligible draft or responds to requested changes.                                                                                                                                                                                                                                                                 |
 
 ## Contract-change process
 

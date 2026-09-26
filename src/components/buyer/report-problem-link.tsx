@@ -20,14 +20,16 @@ import {
  */
 export function ReportProblemLink({ propertyName }: { propertyName?: string }) {
   const [open, setOpen] = React.useState(false);
-  // The page address is read after the dialog opens, never while rendering: a
-  // client component is still rendered on the server for the HTML, where
-  // `window` does not exist, and reading it there failed the dossier's server
-  // render and dropped the whole page to client rendering.
-  const [pageUrl, setPageUrl] = React.useState<string>();
-  React.useEffect(() => {
-    if (open) setPageUrl(window.location.href);
-  }, [open]);
+  // The page address is read from the browser, never while rendering on the
+  // server: a client component is still rendered there to produce the HTML, and
+  // reading `window` failed the dossier's server render, dropping the whole page
+  // to client rendering. The server's snapshot is `undefined`, so the mail is
+  // simply offered without the page address until the browser takes over.
+  const pageUrl = React.useSyncExternalStore(
+    () => () => {},
+    () => window.location.href,
+    () => undefined,
+  );
 
   return (
     <Dialog.Root open={open} onOpenChange={setOpen}>

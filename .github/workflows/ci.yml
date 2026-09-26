@@ -8,11 +8,12 @@ on:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    # Same three-role split as docs/local-database-setup.md, with CI-only credentials.
+    # Same four-role split as docs/local-database-setup.md, with CI-only credentials.
     env:
       DATABASE_URL: postgres://propcompare_app:propcompare_app_dev_only@localhost:5432/propcompare
       DATABASE_ADMIN_URL: postgres://propcompare:propcompare_dev_only@localhost:5432/propcompare
       DATABASE_SERVICE_URL: postgres://propcompare_service:propcompare_service_dev_only@localhost:5432/propcompare
+      DATABASE_DEVELOPER_READER_URL: postgres://propcompare_developer_reader:propcompare_developer_reader_dev_only@localhost:5432/propcompare
       BETTER_AUTH_SECRET: ci-only-secret-not-used-outside-tests-000000
       BETTER_AUTH_URL: http://localhost:3000
     steps:

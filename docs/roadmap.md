@@ -86,11 +86,17 @@ Phases 2A and 2B run in parallel once Phase 1 lands, so both developers are work
 
 ---
 
-## Phase 4 — Developer portfolio/analytics (narrowed 2026-09-18)
+## Phase 4 — Developer analytics over schema v20
 
-> The developer-facing submission screens pulled forward on 2026-09-18 are **on hold** (owner decision 2026-09-20): maintainers upload everything until developers join. Revisit only if the project is ahead of schedule.
+> **Scope set 2026-09-25 — Deep:** Phase 4 is the developer-facing, aggregates-only view of the first-party analytics Bhavarth built in Phase 3 completion (schema v20, `DECISIONS.md` 2026-09-25 "First-party analytics built", item 7). It builds on v20 and does not rebuild capture: no second event table, cookie or events route. A developer sees thresholded aggregates for their own properties only, plus deterministic listing completeness; nothing reaches a buyer or becomes a score. **Execution tasklist:** [2026-09-25 Phase 4 developer analytics](tasklists/2026-09-25-phase-4-developer-analytics.md), in six parts, each approved by Deep before it starts. Ten choices are open there and are not to be guessed.
+>
+> **Area of focus:** Deep builds the vertical slice. Bhavarth reviews analytics read access, any schema/grant change, the event vocabulary, developer auth/ownership, and the merge.
+>
+> The paragraphs below are the earlier record, kept as history.
 
-**Area of focus: Deep** for the portal build; **Bhavarth** defines the auth/permission boundaries and reviews.
+> The developer-facing submission screens pulled forward on 2026-09-18 are **on hold** (owner decision 2026-09-20): maintainers upload everything until developers join. Revisit only if the project is ahead of schedule. _(Still true 2026-09-25 — Deep: Phase 4 does not include them.)_
+
+**Area of focus (2026-09-18, superseded 2026-09-25 above): Deep** for the portal build; **Bhavarth** defines the auth/permission boundaries and reviews.
 
 The submission-creating half of the developer portal (upload, page routing, OCR-draft review, submit) moved to finishing Phase 2A — see the 2026-09-18 `DECISIONS.md` entry. What's left here, once a developer account can already sign in and submit:
 
