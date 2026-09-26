@@ -69,11 +69,15 @@ export interface PropertyRow {
 
 export interface CountRow {
   label: string;
+  /** The raw value behind the label, for a link to the visitors behind the row. */
+  key?: string;
   count: number;
 }
 
 export interface BreakdownRow {
   label: string;
+  /** The raw value behind the label (the same as the label for these tables). */
+  key: string;
   visitors: number;
   comparers: number;
   enquirers: number;
@@ -140,6 +144,31 @@ export const FOCUS_LABEL: Record<string, string> = {
   amenities: "Amenities",
   build: "Build",
   trust: "Trust",
+};
+
+/**
+ * The source of the visit an event belongs to: the session's first event's
+ * campaign tags, else the site that linked to it, else "Direct". Shared with the
+ * visitors list, so a table row and the list it opens cannot define it apart.
+ * `alias` names the analytics events row in the caller's query.
+ */
+export const sourceOfEvent = (alias: string): SQL => {
+  const e = sql.raw(alias);
+  return sql`coalesce(
+    (select coalesce(s.source || coalesce(' / ' || s.medium, ''), s.referrer_domain)
+       from analytics_events s where s.session_id = ${e}.session_id
+       order by s.occurred_at limit 1),
+    'Direct')`;
+};
+
+/** The budget band a visitor last stated, whatever event it rode on. */
+export const bandOfEvent = (alias: string): SQL => {
+  const e = sql.raw(alias);
+  return sql`coalesce(
+    (select s.budget_band from analytics_events s
+       where s.visitor_id = ${e}.visitor_id and s.budget_band is not null
+       order by s.occurred_at desc limit 1),
+    'Not stated')`;
 };
 
 export const loadAnalyticsDashboard = async (
@@ -354,6 +383,7 @@ export const loadAnalyticsDashboard = async (
       group by 1 order by 2 desc`)
   ).map((row) => ({
     label: GROUP_LABEL[String(row.k)] ?? String(row.k),
+    key: String(row.k),
     count: num(row.n),
   }));
 
@@ -390,23 +420,16 @@ export const loadAnalyticsDashboard = async (
         from e group by k order by visitors desc limit 20`)
     ).map((row) => ({
       label: String(row.k),
+      key: String(row.k),
       visitors: num(row.visitors),
       comparers: num(row.comparers),
       enquirers: num(row.enquirers),
     }));
 
   // A visitor keeps the first source of their visit: the session's earliest event.
-  const sources = await breakdown(sql`coalesce(
-    (select coalesce(s.source || coalesce(' / ' || s.medium, ''), s.referrer_domain)
-       from analytics_events s where s.session_id = e.session_id
-       order by s.occurred_at limit 1),
-    'Direct')`);
+  const sources = await breakdown(sourceOfEvent("e"));
   // A visitor belongs to the band they last stated, whatever event it rode on.
-  const budgetBands = await breakdown(sql`coalesce(
-    (select s.budget_band from analytics_events s
-       where s.visitor_id = e.visitor_id and s.budget_band is not null
-       order by s.occurred_at desc limit 1),
-    'Not stated')`);
+  const budgetBands = await breakdown(bandOfEvent("e"));
   const devices = await breakdown(sql`e.device`);
 
   const intakeBedrooms = (

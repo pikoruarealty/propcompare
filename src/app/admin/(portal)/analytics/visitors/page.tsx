@@ -12,6 +12,7 @@ import {
 import { requirePortalRole } from "@/lib/accounts/session";
 import {
   DASHBOARD_PERIODS,
+  GROUP_LABEL,
   periodRange,
   type DashboardPeriod,
 } from "@/lib/analytics/dashboard";
@@ -43,6 +44,10 @@ type Query = {
   stopped?: string | string[];
   property?: string | string[];
   pair?: string | string[];
+  source?: string | string[];
+  band?: string | string[];
+  device?: string | string[];
+  group?: string | string[];
 };
 
 const first = (value: string | string[] | undefined): string | null =>
@@ -70,6 +75,22 @@ const describe = (
   if (filter.pair) {
     parts.push(
       `compared ${named.get(filter.pair[0]) ?? "a property"} with ${named.get(filter.pair[1]) ?? "a property"}`,
+    );
+  }
+  if (filter.source !== undefined) {
+    parts.push(`came from "${filter.source}"`);
+  }
+  if (filter.band !== undefined) {
+    parts.push(
+      filter.band === "Not stated"
+        ? "stated no budget band"
+        : `stated the budget band "${filter.band}"`,
+    );
+  }
+  if (filter.device !== undefined) parts.push(`used a ${filter.device} device`);
+  if (filter.group !== undefined) {
+    parts.push(
+      `opened "${GROUP_LABEL[filter.group] ?? filter.group}" in a comparison`,
     );
   }
   return parts.length === 0
@@ -100,6 +121,10 @@ export default async function VisitorsPage({
     stopped: first(query.stopped),
     property: first(query.property),
     pair: first(query.pair),
+    source: first(query.source),
+    band: first(query.band),
+    device: first(query.device),
+    group: first(query.group),
   });
   const { rows, total } = await listVisitors(db, periodRange(days), filter);
   const named = await propertyNames(db, [

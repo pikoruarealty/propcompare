@@ -1322,3 +1322,12 @@ Deep approved Part 4 and answered the two choices that blocked it. Recorded here
 7. **The migration stamp again.** `drizzle-kit generate` stamped `0029` with the real clock, earlier than `0028`'s, which would have made every existing database skip it. Its journal `when` was set by hand to `1791504000000` (one day after `0028`) and verified on a database already at `0028`. The same hazard as the `0025`–`0027` restamp above, so it is now a test (`src/db/migration-journal.test.ts`): every migration after `0015` must be stamped later than the one before it. `0015` itself was stamped earlier than `0014` before this check existed.
 
 Schema: `docs/schema/schema.v23.md`. Tasklist: `docs/tasklists/2026-09-25-phase-4-developer-analytics.md`, Part 4.
+**2026-09-26 — Database-backed tests run one file at a time; Phase 3 is closed. Owner direction for the closure, in chat.**
+
+Context: the full suite failed one integration test in about half of runs, a different one each time (RERA refresh, RERA carpet area, the usage ledger). Cause, confirmed rather than assumed: 56 integration files shared one database and ran in parallel, and several assert on whole-table totals or on rows another file may be adding at that moment (the usage ledger compares global totals before and after).
+
+Decision: `vitest.config.mts` has a third project, `integration` (`*.integration.test.ts`), with `fileParallelism: false`; the `node` project keeps the unit tests and runs them in parallel. The only unit test that imports database code (`release-rules.test.ts`) imports a schema file and never connects, so unit and UI tests do not touch the database. Result: four full runs in a row green (2104 tests, about two minutes each), where about half failed before. Costs: the database tests no longer overlap. Rejected: rewriting 56 files' assertions to be row-scoped (large, and every new test would have to remember the rule) and a separate database per file (heavier setup). A test that must still be safe under any order should scope its assertions to its own rows.
+
+The 2026-09-26 entry above that called this "a separate task, not a Phase 4 blocker" is resolved by this one. Also fixed: an analytics test left two events behind on every run (18 had accumulated locally).
+
+**Phase 3 closed.** The last open item was the landing page's richer content, which the owner moved to the UI redesign. The interested-buyer opt-in, the landmark map (considered and set aside for now) and the analytics job scheduling are not Phase 3 acceptance items.

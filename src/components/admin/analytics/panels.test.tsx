@@ -150,7 +150,13 @@ describe("the analytics panels", () => {
     render(
       <BreakdownTable
         rows={[
-          { label: "google / cpc", visitors: 10, comparers: 4, enquirers: 1 },
+          {
+            label: "google / cpc",
+            key: "google / cpc",
+            visitors: 10,
+            comparers: 4,
+            enquirers: 1,
+          },
         ]}
         what="Source"
         empty=""
@@ -159,6 +165,37 @@ describe("the analytics panels", () => {
     const row = screen.getByRole("row", { name: /google/ });
     expect(within(row).getByText(/40%/)).toBeInTheDocument();
     expect(within(row).getByText(/10%/)).toBeInTheDocument();
+  });
+
+  it("links a row to the visitors behind it only when it is given a link", () => {
+    render(
+      <BreakdownTable
+        rows={[
+          {
+            label: "google / cpc",
+            key: "google / cpc",
+            visitors: 10,
+            comparers: 4,
+            enquirers: 1,
+          },
+        ]}
+        what="Source"
+        empty=""
+        href={(row) => `/x?source=${encodeURIComponent(row.key)}`}
+      />,
+    );
+    expect(screen.getByRole("link", { name: "google / cpc" })).toHaveAttribute(
+      "href",
+      "/x?source=google%20%2F%20cpc",
+    );
+    render(
+      <CountTable
+        rows={[{ label: "Amenities", count: 1 }]}
+        what="Section"
+        empty=""
+      />,
+    );
+    expect(screen.queryByRole("link", { name: "Amenities" })).toBeNull();
   });
 
   it("formats durations and shares", () => {

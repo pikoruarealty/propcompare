@@ -182,6 +182,7 @@ Add a row at the end of every part; never replace earlier rows.
 | 2026-09-26 | Deep | 4 | Throwaway PG17 cluster (port 55432, four roles from `docker/postgres-init`); `db:migrate` from a database already at `0028`; both seeds | `0029` applied (its journal `when` set by hand after `0028`'s); shared 5432 database untouched |
 | 2026-09-26 | Deep | 4 | `developer-analytics.integration.test.ts` (3 runs), `release-rules.test.ts`, `src/lib/developers/analytics/*`, the route tests, `developer-request.integration.test.ts`, the isolation and journal tests | All green; lowering the gate to 4 made 6 tests fail, as it should |
 | 2026-09-26 | Deep | 4 | `format:check`, `lint`, `typecheck`, full `bun run test` | Clean; 187/187 files, 2178/2178 tests (one full run) |
+| 2026-09-26 | Codex | 4/6 preparation | Fetched `origin/main` (`138295c`), merged into the Phase 4 branch; reconciled `DECISIONS.md`, `PROGRESS.md` and privacy inputs | Kept the admin drill-down, event rate limit and sequential database-test runner from `main`; no developer code or schema overlap. Format, lint and typecheck passed after reconciliation. Gates 2, 4 and 5, Part 5 approval, and choice 10 remain open. |
 
 ## Completion record
 

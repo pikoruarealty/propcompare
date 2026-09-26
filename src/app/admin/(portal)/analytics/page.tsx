@@ -369,6 +369,11 @@ export default async function AnalyticsPage({
             rows={data.groupsOpened}
             what="Section"
             empty="No section opened yet."
+            href={(row) =>
+              row.key
+                ? visitorsHref(days, `group=${encodeURIComponent(row.key)}`)
+                : null
+            }
           />
         </Panel>
         <Panel title="Focus chosen">
@@ -395,6 +400,9 @@ export default async function AnalyticsPage({
           rows={data.sources}
           what="Source"
           empty="No visits yet."
+          href={(row) =>
+            visitorsHref(days, `source=${encodeURIComponent(row.key)}`)
+          }
         />
       </Panel>
 
@@ -407,6 +415,9 @@ export default async function AnalyticsPage({
             rows={data.budgetBands}
             what="Budget band"
             empty="No visits yet."
+            href={(row) =>
+              visitorsHref(days, `band=${encodeURIComponent(row.key)}`)
+            }
           />
         </Panel>
         <Panel title="By device">
@@ -414,6 +425,9 @@ export default async function AnalyticsPage({
             rows={data.devices}
             what="Device"
             empty="No visits yet."
+            href={(row) =>
+              visitorsHref(days, `device=${encodeURIComponent(row.key)}`)
+            }
           />
         </Panel>
         <Panel title="Bedrooms asked for in intake">

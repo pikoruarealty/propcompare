@@ -1,12 +1,36 @@
 # Progress
 
+## 2026-09-26 — Codex — Phase 4 branch reconciled with the new main baseline
+
+**Done:** fetched `origin/main` at `138295c` and integrated its admin analytics drill-down, event rate limit and sequential integration-test runner into the Phase 4 branch. The overlapping decision and progress entries were kept in full; the privacy inputs now describe the built developer API, named rivals, peer benchmarks and forwarded enquiry contact alongside `main`'s Google Maps and rate-limit corrections. No developer code or schema conflicted.
+
+**Verified so far:** format, lint and typecheck passed on the reconciled tree. The full Part 6 verification and merge to `main` remain pending Part 5, the external gates and the scheduling-host choice in the Phase 4 tasklist.
+
 ## 2026-09-26 (5) — Deep — Phase 4 Part 4 built: developer queries, routes, CSV, named rivals, peer benchmarks; handed to Codex for the bookkeeping and Part 5
 
 **Done:** the developer analytics services and three routes (`/api/v1/developer/portfolio`, `/properties/{id}`, `/export`) over the released tables through the read-only reader connection, with a developer id taken only from an active link; schema v23 (`docs/schema/schema.v23.md`, migration `0029`) so the job also releases named rival pairings (5 visitors, at most 5 per property) and peer benchmarks (cohort of 5 properties from 3 other developers, median at the gate); completeness reuses the dossier's "facts stated"; a journal-order test so a mis-stamped migration can no longer be skipped silently. Decisions: `DECISIONS.md` 2026-09-26 "Part 4 built".
 
 **Verified:** throwaway PG17 on 55432; `0029` applied to a database already at `0028`; format, lint, typecheck; full suite 187 files, 2178 tests green in one run; lowering the gate to 4 fails 6 tests.
 
-**Not done:** Part 5 (portal UI) and Part 6; gates 2 (v23) and 4 (auth) from Bhavarth; owner confirmation of the cohort sizes and rival cap; the privacy-policy inputs for the developer layer; choice 7 (no new events needed). Handoff: the end of `docs/tasklists/2026-09-25-phase-4-developer-analytics.md`.
+**Not done:** Part 5 (portal UI) and Part 6; gates 2 (v23) and 4 (auth) from Bhavarth; owner confirmation of the cohort sizes and rival cap; choice 7 (no new events needed). Handoff: the end of `docs/tasklists/2026-09-25-phase-4-developer-analytics.md`.
+
+## 2026-09-26 (5) - Two stale readiness lines and one wrong privacy statement corrected; pending items checked against the database
+
+**Done:** (1) `docs/production-readiness.md` said the saved properties and comparisons page and the pre-login intake claim were unbuilt; both are built (`/saved`, `POST /api/v1/buyer/intake-handoff/claim`), lines corrected. (2) `docs/product/privacy-policy-inputs.md` said Google received nothing today; the dossier's embedded map already loads from google.com on page load, corrected. (3) The landmark map was scoped and then set aside by the owner for now; nothing was built and the map is as before.
+
+**Checked against the database, not the docs:** no draft submission exists (all 12 are published), so the Godrej Altus draft and the Maruti 360 edit are done; no unit-type price has been typed (0 staged, 0 history); a RERA snapshot is held for 2 of 5 properties (Anamika, Godrej Altus); nothing schedules `analytics:purge` or `analytics:release`; `POST /api/v1/events` has no rate limit.
+
+## 2026-09-26 (7) - The full suite is reliable; source, budget, device and section rows open their visitors; Phase 3 closed
+
+**Done:** (1) **The flaky suite fixed at its cause** (`DECISIONS.md` 2026-09-26 "Database-backed tests run one file at a time"): the 56 integration files shared one database while running in parallel; they now run one at a time in their own vitest project. Four consecutive full runs were green (2104 tests, about two minutes), against about half failing before. (2) **Drill-down** (`docs/tasklists/2026-09-26-analytics-table-drill-down.md`): each row of "Where visitors come from", "By budget", "By device" and "Sections opened" opens the visitors it counted, through the same filter and the same source and band definitions as the tables (proved row by row against the database). (3) `docs/roadmap.md` and `DECISIONS.md` record Phase 3 as closed; the landing page's richer content went to the UI redesign.
+
+**Verified:** typecheck, lint, format; the full suite four times; the analytics and admin suites for the drill-down. Local database holds only its real rows (6 properties, 10 developers, 9 events). Not looked at in a browser.
+
+## 2026-09-26 (6) - The events route has a rate limit; a test that left events behind on every run is fixed
+
+**Done (`docs/tasklists/2026-09-26-events-rate-limit.md`):** `POST /api/v1/events` now drops a caller's events after 120 in a minute (still `204`, nothing recorded). The caller's address is a key in memory for at most that minute and is never stored (`privacy-policy-inputs.md` updated). It is a floor per server instance; the host's proxy must still set the forwarding header and limit the route (`production-readiness.md`). **Found and fixed:** the analytics integration test recorded two events per run that its cleanup never removed (18 accumulated in the local database); it now registers them, and the 18 were deleted, leaving the 9 real events.
+
+**Verified:** `bun run typecheck`, lint, format; `rate-limit.test.ts`, the analytics integration file and the isolation test. The full suite was not run.
 
 ## 2026-09-26 (4) - Developers see forwarded enquiries; the Phase 4 review items finished; ready to hand Parts 4 to 6 to Deep
 

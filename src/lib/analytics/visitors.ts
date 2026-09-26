@@ -1,6 +1,12 @@
 import { sql, type SQL } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
-import { FOCUS_LABEL, GROUP_LABEL, type DashboardRange } from "./dashboard";
+import {
+  FOCUS_LABEL,
+  GROUP_LABEL,
+  bandOfEvent,
+  sourceOfEvent,
+  type DashboardRange,
+} from "./dashboard";
 import { duration } from "./format";
 
 /**
@@ -47,7 +53,17 @@ export interface VisitorFilter {
   propertyId?: string;
   /** Visitors who opened a comparison holding both. */
   pair?: [string, string];
+  /** Visitors with an event in a visit that came from this source (as the table names it). */
+  source?: string;
+  /** Visitors whose stated budget band is this ("Not stated" for none). */
+  band?: string;
+  /** Visitors with an event from this kind of device. */
+  device?: string;
+  /** Visitors who opened this section of a comparison. */
+  group?: string;
 }
+
+const MAX_TEXT = 200;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -76,6 +92,10 @@ export const readVisitorFilter = (query: {
   stopped?: string | null;
   property?: string | null;
   pair?: string | null;
+  source?: string | null;
+  band?: string | null;
+  device?: string | null;
+  group?: string | null;
 }): VisitorFilter => {
   const filter: VisitorFilter = {};
   const funnel = FUNNEL_KEYS as readonly string[];
@@ -92,6 +112,17 @@ export const readVisitorFilter = (query: {
     if (isUuid(a) && isUuid(b) && a !== b) {
       filter.pair = [a.toLowerCase(), b.toLowerCase()];
     }
+  }
+  const text = (value: string | null | undefined): string | undefined =>
+    value && value.length <= MAX_TEXT ? value : undefined;
+  filter.source = text(query.source);
+  filter.band = text(query.band);
+  filter.device = text(query.device);
+  if (query.group && /^[a-z_]{1,40}$/.test(query.group)) {
+    filter.group = query.group;
+  }
+  for (const key of ["source", "band", "device", "group"] as const) {
+    if (filter[key] === undefined) delete filter[key];
   }
   return filter;
 };
@@ -176,6 +207,28 @@ export const listVisitors = async (
         and x.event = 'compare_opened'
         and ${filter.pair[0]}::uuid = any(x.compared_ids)
         and ${filter.pair[1]}::uuid = any(x.compared_ids))`);
+  }
+
+  if (filter.source !== undefined) {
+    where.push(sql`exists (
+      select 1 from e x where x.visitor_id = per.visitor_id
+        and ${sourceOfEvent("x")} = ${filter.source})`);
+  }
+  if (filter.band !== undefined) {
+    where.push(sql`exists (
+      select 1 from e x where x.visitor_id = per.visitor_id
+        and ${bandOfEvent("x")} = ${filter.band})`);
+  }
+  if (filter.device !== undefined) {
+    where.push(sql`exists (
+      select 1 from e x where x.visitor_id = per.visitor_id
+        and x.device = ${filter.device})`);
+  }
+  if (filter.group !== undefined) {
+    where.push(sql`exists (
+      select 1 from e x where x.visitor_id = per.visitor_id
+        and x.event = 'compare_group_opened'
+        and x.detail->>'group' = ${filter.group})`);
   }
 
   const result = Array.from(
