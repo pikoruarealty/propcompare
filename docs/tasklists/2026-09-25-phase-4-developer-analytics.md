@@ -2,7 +2,7 @@
 
 - **Created:** 2026-09-25 — Deep
 - **Owner:** Deep. This tasklist lists Deep's work only. Bhavarth's reviews are external gates, not checklist items.
-- **Status:** Part 1 complete 2026-09-25; stopped for Deep's approval before Part 2
+- **Status:** Part 2 approved 2026-09-26 and in progress; the table approach is chosen; blocked on the threshold decision (choice 2) and Bhavarth's gates 1 and 2
 - **Branch:** `task/phase-4-developer-analytics`, reset onto `origin/main` at `461060d` in Part 1
 - **Base:** `origin/main` `461060d` (merge of `task/phase-3-completion`)
 - **Working agreement:** Deep approves every numbered part before it begins. Finishing one part never authorises the next. Every documentation change carries `2026-09-25 — Deep` (or its actual date plus Deep), and this tasklist and `PROGRESS.md` are updated in the same part.
@@ -47,7 +47,7 @@ A developer signs in and sees aggregated, privacy-thresholded analytics for thei
 
 1. **Developer read access (gate 1, Bhavarth).** How the isolation rule changes: which new modules may read analytics, and that they return only thresholded aggregates. Blocks Part 2.
 2. **Privacy threshold.** Minimum distinct **visitors** (v20's `visitor_id`) or distinct **visits** (`session_id`) per released cell, and the number (the earlier plan said 5). Suppressed cells show as "not enough data", never as zero. Blocks Part 2.
-3. **Where suppression happens.** Choose one: (a) a developer query service reads v20 raw rows and applies the threshold in code; or (b) a scheduled job writes a release-safe aggregate table (schema v21, migration `0025`) that is the only thing developer code may read. (b) enforces the rule in the database and needs gate 2. Blocks Part 2.
+3. **Where suppression happens.** Choose one: (a) a developer query service reads v20 raw rows and applies the threshold in code; or (b) a scheduled job writes a release-safe aggregate table (schema v21, migration `0025`) that is the only thing developer code may read. (b) enforces the rule in the database and needs gate 2. **Resolved 2026-09-26 — Deep: (b), the release-safe table.** Gate 2 now applies to Part 2.
 4. **Competitor pairings.** May developer A see that their property is often compared with a named property from developer B? Options: named, anonymised ("a 3 BHK in the same locality"), or counts only. This is the most commercially sensitive figure; owner decision. Blocks the comparison view in Parts 4–5.
 5. **Enquiry metric.** Should a developer's "enquiries" count every `enquiry_submitted` event, or only enquiries the admin forwarded (schema v19)? Blocks Part 4.
 6. **Property eligibility.** Include only listed properties, or listed plus unlisted with soft-deleted excluded? The recorder already keeps only listed properties at capture time. Blocks Part 4.
@@ -86,7 +86,9 @@ Deep requests each gate and records the outcome in the verification table.
 
 **Precondition:** Deep approves Part 2; choices 1–3 resolved; gate 1 passed (and gate 2 if 3b).
 
-- [ ] Carried over from Part 1: make `developer-profile.integration.test.ts` create its own listed property through `publishSubmission` instead of assuming one exists (it fails on a freshly seeded `main`).
+> **Part 2 authorisation — 2026-09-26, Deep:** Deep approved Part 2 and chose the release-safe table (choice 3b). The threshold (choice 2) needs a fuller explanation before Deep decides. Until choice 2 is decided and gates 1 and 2 pass, only work that does not depend on them proceeds: the carried-over test fix.
+
+- [x] Carried over from Part 1: make `developer-profile.integration.test.ts` create its own listed property through `publishSubmission` instead of assuming one exists (it fails on a freshly seeded `main`).
 - [ ] Change `analytics-isolation.test.ts` so the named developer modules may read analytics, with their exports limited to thresholded aggregates. Buyer code must still only send events.
 - [ ] Build the aggregate path chosen in choice 3, keyed by developer and property. Raw visitor/session ids and sub-threshold cells never leave it.
 - [ ] If 3b: schema v21 doc, migration `0025`, grants, the scheduled job and its script. The job reads from v20 and writes nothing to the catalog.
@@ -154,6 +156,8 @@ Add a row at the end of every part; never replace earlier rows.
 | 2026-09-25 | Deep  | 1    | `bun run format:check`, `bun run lint`, `bun run typecheck`                                                                     | Passed                                                                                                                                                                            |
 | 2026-09-25 | Deep  | 1    | Full `bun run test` on that database                                                                                            | 172/173 files, 2025/2026 tests; the one failure is `developer-profile.integration.test.ts` ("The seeded database has no listed property"), already on `main`, carried into Part 2 |
 | 2026-09-25 | Deep  | 1    | Prettier and relative-link check on changed Markdown; `git diff --check`                                                        | Passed; repository-wide `format:check` clean, no broken relative links, no whitespace errors                                                                                      |
+
+| 2026-09-26 | Deep | 2 | Fixed `developer-profile.integration.test.ts` alone, then full `bun run test`, on a fresh throwaway PG18 database (port 55432); leftover-row query; Prettier and ESLint on the file | 3/3 in the file; full suite 173/173 files, 2026/2026 tests; no `Profile Tower`/`Profile Listed Developer` rows left behind; format and lint clean |
 
 ## Completion record
 

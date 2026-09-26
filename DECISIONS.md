@@ -1188,3 +1188,16 @@ Decisions:
 5. **Open, not guessed** (listed in `docs/tasklists/2026-09-25-phase-4-developer-analytics.md`): the threshold's unit (distinct visitors or visits) and value; whether suppression happens in a query service or in a release-safe table (schema v21, migration `0025`); whether a developer may see named competitor pairings; whether "enquiries" counts every submitted enquiry or only forwarded ones; listed-only versus listed-plus-unlisted eligibility; card impressions; benchmarks; the completeness definition; the scheduling host.
 
 Alternatives rejected: merging the 2026-09-24 branch and resolving its 12 conflicting files (it would still leave two analytics systems to reconcile); keeping the separate `analytics` schema alongside v20 (a second representation of the same events); reopening v20's identity and consent choices inside Phase 4 (they are decided and live).
+
+---
+
+**2026-09-26 — Deep — Developer analytics are released through a table, not filtered in code: a scheduled job writes thresholded aggregates to a release-safe table, and developer code reads only that table.**
+
+Context: Phase 4 Part 2 needs a boundary between v20's raw events, which carry visitor and session ids and every small count, and anything a developer can see. Deep approved Part 2 and chose option (b) of the tasklist's choice 3.
+
+1. A scheduled job reads v20 (`analytics_events`, and the monthly tables beyond raw retention) and writes only released values to a new release-safe table: schema v21, migration `0025`. A value below the privacy threshold is stored as suppressed with no number, never as zero.
+2. Developer query code reads that table and nothing else in analytics. The rule then holds in the database, so a later query bug cannot leak a raw row or a small count.
+3. The table's shape, grants, job and schedule need Bhavarth's review before the migration is written (tasklist gate 2), and widening analytics read access needs his agreement (gate 1).
+4. The threshold's unit and value are still open (tasklist choice 2) and decide the job's counting rule, so neither the schema v21 document nor the migration is written until Deep decides.
+
+Alternatives rejected: applying the threshold inside a developer query service over raw rows (option a). It needs no migration, but every future query must remember the rule, and one mistake would expose raw data to developer code.

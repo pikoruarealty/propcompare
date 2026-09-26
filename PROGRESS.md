@@ -1,5 +1,15 @@
 # Progress
 
+## 2026-09-26 — Deep — Phase 4 Part 2 started: table approach chosen, a pre-existing test fixed; waiting on the threshold and Bhavarth
+
+**Decided:** Deep approved Part 2 and chose the release-safe table for developer analytics (`DECISIONS.md` 2026-09-26). The threshold's unit and value are still open; Deep asked for a fuller explanation first.
+
+**Done:** `developer-profile.integration.test.ts` publishes its own listed property through `publishSubmission` and removes it afterwards, instead of assuming the database already has one. It failed on any freshly seeded `main`.
+
+**Verified (fresh throwaway PG18 database on port 55432; the shared 5432 database untouched):** that test passes 3/3; the full suite passes 173/173 files and 2026/2026 tests; the test leaves no rows behind; Prettier and ESLint are clean.
+
+**Waiting on:** the threshold decision; Bhavarth's gate 1 (developer read access to analytics) and gate 2 (schema v21 table, grants and job). No schema, migration or analytics code has been written.
+
 ## 2026-09-25 (8) — Deep — Phase 4 Part 1: branch reset onto Bhavarth's merge; documentation reconciled; stopped before Part 2
 
 **Done:** reset `task/phase-4-developer-analytics` to `origin/main` `461060d`, discarding the unpushed 2026-09-24 Phase 4 commits (`6bd771b`, `02ad081`) with no backup, by Deep's decision. That work had built a second analytics system (an `analytics` schema as v11, migration `0014`) that collided with Bhavarth's live schema v20 analytics and with `main`'s own v11 and `0014`. Created `docs/tasklists/2026-09-25-phase-4-developer-analytics.md` (Deep's parts only, Bhavarth's reviews as external gates, ten open choices). Replaced the roadmap's narrowed Phase 4 entry, added the dated `DECISIONS.md` entry, and updated the developer flow and the API spec's planned portfolio route. No code, schema or migration changed.
