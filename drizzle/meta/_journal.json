@@ -183,6 +183,13 @@
       "when": 1790413825476,
       "tag": "0025_developer_analytics_release",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1790416014009,
+      "tag": "0026_developer_analytics_no_enquiries",
+      "breakpoints": true
     }
   ]
 }

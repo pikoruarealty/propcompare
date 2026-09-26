@@ -40,15 +40,11 @@ export const RELEASE_METRICS = [
   "returning_visitors",
   "median_dossier_seconds",
   "median_compare_seconds",
-  "enquirers",
-  "enquirers_comparing",
 ] as const;
 
-/** Enquiry figures are portfolio level only (Deep, 2026-09-26). */
-export const PORTFOLIO_ONLY_METRICS = [
-  "enquirers",
-  "enquirers_comparing",
-] as const;
+// No enquiry figure of any kind is released to a developer (Deep, 2026-09-26,
+// schema v21 migration 0026): they receive forwarded enquiries, so even a
+// portfolio count could be tied to named buyers. The metric check refuses one.
 
 export const RELEASE_DIMENSIONS = ["none", "budget_band", "device"] as const;
 
@@ -173,11 +169,6 @@ export const developerAnalyticsReleased = pgTable(
     check(
       "developer_analytics_released_metric",
       sql`${table.metric} in (${listOf(RELEASE_METRICS)})`,
-    ),
-    check(
-      "developer_analytics_released_portfolio_only",
-      sql`${table.metric} not in (${listOf(PORTFOLIO_ONLY_METRICS)})
-        or (${table.propertyId} is null and ${table.dimension} = 'none')`,
     ),
     check(
       "developer_analytics_released_dimension",
