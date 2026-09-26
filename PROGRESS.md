@@ -1,5 +1,15 @@
 # Progress
 
+## 2026-09-26 (4) — Deep — Part 2 built: the release job, and no enquiry figures for developers
+
+**Decided (`DECISIONS.md` 2026-09-26):** developers see no enquiry figure at all; only listed properties get figures; the 12-month window stands.
+
+**Done:** migration `0026` removes the enquiry metrics so the database refuses them. The release job (`bun run analytics:release`, `src/lib/analytics/release.ts`) counts distinct visitors behind every figure for each window, releases them under the shared rules, keeps the latest 7 runs, and on failure leaves the last good figures in place. Every listed property and portfolio always has a row per unsplit metric. The shared test helper also cleans up later edits to its properties.
+
+**Verified (fresh throwaway PG18 database on port 55432; the shared 5432 database untouched):** migrations `0000`–`0026`; 26 v21 tests including the job against real events (released and withheld figures, the median, the no-subtraction rule, the portfolio, India-time edges, no enquiry/unlisted/other-developer figure, rerun, failure, pruning); lowering the gate to 4 makes them fail; the command runs; format, lint and typecheck clean; full suite 175/175 files, 2071/2071 tests; nothing left behind.
+
+**Waiting on:** Bhavarth's gate 2 review of `0025` and `0026`. Part 3 (capture gaps) needs Deep's approval, or can be skipped if no new events are wanted.
+
 ## 2026-09-26 (3) — Deep — Schema v21 built: release tables, a read-only developer role, migration `0025`
 
 **Decided (`DECISIONS.md` 2026-09-26):** developer analytics read through their own role; a developer sees only their own properties (platform-wide figures stay with the admin); quarter and year to date are calendar ones. Deep approved the migration.

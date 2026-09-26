@@ -1217,3 +1217,16 @@ Context: answers to Phase 4 tasklist choices 11–13 and Deep's approval of the 
 5. **Migration approved by Deep; Bhavarth's review still to be recorded.** `0025` creates the two tables and grants to both roles, and stops if the reader role is missing rather than leaving the boundary half built. Local and CI provisioning, `.env.example`, CI and the setup docs are updated. It is not applied outside the throwaway test database, and the branch does not merge before tasklist gate 2 is recorded.
 
 Also fixed on the way, because they made the suite pass or fail depending on timing: three integration tests (`developer-profile`, `analytics`, `enquiry-inbox`) borrowed "any listed property" and failed whenever no other test file had one live at that moment. They now publish their own through `publishSubmission` using one shared helper, `src/lib/submissions/test-support.ts`, and remove it afterwards. `analytics.integration.test.ts` is Bhavarth's; only its fixture changed, not its assertions.
+
+---
+
+**2026-09-26 — Deep — Developers see no enquiry figure at all; only listed properties get figures; the 12-month window stands. The release job is built.**
+
+Context: answers to Phase 4 tasklist choices 5 and 6, and Deep's confirmation of the 12-month window found while building the windows.
+
+1. **No enquiry figures (choice 5).** A developer sees no count, rate or split of enquiries, not even across their whole portfolio. This supersedes the "portfolio level only" part of the 2026-09-26 threshold entry above. Developers receive forwarded enquiries (schema v19), so any enquiry figure could be tied to named buyers. Enquiries stay in v20 for the admin console. Migration `0026_developer_analytics_no_enquiries` removes the two enquiry metrics from the released table's allowed list, so the database refuses one; Deep approved it with `0025`. The earlier "every submitted or only forwarded" question no longer arises.
+2. **Listed only (choice 6).** Figures are written only for properties listed when the job runs, under the developer that owns them then. Unlisted and deleted properties get no rows; their raw history stays in v20.
+3. **Twelve months confirmed.** The longest window stays trailing 12 months, inside v20's 13-month raw retention.
+4. **The job.** `bun run analytics:release` releases every window in one transaction, keeps the latest 7 successful runs, and on failure records a failed run and leaves the previous figures as the latest, shown as stale. It locks the listed properties it reads (`KEY SHARE`) so a concurrent delete cannot break the run; ordinary edits are not blocked. Every listed property and portfolio always has a row per unsplit metric, withheld when nothing was counted.
+
+Bhavarth's review of `0025` and `0026` (tasklist gate 2) is still to be recorded before merge or any apply outside tests.

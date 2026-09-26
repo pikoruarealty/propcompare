@@ -20,6 +20,8 @@ import { publishSubmission } from "./publisher";
  */
 export interface TestPortfolio {
   developerId: string;
+  /** The throwaway owner that published them, to act on them in a test. */
+  ownerUserId: string;
   properties: { id: string; slug: string; name: string }[];
   remove: () => Promise<void>;
 }
@@ -82,14 +84,24 @@ export const publishTestPortfolio = async (
 
   return {
     developerId: developer.id,
+    ownerUserId: userId,
     properties: published,
     remove: async () => {
+      // Its own submissions, and any later edit a test made to its properties
+      // (an unlisting is an edit submission of its own).
+      const later = await db
+        .select({ id: propertySubmissions.id })
+        .from(propertySubmissions)
+        .where(inArray(propertySubmissions.propertyId, propertyIds));
+      const allIds = [
+        ...new Set([...submissionIds, ...later.map((row) => row.id)]),
+      ];
       await db
         .delete(propertyRevisions)
-        .where(inArray(propertyRevisions.submissionId, submissionIds));
+        .where(inArray(propertyRevisions.submissionId, allIds));
       await db
         .delete(propertySubmissions)
-        .where(inArray(propertySubmissions.id, submissionIds));
+        .where(inArray(propertySubmissions.id, allIds));
       await db.delete(properties).where(inArray(properties.id, propertyIds));
       await db.delete(developers).where(eq(developers.id, developer.id));
       await db.delete(users).where(eq(users.id, userId));

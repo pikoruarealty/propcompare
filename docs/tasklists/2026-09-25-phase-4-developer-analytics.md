@@ -2,7 +2,7 @@
 
 - **Created:** 2026-09-25 — Deep
 - **Owner:** Deep. This tasklist lists Deep's work only. Bhavarth's reviews are external gates, not checklist items.
-- **Status:** Part 2 in progress. Schema v21 tables, reader role and migration `0025` built and tested 2026-09-26 (Deep approved the migration). The release job waits on choices 5 and 6; Bhavarth's gate 2 review is still to be recorded.
+- **Status:** Part 2 built and verified 2026-09-26: schema v21 (migrations `0025`, `0026`), the reader role, the release rules and the release job. Waiting on Bhavarth's gate 2 review; stopped for Deep before Part 3.
 - **Branch:** `task/phase-4-developer-analytics`, reset onto `origin/main` at `461060d` in Part 1
 - **Base:** `origin/main` `461060d` (merge of `task/phase-3-completion`)
 - **Working agreement:** Deep approves every numbered part before it begins. Finishing one part never authorises the next. Every documentation change carries `2026-09-25 — Deep` (or its actual date plus Deep), and this tasklist and `PROGRESS.md` are updated in the same part.
@@ -49,15 +49,15 @@ A developer signs in and sees aggregated, privacy-thresholded analytics for thei
 2. **Privacy threshold.** Minimum distinct **visitors** (v20's `visitor_id`) or distinct **visits** (`session_id`) per released cell, and the number (the earlier plan said 5). Suppressed cells show as "not enough data", never as zero. Blocks Part 2. **Resolved 2026-09-26 — Deep:** the gate is 5 distinct visitors. Visitors are the primary metric (portfolio and per property); visits are secondary (return and intent) under the same visitor gate; enquiry figures are portfolio level only (option c). See `DECISIONS.md` 2026-09-26 (threshold) and `docs/schema/schema.v21.md`.
 3. **Where suppression happens.** Choose one: (a) a developer query service reads v20 raw rows and applies the threshold in code; or (b) a scheduled job writes a release-safe aggregate table (schema v21, migration `0025`) that is the only thing developer code may read. (b) enforces the rule in the database and needs gate 2. **Resolved 2026-09-26 — Deep: (b), the release-safe table.** Gate 2 now applies to Part 2.
 4. **Competitor pairings.** May developer A see that their property is often compared with a named property from developer B? Options: named, anonymised ("a 3 BHK in the same locality"), or counts only. This is the most commercially sensitive figure; owner decision. Blocks the comparison view in Parts 4–5.
-5. **Enquiry metric.** Should a developer's "enquiries" count every `enquiry_submitted` event, or only enquiries the admin forwarded (schema v19)? Blocks the release job (Part 2), since `enquirers` is computed there.
-6. **Property eligibility.** Include only listed properties, or listed plus unlisted with soft-deleted excluded? The recorder already keeps only listed properties at capture time. Blocks the release job (Part 2), which decides which properties get figures.
+5. **Enquiry metric.** Should a developer's "enquiries" count every `enquiry_submitted` event, or only enquiries the admin forwarded (schema v19)? Blocks the release job (Part 2), since `enquirers` is computed there. **Resolved 2026-09-26 — Deep: developers see no enquiry figure at all** (migration `0026`).
+6. **Property eligibility.** Include only listed properties, or listed plus unlisted with soft-deleted excluded? The recorder already keeps only listed properties at capture time. Blocks the release job (Part 2), which decides which properties get figures. **Resolved 2026-09-26 — Deep: listed only.**
 7. **New capture events.** Card impressions (seen in a list, not opened) do not exist in v20. Adding them extends Bhavarth's vocabulary and the privacy-policy list. Decide whether Phase 4 needs them. Blocks Part 3; if the answer is no, skip Part 3.
 8. **Peer benchmarks.** Keep "your property compared with similar properties" (locality → city cohorts) in Phase 4, or defer? Blocks Part 4.
 9. **Completeness definition.** Reuse the data-quality KPI definition adopted 2026-09-23 (`property_schema_fields`, `not_stated`), or define a developer-facing ruleset? Blocks Part 4.
 10. **Scheduling host** for any aggregation job, which can share the daily `analytics:purge` schedule already listed in production-readiness. Blocks Part 6 sign-off.
 11. **Added 2026-09-26 — Deep. How developer code is kept to the release table.** Every analytics reader today runs as `propcompare_app`, which can read raw v20 events. (a) Static only: the isolation test limits developer modules to the v21 schema file. (b) A new read-only `propcompare_developer_reader` role and connection with `SELECT` on the two v21 tables only, so a slip fails in the database. (b) adds a credential, role provisioning, CI and production setup. Blocks the migration in Part 2; needs gate 2. **Resolved 2026-09-26 — Deep: (b), the reader role.** Built in migration `0025`.
 12. **Added 2026-09-26 — Deep. Market-wide figures for developers.** Deep described visitors as the main metric "for the app and also for the particular project". Should a developer see platform-wide totals (all PropCompare unique visitors, and intake demand by BHK/city/band across all buyers), or only figures about their own properties? Platform totals reveal PropCompare's own traffic to every developer. Not in `release-v1` until decided; an additive change later. **Resolved 2026-09-26 — Deep: own properties only; platform-wide figures are admin only.**
-13. **Added 2026-09-26 — Deep. "Year to date" and "quarter to date".** Calendar year (January) or Indian financial year (April)? Blocks the job's window definitions in Part 2. **Resolved 2026-09-26 — Deep: calendar year.** Building the windows also showed the longest must be trailing 12 months, not 13, to stay inside v20's raw retention (`DECISIONS.md` 2026-09-26); Deep to confirm.
+13. **Added 2026-09-26 — Deep. "Year to date" and "quarter to date".** Calendar year (January) or Indian financial year (April)? Blocks the job's window definitions in Part 2. **Resolved 2026-09-26 — Deep: calendar year.** Building the windows also showed the longest must be trailing 12 months, not 13, to stay inside v20's raw retention (`DECISIONS.md` 2026-09-26); Confirmed by Deep 2026-09-26.
 
 ## External review gates (Bhavarth; not Deep's items)
 
@@ -98,9 +98,10 @@ Deep requests each gate and records the outcome in the verification table.
 - [x] Database tests (`src/db/developer-analytics.integration.test.ts`): the reader reads v21 only and is refused raw analytics, catalog, account and `private` tables and all writes; its exact grants and attributes; every check constraint; one running job.
 - [x] Fixed three integration tests on `main` that borrowed "any listed property" and failed by timing (`developer-profile`, Bhavarth's `analytics`, `enquiry-inbox`), with a shared `publishTestPortfolio` helper (`src/lib/submissions/test-support.ts`).
 - [ ] Request gate 2 (the v21 tables, grants and role as built) from Bhavarth and record the outcome.
-- [ ] After choices 5 and 6: the release job (`src/lib/analytics/release.ts`, `src/db/analytics-release.ts`, `analytics:release`) computing `release-v1` from raw v20 rows, run records, pruning to the last 7 successful runs, and a failed run that leaves the previous one visible.
-- [ ] Job tests against the database: gate at 4 and 5 visitors, one visitor with many visits, the no-subtraction rule, enquiries only at portfolio level, a property changing developer, eligibility, India-time edges, failure and rerun.
-- [ ] Update schema, decisions, production-readiness, progress and this tasklist.
+- [x] Migration `0026_developer_analytics_no_enquiries`: the two enquiry metrics leave the allowed list (choice 5).
+- [x] The release job (`src/lib/analytics/release.ts`, `src/db/analytics-release.ts`, `bun run analytics:release`) computing `release-v1` from raw v20 rows for listed properties only, with run records, a `KEY SHARE` lock on the listed properties, pruning to the last 7 successful runs, and a failed run that leaves the previous one visible.
+- [x] Job tests against the database (`src/db/developer-analytics.integration.test.ts`): figures at and under the gate, the median, the second withheld split, the portfolio counted once per visitor, India-time edges to the second, no enquiry/unlisted/other-developer figure, rerun equality, failure, pruning. A planted gate of 4 makes them fail. (One visitor with many visits is covered in `release-rules.test.ts`.)
+- [x] Update schema, decisions, production-readiness, progress and this tasklist.
 - [ ] Report Part 2 and stop.
 
 **Acceptance:** no code path gives a developer module an unthresholded value or a visitor/session id.
@@ -170,6 +171,11 @@ Add a row at the end of every part; never replace earlier rows.
 | 2026-09-26 | Deep | 2 | `release-rules.test.ts` and `developer-analytics.integration.test.ts` | 36/36 |
 | 2026-09-26 | Deep | 2 | The three fixture-fixed tests alone | 11/11 (each failed alone before) |
 | 2026-09-26 | Deep | 2 | `format:check`, `lint`, `typecheck`, full `bun run test`; leftover-row query | All clean; 175/175 files, 2062/2062 tests; 0 properties, developers, submissions, runs or events left behind |
+| 2026-09-26 | Deep | 2 | `drizzle-kit generate --name developer_analytics_no_enquiries`; header and a clean-up delete added by hand | `0026` drops the portfolio-only check and narrows the metric check; nothing else |
+| 2026-09-26 | Deep | 2 | Fresh throwaway PG18 (port 55432); `db:migrate`; both seeds; `developer-analytics.integration.test.ts` | `0000`–`0026` applied; 26/26 |
+| 2026-09-26 | Deep | 2 | Planted `MIN_VISITORS = 4`, reran, restored | Two job tests failed as they should; restored file identical to the committed one |
+| 2026-09-26 | Deep | 2 | `bun run analytics:release` on the seeded database | Ran and reported through 2026-09-25 (no listed properties, so 0 figures) |
+| 2026-09-26 | Deep | 2 | `format:check`, `lint`, `typecheck`, full `bun run test`; leftover-row query | All clean; 175/175 files, 2071/2071 tests; nothing left behind |
 
 ## Completion record
 
