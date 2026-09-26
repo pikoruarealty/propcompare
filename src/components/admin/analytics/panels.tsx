@@ -313,15 +313,28 @@ export function DailyTrend({ days }: { days: DayRow[] }) {
   );
 }
 
+/** A table row's name, as a link to the visitors behind it when there is one. */
+function RowLabel({ label, href }: { label: string; href: string | null }) {
+  if (href === null) return <>{label}</>;
+  return (
+    <Link href={href} className="text-primary underline underline-offset-4">
+      {label}
+    </Link>
+  );
+}
+
 /** A ranked count list with its share, as a table (sections opened, focus, bedrooms). */
 export function CountTable({
   rows,
   what,
   empty,
+  href,
 }: {
   rows: CountRow[];
   what: string;
   empty: string;
+  /** Where a row opens to, when it has a list of visitors behind it. */
+  href?: (row: CountRow) => string | null;
 }) {
   if (rows.length === 0) return <Empty>{empty}</Empty>;
   const total = rows.reduce((sum, row) => sum + row.count, 0);
@@ -346,7 +359,9 @@ export function CountTable({
             key={row.label}
             className="border-border border-b last:border-b-0"
           >
-            <td className={td}>{row.label}</td>
+            <td className={td}>
+              <RowLabel label={row.label} href={href?.(row) ?? null} />
+            </td>
             <td className={tdNum}>{row.count}</td>
             <td className={tdNum}>{percent(row.count, total)}</td>
           </tr>
@@ -361,10 +376,13 @@ export function BreakdownTable({
   rows,
   what,
   empty,
+  href,
 }: {
   rows: BreakdownRow[];
   what: string;
   empty: string;
+  /** Where a row opens to: the visitors it counted. */
+  href?: (row: BreakdownRow) => string | null;
 }) {
   if (rows.length === 0) return <Empty>{empty}</Empty>;
   return (
@@ -391,7 +409,9 @@ export function BreakdownTable({
             key={row.label}
             className="border-border border-b last:border-b-0"
           >
-            <td className={td}>{row.label}</td>
+            <td className={td}>
+              <RowLabel label={row.label} href={href?.(row) ?? null} />
+            </td>
             <td className={tdNum}>{row.visitors}</td>
             <td className={tdNum}>
               {row.comparers}{" "}

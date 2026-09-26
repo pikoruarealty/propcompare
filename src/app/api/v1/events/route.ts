@@ -13,10 +13,12 @@ import {
   VISITOR_COOKIE,
   VISITOR_MAX_AGE,
 } from "@/lib/analytics/cookies";
+import { callerKey, createRateLimiter } from "@/lib/analytics/rate-limit";
 import { recordEvent } from "@/lib/analytics/record";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_BODY = 4096;
+const limiter = createRateLimiter();
 
 const cookie = (name: string, value: string, maxAge: number) =>
   `${name}=${value}; Path=/; Max-Age=${maxAge}; HttpOnly; SameSite=Lax${
@@ -31,7 +33,8 @@ const cookie = (name: string, value: string, maxAge: number) =>
  * is read or set and the event carries no visitor or visit id, so nothing links it
  * to any other. Everyone else gets a random visitor cookie, the same before and
  * after sign-in. No user id, IP or personal detail is stored either way
- * (`DECISIONS.md` 2026-09-25, 2026-09-26).
+ * (`DECISIONS.md` 2026-09-25, 2026-09-26). A caller sending more than a minute's
+ * worth (`rate-limit.ts`) is not recorded; its address is held in memory only.
  */
 export const POST = async (request: NextRequest): Promise<Response> => {
   const headers = new Headers({ "Cache-Control": "no-store" });
@@ -40,6 +43,10 @@ export const POST = async (request: NextRequest): Promise<Response> => {
   const mode = recordingMode(request.headers);
   if (mode === "none") return done();
   const userAgent = request.headers.get("user-agent");
+
+  // Over the limit: dropped without a trace, and still a 204 (see above).
+  const caller = callerKey(request.headers);
+  if (caller !== null && !limiter.allow(caller)) return done();
 
   const text = await request.text().catch(() => "");
   if (text.length === 0 || text.length > MAX_BODY) return done();

@@ -11,6 +11,7 @@ import {
   type TestPortfolio,
 } from "@/lib/submissions/test-support";
 import { POST } from "@/app/api/v1/events/route";
+import { EVENTS_PER_WINDOW } from "@/lib/analytics/rate-limit";
 import { VISITOR_COOKIE } from "./cookies";
 import { loadAnalyticsDashboard } from "./dashboard";
 import { listVisitors, loadJourney, visitorLabel } from "./visitors";
@@ -193,6 +194,11 @@ describe("POST /api/v1/events", () => {
       }),
     ];
     for (const response of refused) expect(response.status).toBe(204);
+    // The two that were kept carry a visitor cookie; register it so afterAll
+    // removes them (they were left behind on every run before).
+    for (const response of refused) {
+      if (response.headers.getSetCookie().length > 0) visitorOf(response);
+    }
     // Only the last one is kept, and without the figure it tried to carry.
     const after = await db.select().from(analyticsEvents);
     expect(after.length).toBe(before + 1);
@@ -391,7 +397,7 @@ describe("the dashboard and retention", () => {
       medianDossierSeconds: 30,
     });
     expect(dashboard.groupsOpened).toEqual([
-      { label: "Room by room", count: 1 },
+      { label: "Room by room", key: "rooms", count: 1 },
     ]);
     expect(dashboard.comparisonSize).toEqual([
       { label: "2 properties", count: 3 },
@@ -448,6 +454,28 @@ describe("the dashboard and retention", () => {
     expect(await ids({ propertyId: a.id })).toEqual([v2, v1]);
     expect(await ids({ pair: [a.id, b.id] })).toEqual([v1]);
     expect(await ids({ pair: [a.id, randomUUID()] })).toEqual([]);
+  });
+
+  it("opens, from each source, budget, device and section row, exactly the visitors it counted", async () => {
+    const dashboard = await loadAnalyticsDashboard(db, range);
+    const total = async (filter: Parameters<typeof listVisitors>[2]) =>
+      (await listVisitors(db, range, filter)).total;
+    expect(dashboard.sources.length).toBeGreaterThan(0);
+    for (const row of dashboard.sources) {
+      expect(await total({ source: row.key })).toBe(row.visitors);
+    }
+    for (const row of dashboard.budgetBands) {
+      expect(await total({ band: row.key })).toBe(row.visitors);
+    }
+    for (const row of dashboard.devices) {
+      expect(await total({ device: row.key })).toBe(row.visitors);
+    }
+    expect(dashboard.groupsOpened.map((row) => row.key)).toEqual(["rooms"]);
+    const opened = await listVisitors(db, range, { group: "rooms" });
+    expect(opened.rows.map((row) => row.visitorId)).toEqual([v1]);
+    // A value nobody has matches nobody; a bound parameter, never spliced in.
+    expect(await total({ source: "x' or 'a'='a" })).toBe(0);
+    expect(await total({ group: "no_such_section" })).toBe(0);
   });
 
   it("tells one visitor's journey in order, in words, by visit", async () => {
@@ -584,5 +612,39 @@ describe("the dashboard and retention", () => {
     expect(
       dashboard.properties.find((row) => row.id === a.id)?.medianDossierSeconds,
     ).toBe(50);
+  });
+});
+
+describe("POST /api/v1/events rate limit", () => {
+  const LIMITED_SOURCE = `${ANON_SOURCE}-limit`;
+  const valid = {
+    event: "property_viewed",
+    slug: "",
+    utm: { source: LIMITED_SOURCE, medium: null, campaign: null },
+  };
+  const from = (address: string) => ({ "x-forwarded-for": address });
+
+  it("stops recording one address after a minute's allowance, and leaves another alone, still with a 204", async () => {
+    const noisy = "198.51.100." + (1 + Math.floor(Math.random() * 200));
+    // Junk bodies count against the limit without recording anything.
+    for (let i = 0; i < EVENTS_PER_WINDOW; i += 1) {
+      await post({ event: "not-an-event" }, from(noisy));
+    }
+    const refused = await post({ ...valid, slug: a.slug }, from(noisy));
+    expect(refused.status).toBe(204);
+    // A recorded event sets the visitor cookie; a dropped one leaves no trace.
+    expect(refused.headers.getSetCookie()).toEqual([]);
+
+    const other = await post(
+      { ...valid, slug: a.slug },
+      from("203.0.113." + (1 + Math.floor(Math.random() * 200))),
+    );
+    visitorOf(other);
+
+    const rows = await db
+      .select()
+      .from(analyticsEvents)
+      .where(eq(analyticsEvents.source, LIMITED_SOURCE));
+    expect(rows).toHaveLength(1);
   });
 });

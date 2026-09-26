@@ -55,6 +55,29 @@ describe("readVisitorFilter", () => {
     ).toEqual({});
     expect(readVisitorFilter({})).toEqual({});
   });
+
+  it("reads source, budget band, device and section, and refuses what does not fit", () => {
+    expect(
+      readVisitorFilter({
+        source: "google / cpc",
+        band: "₹2–3 crore",
+        device: "mobile",
+        group: "unit_type",
+      }),
+    ).toEqual({
+      source: "google / cpc",
+      band: "₹2–3 crore",
+      device: "mobile",
+      group: "unit_type",
+    });
+    expect(
+      readVisitorFilter({
+        source: "x".repeat(201),
+        group: "Robert'); drop table",
+        device: "",
+      }),
+    ).toEqual({});
+  });
 });
 
 describe("describeEvent", () => {
