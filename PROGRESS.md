@@ -1,5 +1,15 @@
 # Progress
 
+## 2026-09-26 (3) — Deep — Schema v21 built: release tables, a read-only developer role, migration `0025`
+
+**Decided (`DECISIONS.md` 2026-09-26):** developer analytics read through their own role; a developer sees only their own properties (platform-wide figures stay with the admin); quarter and year to date are calendar ones. Deep approved the migration.
+
+**Done:** `src/db/schema/developer-analytics.ts` and migration `0025_developer_analytics_release` (run and release tables, every release rule a check constraint, explicit grants); the `propcompare_developer_reader` role in local/CI provisioning, `.env.example`, CI and `src/db/developer-reader.ts`; the pure release rules (`src/lib/analytics/release-rules.ts`: India-time windows, the 5-visitor gate, the no-subtraction rule). Building the windows showed that a trailing 13-month window would reach raw events v20 has already rolled up, so the longest window is 12 months (Deep to confirm). Three integration tests on `main` that failed depending on timing (`developer-profile`, `analytics`, `enquiry-inbox`) now publish their own properties through a shared helper. Updated schema v21, local database setup, production readiness and the tasklist.
+
+**Verified (fresh throwaway PG18 database on port 55432; the shared 5432 database untouched):** migrations `0000`–`0025` apply and rerun as a no-op; the reader reads v21 and is refused raw analytics, catalog, account and `private` tables and every write; format, lint and typecheck clean; full suite 175/175 files, 2062/2062 tests; nothing left behind.
+
+**Not done:** the release job (waits on choices 5 and 6); Bhavarth's gate 2 review of `0025`, to be recorded before merge or any apply outside tests. An existing local database needs the reader role created before it can migrate (`docs/local-database-setup.md`).
+
 ## 2026-09-26 (2) — Deep — Threshold decided; schema v21 proposed for review
 
 **Decided (`DECISIONS.md` 2026-09-26, threshold):** a developer figure needs at least 5 distinct visitors. Visitors are the primary metric; visits are secondary (return and intent) under the same gate; enquiry figures are portfolio level only.

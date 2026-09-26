@@ -1,7 +1,7 @@
 # Local database setup
 
 Every connection is read from the environment — nothing in the codebase hard-codes a
-host, port, or credential. Copy `.env.example` to `.env` and point the three URLs at
+host, port, or credential. Copy `.env.example` to `.env` and point the four URLs at
 whatever Postgres you run locally. `.env` is gitignored, so each developer's local
 setup stays their own.
 
@@ -9,15 +9,16 @@ setup stays their own.
 cp .env.example .env
 ```
 
-The three connections exist to enforce the privilege split described in
+The four connections exist to enforce the privilege split described in
 [`ARCHITECTURE.md`](../ARCHITECTURE.md). Keep them distinct even locally, because a
 local setup that collapses them cannot catch a permission bug that production would:
 
-| Variable               | Role                  | May read `private`?             |
-| ---------------------- | --------------------- | ------------------------------- |
-| `DATABASE_URL`         | `propcompare_app`     | **No** — the application role.  |
-| `DATABASE_ADMIN_URL`   | `propcompare`         | Owner; migrations only.         |
-| `DATABASE_SERVICE_URL` | `propcompare_service` | Yes — Phase 3 matching service. |
+| Variable                        | Role                           | May read `private`?                                                                         |
+| ------------------------------- | ------------------------------ | ------------------------------------------------------------------------------------------- |
+| `DATABASE_URL`                  | `propcompare_app`              | **No** — the application role.                                                              |
+| `DATABASE_ADMIN_URL`            | `propcompare`                  | Owner; migrations only.                                                                     |
+| `DATABASE_SERVICE_URL`          | `propcompare_service`          | Yes — Phase 3 matching service.                                                             |
+| `DATABASE_DEVELOPER_READER_URL` | `propcompare_developer_reader` | **No** — selects the two released developer-analytics tables and nothing else (schema v21). |
 
 ## Option A — Docker (the documented default)
 
@@ -27,7 +28,7 @@ docker compose up -d
 
 `docker-compose.yml` provisions Postgres 17 on port 5432 and runs
 `docker/postgres-init/*.sql` on first container creation, which creates the `private`
-schema and the three roles. Requires WSL2 on Windows.
+schema and the four roles. Requires WSL2 on Windows.
 
 ## Option B — an existing native Postgres install
 
@@ -40,6 +41,7 @@ As a superuser:
 CREATE ROLE propcompare LOGIN PASSWORD 'propcompare_dev_only' NOSUPERUSER CREATEDB NOCREATEROLE;
 CREATE ROLE propcompare_app LOGIN PASSWORD 'propcompare_app_dev_only' NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT;
 CREATE ROLE propcompare_service LOGIN PASSWORD 'propcompare_service_dev_only' NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT BYPASSRLS;
+CREATE ROLE propcompare_developer_reader LOGIN PASSWORD 'propcompare_developer_reader_dev_only' NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT;
 
 CREATE DATABASE propcompare OWNER propcompare;
 ```
@@ -55,7 +57,9 @@ ALTER SCHEMA public OWNER TO propcompare;
 REVOKE ALL ON SCHEMA private FROM PUBLIC;
 REVOKE CREATE ON SCHEMA public FROM PUBLIC;
 REVOKE ALL ON SCHEMA private FROM propcompare_app;
-GRANT CONNECT ON DATABASE propcompare TO propcompare_app, propcompare_service;
+REVOKE ALL ON SCHEMA private FROM propcompare_developer_reader;
+GRANT CONNECT ON DATABASE propcompare TO propcompare_app, propcompare_service, propcompare_developer_reader;
+GRANT USAGE ON SCHEMA public TO propcompare_developer_reader;
 ```
 
 **Stop there — do not add blanket `ALTER DEFAULT PRIVILEGES` grants.** The migrations
@@ -68,6 +72,14 @@ next section asks you to verify.
 Update the `localhost:5432` in your `.env` if your instance listens elsewhere.
 
 ## Schema and seed data
+
+> **Existing databases, 2026-09-26 — Deep.** Migration `0025` grants `SELECT` to
+> `propcompare_developer_reader` and stops if that role does not exist. A database
+> created before schema v21 (an existing Docker volume, or a native install) needs the
+> role first, as a superuser: the `CREATE ROLE propcompare_developer_reader …` line
+> above, then `GRANT CONNECT ON DATABASE propcompare TO propcompare_developer_reader;`
+> and `GRANT USAGE ON SCHEMA public TO propcompare_developer_reader;`. Add
+> `DATABASE_DEVELOPER_READER_URL` to `.env` from `.env.example`.
 
 ```bash
 bun run db:migrate      # see the caveat below
@@ -99,9 +111,11 @@ Then sign in at `/admin/login`.
 ## Verifying the privilege split
 
 Worth running once after setup: the application role must be refused, and the
-service role allowed.
+service role allowed; the developer reader must be refused raw analytics.
 
 ```bash
 psql "$DATABASE_URL"         -c 'select count(*) from private.budget_buckets;'  # must ERROR
 psql "$DATABASE_SERVICE_URL" -c 'select count(*) from private.budget_buckets;'  # must return 16
+psql "$DATABASE_DEVELOPER_READER_URL" -c 'select count(*) from analytics_events;'  # must ERROR
+psql "$DATABASE_DEVELOPER_READER_URL" -c 'select count(*) from developer_analytics_runs;'  # must return a count
 ```
