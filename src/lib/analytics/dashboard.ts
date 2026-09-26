@@ -160,8 +160,9 @@ export const loadAnalyticsDashboard = async (
         and session_id is not null group by 1
     ),
     dossier_time as (
-      select engaged_ms ms from e
+      select session_id, sum(engaged_ms) ms from e
       where event = 'page_engaged' and detail->>'page' = 'dossier'
+        and session_id is not null group by 1
     )
     select
       count(*) filter (where visitor_id is null) events_without_visitor,
@@ -298,12 +299,21 @@ export const loadAnalyticsDashboard = async (
       top_rival as (
         select distinct on (pid) pid, other, n from rival order by pid, n desc, other
       ),
+      -- Summed per visit (session) before the median, like the overview tile's
+      -- own dossier and compare figures: a visitor's three pings on one visit
+      -- are one data point, not three (2026-09-26, the two disagreed).
+      dossier_time_by_property as (
+        select property_id, session_id, sum(engaged_ms) ms from e
+        where event = 'page_engaged' and detail->>'page' = 'dossier'
+          and session_id is not null
+        group by 1, 2
+      ),
       per as (
         select p.id, p.name,
           count(*) filter (where e.event = 'property_viewed' and e.property_id = p.id) views,
           count(distinct e.visitor_id) filter (where e.event = 'property_viewed' and e.property_id = p.id) viewers,
-          percentile_cont(0.5) within group (order by e.engaged_ms) filter (
-            where e.event = 'page_engaged' and e.detail->>'page' = 'dossier' and e.property_id = p.id) median_ms,
+          (select percentile_cont(0.5) within group (order by dt.ms)
+             from dossier_time_by_property dt where dt.property_id = p.id) median_ms,
           count(*) filter (where e.event = 'comparison_started' and e.property_id = p.id) added,
           count(*) filter (where e.event = 'comparison_removed' and e.property_id = p.id) removed,
           count(*) filter (where e.event = 'compare_opened' and p.id = any(e.compared_ids)) in_comparisons,

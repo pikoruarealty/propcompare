@@ -363,6 +363,30 @@ describe("the release job", () => {
         comparedIds: [p1, rival],
       });
     }
+    // Three more views and one more comparison from browsers with no visitor
+    // id (a privacy signal): they count toward `views`/`comparisons`, the gate
+    // stays the 13 identified viewers above, and they never appear in
+    // `viewers`/`visitors` (2026-09-26, "count as activity, gate on identified").
+    for (let index = 0; index < 3; index += 1) {
+      events.push({
+        occurredAt: IN_WINDOW,
+        visitorId: null,
+        sessionId: null,
+        event: "property_viewed",
+        propertyId: p1,
+        signedIn: false,
+        device: "mobile",
+      });
+    }
+    events.push({
+      occurredAt: IN_WINDOW,
+      visitorId: null,
+      sessionId: null,
+      event: "compare_opened",
+      comparedIds: [p1, rival],
+      signedIn: false,
+      device: "mobile",
+    });
 
     // p2: window edges. Four inside; one at the 7-day window's first instant;
     // one a second before it (30-day only); one just after the last day.
@@ -435,6 +459,13 @@ describe("the release job", () => {
     expect(await at("comparers")).toEqual(shown(5));
     expect(await at("visits")).toEqual(shown(20));
     expect(await at("median_dossier_seconds")).toEqual(shown(30));
+    // 2026-09-26: the gate stays on identified visitors (unchanged above),
+    // but `views`/`comparisons` also count the anonymous activity the gate
+    // does not otherwise show: 15 identified property views (13 viewers, one
+    // of whom returned twice) plus 3 anonymous; 5 identified comparisons plus
+    // 1 anonymous.
+    expect(await at("views")).toEqual(shown(18));
+    expect(await at("comparisons")).toEqual(shown(6));
     // Four savers and one returning visitor are under the gate; nobody
     // unlocked or timed a comparison.
     expect(await at("returning_visitors")).toEqual(withheld);

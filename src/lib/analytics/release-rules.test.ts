@@ -146,6 +146,24 @@ describe("the visitor gate", () => {
     });
   });
 
+  it("keeps the gate on identified visitors even when the value counts more (anonymous activity, 2026-09-26)", () => {
+    // `visitors` is always the identified count; `value` may be larger once a
+    // metric also counts events with no visitor id (a privacy signal, or older
+    // than the raw retention window). A few identified people plus a lot of
+    // anonymous activity still does not meet the gate.
+    expect(releaseCell({ key: null, visitors: 3, value: 60 })).toMatchObject({
+      released: false,
+      value: null,
+    });
+    // Once enough identified people are behind it, the larger value (which may
+    // include anonymous activity) is what is shown, not the identified count.
+    expect(releaseCell({ key: null, visitors: 5, value: 60 })).toEqual({
+      key: null,
+      released: true,
+      value: 60,
+    });
+  });
+
   it("never turns a withheld figure into a zero", () => {
     expect(releaseCell({ key: null, visitors: 0, value: 0 }).value).toBeNull();
   });

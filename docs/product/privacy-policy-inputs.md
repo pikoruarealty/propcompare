@@ -50,6 +50,13 @@ A browser that sends Global Privacy Control or Do Not Track gets **no** `pc_vid`
 
 **Consent position taken.** A privacy notice and no consent prompt for analytics, because the events carry no personal identifier; the privacy signal is honoured for the one thing it concerns (a lasting identifier). Revisit if a third-party tracker is ever added. **No claim of "we never store your IP"** may be made without the qualification that the sign-in session stores the IP of a signed-in browser (section 1); the analytics tables hold none.
 
+### 3a. What a developer sees (schema v21, `DECISIONS.md` 2026-09-26)
+
+- **Analytics, aggregates only.** A scheduled job copies figures about a developer's own listed properties into a released table that developer code reads through its own read-only database role. A figure is released only when at least 5 distinct identified visitors are behind it; a figure below that has no number at all (never a zero). It never holds a visitor id, a visit id, a price or a buyer's detail. Fixed windows only (7 days, 30 days, quarter to date, year to date, trailing 12 months). Counts of views and comparisons include events from browsers that sent a privacy signal (they have no visitor id), but the gate counts identified visitors only.
+- **Named competitors.** Owner decision: a developer may see which named properties, including another developer's, theirs is most often compared with (not built yet; the pairing must meet the same gate and never carry the rival's own figures).
+- **No enquiry figures** in developer analytics: no count, rate or split.
+- **A forwarded enquiry, in full.** Once the admin forwards an enquiry, that property's developer sees the buyer's **name, message and phone number**, the property and unit type, and when it was forwarded (`/developers/enquiries`). This is the first time a buyer's phone number reaches a developer. An enquiry not forwarded, or closed, is never shown to a developer. The consent wording at the point of enquiry must say this plainly (section 8.1).
+
 ## 4. What is collected about developers and staff
 
 Developer and admin accounts sign in with email and password (Better Auth). Developer invitations, the team panel and the developer organisation's details are held. Staff email addresses and the admin's actions on submissions are held. Brochures and documents a developer or admin uploads, and what is read from them, are property information rather than personal data; they are sent to a third-party reading provider (paid OCR/AI) under `docs/ocr-adapter-usage.md`, which the policy should name generically as a document-reading service. Buyers' data is never sent to that provider.

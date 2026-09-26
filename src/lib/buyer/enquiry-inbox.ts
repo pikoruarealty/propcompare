@@ -41,9 +41,11 @@ export interface InboxEnquiry {
 
 /**
  * The admin inbox: every enquiry, newest first, with the property, the unit type
- * asked about and who to contact. The buyer's number is personal data and is read
- * only here, on an admin-only screen; it never reaches a buyer or developer
- * surface.
+ * asked about and who to contact. The buyer's number is personal data, held here
+ * for every enquiry; once the admin forwards one, its developer sees the same
+ * number for that enquiry alone (`listForwardedEnquiries`, `DECISIONS.md`
+ * 2026-09-26) — an unforwarded or closed enquiry never reaches a developer, and
+ * neither ever reaches a buyer.
  */
 export const listEnquiryInbox = async (db: AppDb): Promise<InboxEnquiry[]> => {
   const rows = await db

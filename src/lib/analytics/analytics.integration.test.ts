@@ -533,4 +533,56 @@ describe("the dashboard and retention", () => {
       ),
     ).rejects.toThrow();
   });
+
+  it("sums a visitor's dossier pings within one visit before taking the median (2026-09-26)", async () => {
+    // Its own visitor, session and day so this is exactly its own figures: two
+    // pings on the same visit (35s + 15s) must count as one 50-second visit,
+    // not two separate data points of 35 and 15 — the mistake this fixes.
+    const visitorId = randomUUID();
+    const sessionId = randomUUID();
+    const day = new Date(Date.UTC(2001, 0, 20, 10));
+    await db.insert(analyticsEvents).values([
+      {
+        occurredAt: day,
+        visitorId,
+        sessionId,
+        event: "property_viewed",
+        signedIn: false,
+        device: "desktop",
+        propertyId: a.id,
+      },
+      {
+        occurredAt: day,
+        visitorId,
+        sessionId,
+        event: "page_engaged",
+        signedIn: false,
+        device: "desktop",
+        propertyId: a.id,
+        engagedMs: 35_000,
+        detail: { page: "dossier" },
+      },
+      {
+        occurredAt: new Date(day.getTime() + 60_000),
+        visitorId,
+        sessionId,
+        event: "page_engaged",
+        signedIn: false,
+        device: "desktop",
+        propertyId: a.id,
+        engagedMs: 15_000,
+        detail: { page: "dossier" },
+      },
+    ]);
+    visitorIds.push(visitorId);
+
+    const dashboard = await loadAnalyticsDashboard(db, {
+      from: new Date(Date.UTC(2001, 0, 20)),
+      to: new Date(Date.UTC(2001, 0, 21)),
+    });
+    expect(dashboard.overview.medianDossierSecondsPerView).toBe(50);
+    expect(
+      dashboard.properties.find((row) => row.id === a.id)?.medianDossierSeconds,
+    ).toBe(50);
+  });
 });

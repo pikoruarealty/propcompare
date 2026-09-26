@@ -40,6 +40,15 @@ export const RELEASE_METRICS = [
   "returning_visitors",
   "median_dossier_seconds",
   "median_compare_seconds",
+  /**
+   * Activity counts, gated the same as every other metric on distinct
+   * identified visitors, but the shown value counts every event, including one
+   * from a browser with no visitor id (a privacy signal, or older than the raw
+   * retention window; `DECISIONS.md` 2026-09-26). `viewers`/`comparers` stay
+   * identified-only counts of people; these count what happened.
+   */
+  "views",
+  "comparisons",
 ] as const;
 
 // No enquiry figure of any kind is released to a developer (Deep, 2026-09-26,

@@ -46,6 +46,8 @@ const PROPERTY_METRICS = [
   "returning_visitors",
   "median_dossier_seconds",
   "median_compare_seconds",
+  "views",
+  "comparisons",
 ] as const;
 const PORTFOLIO_METRICS = ["visitors", "visits", "returning_visitors"] as const;
 
@@ -69,17 +71,29 @@ interface CandidateRow {
  * Every candidate figure in one window, with the distinct visitors behind it.
  * An event is "about" a property when it names it or compares it; only listed
  * properties count (Deep, 2026-09-26), under the developer that owns them now.
+ *
+ * `listed` is the run's own lock-held read (`isListed`, held `for key share` for
+ * the whole run) rather than a second, hand-written check here: "listed" was
+ * checked two different ways until 2026-09-26 — the shared definition for the
+ * lock, and a raw `listing_status = 'listed'` copy for the candidates, which
+ * could silently drift apart if `isListed`'s definition ever grows a second
+ * condition. There is now exactly one place that decides eligibility.
  */
 const candidatesFor = async (
   db: PostgresJsDatabase,
   window: ReportWindow,
+  listed: { propertyId: string; developerId: string }[],
 ): Promise<CandidateRow[]> => {
   const { from, until } = windowBounds(window);
+  if (listed.length === 0) return [];
   const result = await db.execute<CandidateRow>(sql`
-    with eligible as (
-      select p.id as property_id, p.developer_id
-      from properties p
-      where p.listing_status = 'listed'
+    with eligible (property_id, developer_id) as (
+      values ${sql.join(
+        listed.map(
+          (row) => sql`(${row.propertyId}::uuid, ${row.developerId}::uuid)`,
+        ),
+        sql`, `,
+      )}
     ),
     about as (
       select e.visitor_id, e.session_id, e.event, e.engaged_ms,
@@ -157,6 +171,22 @@ const candidatesFor = async (
            count(distinct visitor_id)::int, count(distinct visitor_id)::int
     from about where event = 'compare_opened' and budget_band is not null
     group by developer_id, property_id, budget_band
+    union all
+    -- 'views' and 'comparisons' count every event, including one with no
+    -- visitor id (a privacy signal, or older than the raw retention window);
+    -- 'viewers' and 'comparers' above count only identified people. The gate
+    -- is still the identified count, so privacy is unchanged — once enough
+    -- real people are behind a figure, the number shown also counts the real
+    -- activity a gate on identity alone would otherwise hide.
+    select developer_id, property_id, 'views', 'none', null,
+           count(distinct visitor_id)::int, count(*)::int
+    from about where event = 'property_viewed' and direct
+    group by developer_id, property_id
+    union all
+    select developer_id, property_id, 'comparisons', 'none', null,
+           count(distinct visitor_id)::int, count(*)::int
+    from about where event = 'compare_opened'
+    group by developer_id, property_id
     union all
     select developer_id, property_id, 'savers', 'none', null,
            count(distinct visitor_id)::int, count(distinct visitor_id)::int
@@ -355,7 +385,7 @@ export const releaseDeveloperAnalytics = async (
         const rows = figuresFor(
           window,
           listed,
-          await candidatesFor(tx, window),
+          await candidatesFor(tx, window, listed),
         );
         figures += rows.length;
         released += rows.filter((row) => row.released).length;

@@ -1,5 +1,13 @@
 # Progress
 
+## 2026-09-26 (4) - Developers see forwarded enquiries; the Phase 4 review items finished; ready to hand Parts 4 to 6 to Deep
+
+**Done:** (1) Owner decision: a forwarded enquiry shows its developer the buyer's name, message and phone (`/developers/enquiries`, tasklist `docs/tasklists/2026-09-26-developer-forwarded-enquiries.md`). (2) Gate 1 granted: the isolation test already lets developer code read the released tables and refuses raw events (checked with a throwaway route). (3) Release job: `views` and `comparisons` count anonymous activity under the unchanged 5-identified-visitor gate (migration `0028`); "listed" has a single definition. (4) Admin dossier median now sums pings per visit (proved: 25s became 50s). (5) Privacy inputs record what a developer sees. (6) Deep's `developer-analytics` test cleaned up through the wrong role and left orphaned developers in the local database after my earlier re-runs; the residue was removed and the database holds only its real rows (6 properties, 10 developers, 9 real events).
+
+**Verified:** typecheck, lint, format, and the suites touched (analytics, release job and rules, enquiries, isolation). The full suite is intermittently red (one shared-database integration test, a different one each run); see `DECISIONS.md` 2026-09-26, last entry.
+
+**Not done:** Phase 4 Parts 4 to 6 (Deep), splits for the new metrics, the stable fix for the integration flake.
+
 ## 2026-09-26 (3) - Phase 4 reviewed and merged; two of Deep's migrations would never have run on an existing database
 
 **Reviewed** `task/phase-4-developer-analytics` (`745e8cf`) and merged it into `task/analytics-anonymous-events`. **Nothing is built twice:** Deep withdrew his own analytics system and built only the developer-facing release layer on schema v20, with no second events table, cookie, route or capture path. Security checked against a real database: no `sql.raw` with variable input, no write to a live catalog table, and the `propcompare_developer_reader` role can select his two released tables and is refused raw events, catalog, account and `private` tables and every write.
