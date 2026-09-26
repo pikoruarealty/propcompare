@@ -3,87 +3,32 @@ import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { db } from "@/db";
-import { users } from "@/db/schema/auth";
+import { developers } from "@/db/schema/catalog";
 import {
-  developers,
-  properties,
-  propertyRevisions,
-  propertySubmissionFields,
-  propertySubmissions,
-} from "@/db/schema/catalog";
-import { publishSubmission } from "@/lib/submissions/publisher";
+  publishTestPortfolio,
+  type TestPortfolio,
+} from "@/lib/submissions/test-support";
 import { getPublicDeveloper } from "./developer-profile";
 import { findForbiddenKeys } from "./no-price";
 
 /**
  * The public developer profile against the real database: a developer with a
  * listed property shows that project, an unknown id is absent, and no
- * price-shaped key is present.
- *
- * The listed property is this file's own, published through the one write path,
- * so the test does not depend on what a database happens to contain (a freshly
- * seeded one has no property at all).
+ * price-shaped key is present. The listed property is this file's own, so the
+ * test does not depend on what a database happens to contain.
  */
-const suffix = randomUUID();
-const userId = `profile-user-${suffix}`;
-let developerId: string;
-let propertyId: string;
-let submissionId: string;
+let portfolio: TestPortfolio;
+let developerId = "";
+let propertyId = "";
 
 beforeAll(async () => {
-  await db
-    .insert(users)
-    .values({ id: userId, name: userId, email: `${userId}@example.test` });
-  const [developer] = await db
-    .insert(developers)
-    .values({ name: `Profile Listed Developer ${suffix}` })
-    .returning({ id: developers.id });
-  developerId = developer.id;
-
-  const [submission] = await db
-    .insert(propertySubmissions)
-    .values({
-      developerId,
-      submittedBy: userId,
-      reviewedBy: userId,
-      source: "manual_form",
-      status: "approved",
-      payload: {},
-    })
-    .returning({ id: propertySubmissions.id });
-  submissionId = submission.id;
-  await db.insert(propertySubmissionFields).values(
-    Object.entries({
-      "property.name": `Profile Tower ${suffix}`,
-      "property.type": "apartment",
-      "property.city": "Ahmedabad",
-      "property.locality": "Profile Locality",
-    }).map(([fieldKey, value]) => ({
-      submissionId,
-      fieldKey,
-      value,
-      reviewStatus: "confirmed" as const,
-    })),
-  );
-  propertyId = (
-    await publishSubmission({
-      submissionId,
-      actorUserId: userId,
-      actorRole: "owner",
-    })
-  ).propertyId;
+  portfolio = await publishTestPortfolio("Profile");
+  developerId = portfolio.developerId;
+  propertyId = portfolio.properties[0].id;
 });
 
 afterAll(async () => {
-  await db
-    .delete(propertyRevisions)
-    .where(eq(propertyRevisions.submissionId, submissionId));
-  await db
-    .delete(propertySubmissions)
-    .where(eq(propertySubmissions.id, submissionId));
-  await db.delete(properties).where(eq(properties.id, propertyId));
-  await db.delete(developers).where(eq(developers.id, developerId));
-  await db.delete(users).where(eq(users.id, userId));
+  await portfolio?.remove();
 });
 
 describe("getPublicDeveloper", () => {
