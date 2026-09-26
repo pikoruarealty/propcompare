@@ -15,7 +15,7 @@ import { RELEASE_WINDOWS } from "@/db/schema/developer-analytics";
 export const MIN_VISITORS = 5;
 
 /** Bumped whenever a metric's definition or a rule here changes. */
-export const RULES_VERSION = "release-v1";
+export const RULES_VERSION = "release-v2";
 
 /** Reports are in India time; its offset has no daylight saving. */
 export const REPORTING_TIME_ZONE = "Asia/Kolkata";
@@ -180,4 +180,118 @@ export const releaseGroup = (cells: CandidateCell[]): ReleasedCell[] => {
       ? { key: cell.key, released: false, value: null }
       : cell,
   );
+};
+
+/**
+ * Named rival properties (owner decision, `DECISIONS.md` 2026-09-26): a pairing
+ * is released only when at least `MIN_VISITORS` distinct identified visitors
+ * opened a comparison holding both properties. A developer is shown at most
+ * `MAX_RIVALS` of them, the most compared first, so the list stays a summary.
+ */
+export const MAX_RIVALS = 5;
+
+export interface PairCandidate {
+  propertyId: string;
+  rivalPropertyId: string;
+  /** Distinct identified visitors who opened a comparison holding both. */
+  visitors: number;
+}
+
+/**
+ * The pairings a developer may see: each must meet the gate on its own, then per
+ * property the `MAX_RIVALS` most compared, with a fixed tie-break (rival id) so a
+ * rerun keeps the same ones. A pairing under the gate is not returned at all, so
+ * it is never a zero; and a property is never paired with itself.
+ */
+export const releasePairings = (rows: PairCandidate[]): PairCandidate[] => {
+  const byProperty = new Map<string, PairCandidate[]>();
+  for (const row of rows) {
+    if (row.propertyId === row.rivalPropertyId) continue;
+    if (!meetsGate(row.visitors)) continue;
+    const list = byProperty.get(row.propertyId) ?? [];
+    list.push(row);
+    byProperty.set(row.propertyId, list);
+  }
+  return [...byProperty.values()].flatMap((list) =>
+    list
+      .sort(
+        (a, b) =>
+          b.visitors - a.visitors ||
+          a.rivalPropertyId.localeCompare(b.rivalPropertyId),
+      )
+      .slice(0, MAX_RIVALS),
+  );
+};
+
+/**
+ * Peer benchmarks (owner decision, choice 8). A property's figure is set against
+ * the median of the same count across other developers' listed properties in its
+ * locality, else its city. The cohort must hold at least `MIN_COHORT_PROPERTIES`
+ * properties from at least `MIN_COHORT_DEVELOPERS` developers, none of them the
+ * property's own developer, so no single property or developer can be read off
+ * the median; and the median itself must meet the visitor gate. The narrowest
+ * cohort that is large enough is the one used, and there is no fallback past it.
+ */
+export const MIN_COHORT_PROPERTIES = 5;
+export const MIN_COHORT_DEVELOPERS = 3;
+
+export interface BenchmarkProperty {
+  propertyId: string;
+  developerId: string;
+  city: string;
+  locality: string;
+  /** This property's count of the metric; zero when nothing was counted. */
+  value: number;
+}
+
+export interface BenchmarkCell {
+  cohort: "locality" | "city";
+  properties: number;
+  developers: number;
+  median: number;
+}
+
+const same = (a: string, b: string): boolean =>
+  a.trim().toLowerCase() === b.trim().toLowerCase();
+
+const medianOf = (values: number[]): number => {
+  const sorted = [...values].sort((a, b) => a - b);
+  const middle = sorted.length >> 1;
+  const median =
+    sorted.length % 2 === 1
+      ? sorted[middle]
+      : (sorted[middle - 1] + sorted[middle]) / 2;
+  return Math.round(median * 10) / 10;
+};
+
+export const releaseBenchmark = (
+  subject: BenchmarkProperty,
+  everyone: BenchmarkProperty[],
+): BenchmarkCell | null => {
+  const others = everyone.filter(
+    (other) =>
+      other.propertyId !== subject.propertyId &&
+      other.developerId !== subject.developerId &&
+      same(other.city, subject.city),
+  );
+  const cohorts: [BenchmarkCell["cohort"], BenchmarkProperty[]][] = [
+    ["locality", others.filter((o) => same(o.locality, subject.locality))],
+    ["city", others],
+  ];
+  for (const [cohort, members] of cohorts) {
+    const developers = new Set(members.map((m) => m.developerId)).size;
+    if (
+      members.length < MIN_COHORT_PROPERTIES ||
+      developers < MIN_COHORT_DEVELOPERS
+    ) {
+      continue;
+    }
+    const median = medianOf(members.map((m) => m.value));
+    // The median is a count of visitors (a half when two middles differ), so it
+    // meets the gate by value; `meetsGate` takes whole counts only.
+    return median >= MIN_VISITORS
+      ? { cohort, properties: members.length, developers, median }
+      : null;
+  }
+  return null;
 };

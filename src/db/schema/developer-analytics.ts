@@ -4,6 +4,7 @@ import {
   check,
   date,
   index,
+  integer,
   numeric,
   pgTable,
   smallint,
@@ -189,6 +190,138 @@ export const developerAnalyticsReleased = pgTable(
       "developer_analytics_released_value",
       sql`${table.released} = (${table.value} is not null)
         and (${table.value} is null or ${table.value} >= 0)`,
+    ),
+  ],
+);
+
+/**
+ * Schema v23 (`docs/schema/schema.v23.md`): what a developer may see beyond their
+ * own figures. Both tables hold only figures that passed their gate, so a row is
+ * always a released figure and no row means "not enough data"; nothing here is a
+ * withheld count or a zero.
+ */
+
+export const RELEASE_BENCHMARK_METRICS = [
+  "visitors",
+  "viewers",
+  "comparers",
+  "savers",
+] as const;
+
+export const RELEASE_BENCHMARK_COHORTS = ["locality", "city"] as const;
+
+/**
+ * The listed properties a developer's property is most often compared with,
+ * named (owner decision, `DECISIONS.md` 2026-09-26). One row is a pairing and its
+ * count of distinct identified visitors who opened a comparison holding both,
+ * released only at the visitor gate. It carries no figure of the rival's own, no
+ * visitor id and nothing about the comparison's other properties.
+ */
+export const developerAnalyticsPairings = pgTable(
+  "developer_analytics_pairings",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    runId: uuid("run_id")
+      .notNull()
+      .references(() => developerAnalyticsRuns.id, { onDelete: "cascade" }),
+    window: text("window").notNull(),
+    windowStart: date("window_start").notNull(),
+    windowEnd: date("window_end").notNull(),
+    developerId: uuid("developer_id")
+      .notNull()
+      .references(() => developers.id, { onDelete: "cascade" }),
+    /** The developer's own listed property. */
+    propertyId: uuid("property_id")
+      .notNull()
+      .references(() => properties.id, { onDelete: "cascade" }),
+    /** Another listed property (any developer's, or the same developer's). */
+    rivalPropertyId: uuid("rival_property_id")
+      .notNull()
+      .references(() => properties.id, { onDelete: "cascade" }),
+    visitors: integer("visitors").notNull(),
+  },
+  (table) => [
+    unique("developer_analytics_pairings_unique").on(
+      table.runId,
+      table.window,
+      table.propertyId,
+      table.rivalPropertyId,
+    ),
+    index("developer_analytics_pairings_developer_idx").on(
+      table.developerId,
+      table.runId,
+    ),
+    check(
+      "developer_analytics_pairings_window",
+      sql`${table.window} in (${listOf(RELEASE_WINDOWS)})
+        and ${table.windowStart} <= ${table.windowEnd}`,
+    ),
+    check(
+      "developer_analytics_pairings_distinct",
+      sql`${table.propertyId} <> ${table.rivalPropertyId}`,
+    ),
+    check("developer_analytics_pairings_visitors", sql`${table.visitors} >= 1`),
+  ],
+);
+
+/**
+ * One property's figure against the typical listed property near it: the median
+ * of the same count across a cohort of other developers' listed properties (the
+ * property's locality, else its city). Released only when the cohort is large
+ * enough to hide any one property and the median itself meets the visitor gate.
+ * The cohort's size is stored so the figure can say what it is a median of.
+ */
+export const developerAnalyticsBenchmarks = pgTable(
+  "developer_analytics_benchmarks",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    runId: uuid("run_id")
+      .notNull()
+      .references(() => developerAnalyticsRuns.id, { onDelete: "cascade" }),
+    window: text("window").notNull(),
+    windowStart: date("window_start").notNull(),
+    windowEnd: date("window_end").notNull(),
+    developerId: uuid("developer_id")
+      .notNull()
+      .references(() => developers.id, { onDelete: "cascade" }),
+    propertyId: uuid("property_id")
+      .notNull()
+      .references(() => properties.id, { onDelete: "cascade" }),
+    metric: text("metric").notNull(),
+    cohort: text("cohort").notNull(),
+    cohortProperties: smallint("cohort_properties").notNull(),
+    cohortDevelopers: smallint("cohort_developers").notNull(),
+    median: numeric("median").notNull(),
+  },
+  (table) => [
+    unique("developer_analytics_benchmarks_unique").on(
+      table.runId,
+      table.window,
+      table.propertyId,
+      table.metric,
+    ),
+    index("developer_analytics_benchmarks_developer_idx").on(
+      table.developerId,
+      table.runId,
+    ),
+    check(
+      "developer_analytics_benchmarks_window",
+      sql`${table.window} in (${listOf(RELEASE_WINDOWS)})
+        and ${table.windowStart} <= ${table.windowEnd}`,
+    ),
+    check(
+      "developer_analytics_benchmarks_metric",
+      sql`${table.metric} in (${listOf(RELEASE_BENCHMARK_METRICS)})`,
+    ),
+    check(
+      "developer_analytics_benchmarks_cohort",
+      sql`${table.cohort} in (${listOf(RELEASE_BENCHMARK_COHORTS)})`,
+    ),
+    check(
+      "developer_analytics_benchmarks_size",
+      sql`${table.cohortProperties} >= 1
+        and ${table.cohortDevelopers} between 1 and ${table.cohortProperties}
+        and ${table.median} >= 0`,
     ),
   ],
 );
