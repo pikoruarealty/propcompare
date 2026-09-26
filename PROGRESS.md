@@ -1,12 +1,12 @@
 # Progress
 
-## 2026-09-26 — Codex — Phase 4 Parts 5 and 6 built and verified; PR preparation
+## 2026-09-26 — Codex — Phase 4 Parts 5 and 6 built and verified; PR open
 
 **Done:** owner approved gates 2, 4 and 5 and confirmed the cohort/rival limits. On `task/phase-4-portal-completion`, the developer portal now has its own shell, overview and property reports with the five fixed windows, withheld/stale/empty/error states, CSV links, named rivals, peer medians and completeness. The owner added BHK and city demand from an identified visitor's earlier intake choice followed by a later view or comparison of that property: schema v24, migration `0030`, `release-v3`, with the unchanged five-visitor and no-subtraction gates. The app host scheduler is documented for purge then release, but both schedulers remain off until hosting by owner direction. Tasklist: `docs/tasklists/2026-09-26-phase-4-portal-completion.md`.
 
 **Verified:** existing PG17 at `0029` upgraded to `0030`; a fresh PG17 database applied all 31 migrations and both seeds; the release/reader integration file passed 45 tests on each. The full suite on the upgraded database passed 189 files and 2193 tests. The new event-to-service-to-rendered-HTML and CSV assertions passed with two developers and figures above and below the gate. Format, lint and typecheck passed; a Turbopack production build passed with required throwaway database URLs and a temporary root that includes this worktree's sibling `node_modules` junction (removed afterward). The build still reports pre-existing PDF ESM and dynamic filesystem-tracing warnings. The shared port 5432 database was untouched.
 
-**Next:** final branch/main overlap and documentation check, commit and push the new branch, and open the requested PR to `main`. No scheduler has been activated.
+**PR:** [#2](https://github.com/pikoruarealty/propcompare/pull/2) into `main`, from `task/phase-4-portal-completion`. `origin/main` at `138295c` is an ancestor of the branch, so Bhavarth's merged work is included. No scheduler has been activated. The PR awaits review and merge.
 
 ## 2026-09-26 — Codex — Phase 4 branch reconciled with the new main baseline
 

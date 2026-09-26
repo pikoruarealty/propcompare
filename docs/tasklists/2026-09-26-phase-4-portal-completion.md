@@ -21,7 +21,7 @@
 - [x] Run format, lint, typecheck, unit/UI and full integration suites, fresh and existing-at-0029 migrations, and production build; record local build conditions honestly.
 - [x] Review rendered HTML, API and CSV for price, private bucket, visitor/session IDs and personal detail.
 - [x] Check the branch against the current `origin/main` for overlap and document consistency. `origin/main` at `138295c` is already an ancestor of this branch; the Phase 4 schema and privacy documentation now include the new intake demand dimensions.
-- [ ] Commit the steps, push the new branch, and open a PR to `main` with verification and any remaining limitations. Do not merge the PR automatically.
+- [x] Commit the steps, push the new branch, and open [PR #2](https://github.com/pikoruarealty/propcompare/pull/2) to `main` with verification and remaining limitations. The PR awaits review and merge.
 
 ## Verification record
 
@@ -31,4 +31,4 @@
 | 2026-09-26 | Migration `0030` on PG17 already at `0029`; fresh PG17 database through `0030`, both seeds; focused release/reader integration on each               | 31 migrations recorded in each database; new check constraint present; 45 integration tests passed on each. Fresh service-role connection sees 16 private buckets. Shared port 5432 untouched. |
 | 2026-09-26 | Full `bun run test` against the upgraded throwaway PG17                                                                                              | 189 files, 2193 tests passed. After a final HTML/CSV assertion, the focused database file and UI component file passed 48 tests.                                                               |
 | 2026-09-26 | Production `bun run build` with required throwaway DB URLs and a temporary `turbopack.root` spanning this worktree's sibling `node_modules` junction | Built successfully; all developer routes are dynamic. Temporary root setting was removed after the check. Turbopack still emits pre-existing PDF ESM and dynamic filesystem-tracing warnings.  |
-| 2026-09-26 | Final format check, lint, typecheck and `origin/main` ancestry | All passed. `origin/main` at `138295c` is the merge base, so Bhavarth's merged work is in this branch. |
+| 2026-09-26 | Final format check, lint, typecheck and `origin/main` ancestry                                                                                       | All passed. `origin/main` at `138295c` is the merge base, so Bhavarth's merged work is in this branch.                                                                                         |
